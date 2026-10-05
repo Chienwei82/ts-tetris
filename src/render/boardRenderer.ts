@@ -1,0 +1,247 @@
+import * as THREE from 'three';
+import { PIECE_COLORS, VISIBLE_ROWS } from '../game/types.js';
+import type { Grid, PieceKind, Vec2 } from '../game/types.js';
+import { BOARD_D, BOARD_H, BOARD_W, cellToWorld } from './constants.js';
+import { INK, blockMaterial, cardboardMaterial, graphPaperMaterial, outlineMaterial, tapeMaterial } from './materials.js';
+import { ParticleSystem } from './particles.js';
+const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false });
+const ghostEdgeMat = new THREE.LineBasicMaterial({ color: INK, transparent: true, opacity: 0.7 });
+export class BoardRenderer {
+  group = new THREE.Group();
+  particles = new ParticleSystem();
+  private geo = new THREE.BoxGeometry(0.92, 0.92, 0.92);
+  private ghostGeo = new THREE.BoxGeometry(0.86, 0.86, 0.5);
+  private ghostEdgeGeo = new THREE.EdgesGeometry(this.ghostGeo);
+  private lockedMeshes = new Map<string, THREE.Group>();
+  private activeGroup = new THREE.Group();
+  private ghostGroup = new THREE.Group();
+  private clearingRows = new Map<number, { t: number; meshes: THREE.Group[] }>();
+  private lockAnims: { mesh: THREE.Group; t: number }[] = [];
+  private activeTarget = new Map<string, THREE.Vector3>();
+  private pullFree: THREE.Group[] = [];
+  constructor(scene: THREE.Scene) {
+    this.buildFrame();
+    this.group.add(this.activeGroup, this.ghostGroup);
+    this.group.add(this.particles.points);
+    scene.add(this.group);
+  }
+  private makeBlock(kind: PieceKind): THREE.Group {
+    let g = this.pullFree.pop();
+    if (g) { g.visible = true; g.scale.setScalar(1); g.rotation.set(0, 0, 0); return g; }
+    g = new THREE.Group();
+    const mesh = new THREE.Mesh(this.geo, blockMaterial(kind));
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    const outline = new THREE.Mesh(this.geo, outlineMaterial());
+    outline.scale.setScalar(1.07);
+    g.add(mesh, outline);
+    g.userData.kind = kind;
+    return g;
+  }
+  private colorize(g: THREE.Group, kind: PieceKind): void {
+    const mesh = g.children[0] as THREE.Mesh;
+    mesh.material = blockMaterial(kind);
+    g.userData.kind = kind;
+  }
+  private buildFrame(): void {
+    const card = cardboardMaterial();
+    const ink = outlineMaterial();
+    // box + inverted-hull ink outline (paper cut-out edge)
+    const mkBar = (w: number, h: number, d: number, x: number, y: number, z: number): void => {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), card);
+      bar.position.set(x, y, z);
+      bar.castShadow = true; bar.receiveShadow = true;
+      const hull = new THREE.Mesh(bar.geometry, ink);
+      hull.scale.set((w + 0.09) / w, (h + 0.09) / h, (d + 0.09) / d);
+      bar.add(hull);
+      this.group.add(bar);
+    };
+    const T = 0.62; // cardboard bar thickness
+    const pw = BOARD_W + 2 * T;
+    const ph = BOARD_H + 2 * T;
+    mkBar(T, ph, 1.5, -BOARD_W / 2 - T / 2, 0, -0.1);
+    mkBar(T, ph, 1.5, BOARD_W / 2 + T / 2, 0, -0.1);
+    mkBar(pw, T, 1.5, 0, BOARD_H / 2 + T / 2, -0.1);
+    mkBar(pw, T, 1.5, 0, -BOARD_H / 2 - T / 2, -0.1);
+    // washi tape holding the frame corners down
+    const tape = (x: number, y: number, rot: number, color: number): void => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.5), tapeMaterial(color));
+      m.position.set(x, y, 0.78);
+      m.rotation.z = rot;
+      this.group.add(m);
+    };
+    tape(-BOARD_W / 2 - T / 2 - 0.25, BOARD_H / 2 + 0.2, -0.35, 0xe04e39);
+    tape(BOARD_W / 2 + T / 2 + 0.25, BOARD_H / 2 + 0.2, 0.35, 0x4d9de0);
+    tape(-BOARD_W / 2 - T / 2 - 0.25, -BOARD_H / 2 - 0.2, 0.35, 0x58b368);
+    tape(BOARD_W / 2 + T / 2 + 0.25, -BOARD_H / 2 - 0.2, -0.35, 0xffc93c);
+    // cardboard stage platform
+    const floorW = BOARD_W + 2.4;
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(floorW, 0.5, 3.6), card);
+    floor.position.set(0, -BOARD_H / 2 - T - 0.25, 0.5);
+    floor.castShadow = true; floor.receiveShadow = true;
+    const floorHull = new THREE.Mesh(floor.geometry, ink);
+    floorHull.scale.set((floorW + 0.09) / floorW, 1.18, 3.69 / 3.6);
+    floor.add(floorHull);
+    this.group.add(floor);
+    // graph-paper backing sheet with ink outline
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(BOARD_W, BOARD_H), graphPaperMaterial());
+    back.position.set(0, 0, -BOARD_D / 2 - 0.02);
+    back.receiveShadow = true;
+    const backEdge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(back.geometry),
+      new THREE.LineBasicMaterial({ color: INK })
+    );
+    backEdge.position.z = 0.01;
+    back.add(backEdge);
+    this.group.add(back);
+  }
+  key(col: number, row: number): string { return col + ',' + row; }
+  syncLocked(grid: Grid): void {
+    // While a clear animation plays, the engine grid already collapsed but the
+    // old blocks are still flying — skip syncing until the animation finishes.
+    if (this.clearingRows.size > 0) return;
+    const seen = new Set<string>();
+    for (let r = 0; r < VISIBLE_ROWS; r++) {
+      const row = grid[r];
+      if (!row) continue;
+      for (let c = 0; c < row.length; c++) {
+        const v = row[c] as PieceKind | 0;
+        if (v === 0 || v === undefined) continue;
+        const k = this.key(c, r);
+        seen.add(k);
+        let g = this.lockedMeshes.get(k);
+        if (!g) {
+          g = this.makeBlock(v);
+          const p = cellToWorld(c, r);
+          g.position.set(p.x, p.y, 0);
+          // hand-placed paper: tiny random tilt per locked tile
+          g.rotation.z = (Math.random() - 0.5) * 0.05;
+          this.group.add(g);
+          this.lockedMeshes.set(k, g);
+        } else if (g.userData.kind !== v) this.colorize(g, v);
+      }
+    }
+    for (const [k, g] of [...this.lockedMeshes]) {
+      if (!seen.has(k)) { this.group.remove(g); this.pullFree.push(g); g.visible = false; this.lockedMeshes.delete(k); }
+    }
+  }
+  private activeMeshes = new Map<string, THREE.Group>();
+
+  setActive(kind: PieceKind, cells: Vec2[], instant = false): void {
+    const wanted = new Map<string, Vec2>();
+    for (const c of cells) wanted.set(this.key(c.x, c.y), c);
+    // Remove meshes whose cell no longer exists.
+    for (const [k, m] of [...this.activeMeshes]) {
+      if (!wanted.has(k)) {
+        this.activeGroup.remove(m);
+        this.pullFree.push(m);
+        m.visible = false;
+        this.activeMeshes.delete(k);
+        this.activeTarget.delete(k);
+      }
+    }
+    // Add / update meshes keyed by cell so blocks track their own target.
+    for (const [k, c] of wanted) {
+      let m = this.activeMeshes.get(k);
+      if (!m) {
+        m = this.makeBlock(kind);
+        this.activeGroup.add(m);
+        this.activeMeshes.set(k, m);
+      }
+      this.colorize(m, kind);
+      const p = cellToWorld(c.x, c.y);
+      const target = new THREE.Vector3(p.x, p.y, 0.15);
+      this.activeTarget.set(k, target);
+      if (instant) m.position.copy(target);
+      else if (m.position.lengthSq() === 0) m.position.copy(target);
+    }
+  }
+  setGhost(cells: Vec2[]): void {
+    while (this.ghostGroup.children.length > cells.length) {
+      const m = this.ghostGroup.children.pop() as THREE.Group;
+      if (m) this.ghostGroup.remove(m);
+    }
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i] as Vec2;
+      let m = this.ghostGroup.children[i] as THREE.Group | undefined;
+      if (!m) {
+        m = new THREE.Group();
+        const mesh = new THREE.Mesh(this.ghostGeo, ghostMat);
+        const edge = new THREE.LineSegments(this.ghostEdgeGeo, ghostEdgeMat);
+        m.add(mesh, edge);
+        this.ghostGroup.add(m);
+      }
+      const p = cellToWorld(c.x, c.y);
+      m.position.set(p.x, p.y, -0.05);
+    }
+  }
+  playLock(cells: Vec2[], kind: PieceKind): void {
+    for (const c of cells) {
+      if (c.y < 0 || c.y >= VISIBLE_ROWS) continue;
+      const g = this.makeBlock(kind);
+      const p = cellToWorld(c.x, c.y);
+      g.position.set(p.x, p.y, 0.4);
+      this.group.add(g);
+      this.lockAnims.push({ mesh: g, t: 0 });
+      this.particles.burst(new THREE.Vector3(p.x, p.y, 0.5), PIECE_COLORS[kind], 6, 1.6, 1.2);
+    }
+  }
+  playClear(rows: number[], grid: Grid): void {
+    for (const r of rows) {
+      const meshes: THREE.Group[] = [];
+      for (const [k, g] of [...this.lockedMeshes]) {
+        if (Number(k.split(',')[1]) === r) { meshes.push(g); this.lockedMeshes.delete(k); }
+      }
+      void grid;
+      this.clearingRows.set(r, { t: 0, meshes });
+      for (let c = 0; c < 10; c++) {
+        const p = cellToWorld(c, r);
+        const rowArr = grid[r] ?? [];
+        const cell: PieceKind | 0 = (rowArr[c] as PieceKind | 0) ?? 0;
+        const hex = cell === 0 ? 0xffffff : PIECE_COLORS[cell];
+        this.particles.burst(new THREE.Vector3(p.x, p.y, 0.6), hex, 7, 3.2, 3.4);
+      }
+    }
+  }
+  update(dt: number): void {
+    const speed = 1 - Math.pow(0.0001, dt);
+    for (const [k, g] of this.activeMeshes) {
+      const t = this.activeTarget.get(k);
+      if (t) g.position.lerp(t, Math.min(1, speed * 1.4));
+    }
+    for (let i = this.lockAnims.length - 1; i >= 0; i--) {
+      const a = this.lockAnims[i];
+      if (!a) continue;
+      a.t += dt * 5;
+      const k = Math.min(1, a.t);
+      a.mesh.position.z = 0.4 * (1 - k);
+      a.mesh.scale.setScalar(1 + 0.25 * Math.sin(k * Math.PI));
+      if (k >= 1) { this.group.remove(a.mesh); this.pullFree.push(a.mesh); a.mesh.visible = false; this.lockAnims.splice(i, 1); }
+    }
+    for (const [r, c] of [...this.clearingRows]) {
+      c.t += dt * 4;
+      const k = Math.min(1, c.t);
+      for (let i = 0; i < c.meshes.length; i++) {
+        const m = c.meshes[i] as THREE.Group;
+        m.position.x += Math.sin(i * 3.1 + r) * dt * 6;
+        m.position.y += dt * (4 + i * 0.2);
+        m.rotation.z += dt * 6;
+        m.scale.setScalar(Math.max(0.001, 1 - k));
+      }
+      if (k >= 1) {
+        for (const m of c.meshes) { this.group.remove(m); this.pullFree.push(m); m.visible = false; }
+        this.clearingRows.delete(r);
+      }
+    }
+    this.particles.update(dt);
+  }
+  get busyClearing(): boolean { return this.clearingRows.size > 0; }
+  reset(): void {
+    for (const [, g] of this.lockedMeshes) { this.group.remove(g); this.pullFree.push(g); g.visible = false; }
+    this.lockedMeshes.clear();
+    this.clearingRows.clear();
+    this.activeTarget.clear();
+    this.activeMeshes.clear();
+    this.activeGroup.clear();
+    this.ghostGroup.clear();
+  }
+}

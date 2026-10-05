@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TETRIS 3D · Paper Quest</title>
+    <meta name="description" content="Tetris 3D jugable en el navegador — TypeScript + three.js, estilo papercraft" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+    <div id="vignette"></div>
+
+    <header id="brand">
+      <h1>TETRIS<span>3D</span></h1>
+      <p>PAPER&nbsp;QUEST</p>
+    </header>
+
+    <aside id="hud-left" class="panel">
+      <div class="stat"><label>Puntuación</label><strong id="score">0</strong></div>
+      <div class="stat-row">
+        <div class="stat"><label>Nivel</label><strong id="level">1</strong></div>
+        <div class="stat"><label>Líneas</label><strong id="lines">0</strong></div>
+      </div>
+      <div class="stat">
+        <label>Progreso</label>
+        <div id="gauge"><div id="gauge-fill" class="lines"></div></div>
+        <p id="gauge-caption">0/10 líneas · 0:00/0:45</p>
+        <span id="stage-chip">☀️ Pradera</span>
+      </div>
+      <div class="stat"><label>Siguiente</label><canvas id="next" width="160" height="120"></canvas></div>
+      <div class="stat"><label>Reserva <span class="key">C</span></label><canvas id="hold" width="160" height="80"></canvas></div>
+    </aside>
+
+    <aside id="hud-right" class="panel">
+      <h2>Controles</h2>
+      <ul>
+        <li><span class="key">←</span><span class="key">→</span> mover</li>
+        <li><span class="key">↓</span> caída suave</li>
+        <li><span class="key">↑</span>/<span class="key">X</span> rotar</li>
+        <li><span class="key">Z</span> rotar ←</li>
+        <li><span class="key">Espacio</span> caída instantánea</li>
+        <li><span class="key">C</span> reserva</li>
+        <li><span class="key">E</span> efectos del fondo</li>
+        <li><span class="key">P</span> pausa · <span class="key">R</span> reinicio</li>
+      </ul>
+      <div id="toast" class="hidden"></div>
+    </aside>
+
+    <div id="overlay">
+      <div class="card">
+        <h2 id="overlay-title">TETRIS 3D</h2>
+        <p id="overlay-sub">Pulsa <span class="key">Enter</span> o haz clic para jugar</p>
+        <p id="overlay-stats"></p>
+        <div id="start-options">
+          <label for="level-range">Nivel inicial</label>
+          <div class="range-row">
+            <input id="level-range" type="range" min="1" max="20" step="1" value="1" />
+            <output id="level-range-out">1 · ☀️ Pradera</output>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button id="btn-start">▶ Jugar</button>
+          <button id="btn-restart" class="ghost">↻ Reiniciar</button>
+        </div>
+        <p class="hint">Sube de nivel cada 10 líneas o 45 s. Cada 2 niveles cambia el escenario y el clima.</p>
+      </div>
+    </div>
+
+    <div id="level-banner" class="hidden" aria-hidden="true">
+      <strong id="level-banner-title">NIVEL 2</strong>
+      <span id="level-banner-sub">☀️ Pradera</span>
+    </div>
+
+    <div id="bottom-bar">
+      <button id="btn-pause" title="Pausa (P)">⏸</button>
+      <button id="btn-effects" title="Efectos del fondo (E)" aria-pressed="true">✨ Efectos: ON</button>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
