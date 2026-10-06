@@ -99,7 +99,7 @@ button:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0 rgba(var(--
 button:active { transform: translate(4px, 5px); box-shadow: 0 0 0 rgba(var(--shadow), 0.32); }
 button.ghost { background: var(--paper-hi); color: var(--ink); }
 .hint { font-size: 12px; margin-top: 16px; color: var(--muted); }
-#bottom-bar { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 5; }
+#bottom-bar { position: fixed; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 5; }
 #bottom-bar button { padding: 8px 18px; font-size: 14px; background: var(--paper-hi); color: var(--ink); border-radius: 10px; }
 #btn-effects.off { background: var(--paper); color: var(--muted); }
 /* Difficulty gauge + stage chip */
@@ -187,23 +187,16 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #touch-controls { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
 #touch-controls.hidden { display: none; }
 #touch-controls * { touch-action: none; -webkit-user-select: none; user-select: none; }
-#joy {
+#tc-move {
   position: absolute; left: calc(20px + env(safe-area-inset-left, 0px)); bottom: calc(26px + env(safe-area-inset-bottom, 0px));
-  width: 132px; height: 132px; border-radius: 50%; pointer-events: auto;
-  background: rgba(247, 239, 219, 0.26); border: 2.5px solid rgba(59, 43, 32, 0.55);
-}
-#joy-knob {
-  position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px;
-  border-radius: 50%; background: rgba(253, 249, 238, 0.6); border: 2.5px solid var(--ink);
-  box-shadow: 3px 4px 0 rgba(var(--shadow), 0.2);
+  display: flex; gap: 12px; pointer-events: none;
 }
 #tc-buttons {
   position: absolute; right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(26px + env(safe-area-inset-bottom, 0px));
   display: grid; grid-template-columns: repeat(2, 64px); gap: 12px; pointer-events: none;
 }
 #tc-side {
-  position: absolute; right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(182px + env(safe-area-inset-bottom, 0px));
-  display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+  display: none;
 }
 .tc-btn {
   pointer-events: auto; width: 64px; height: 64px; padding: 0; border-radius: 16px;
@@ -229,14 +222,15 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 .mode-btn span { font-size: 12.5px; font-weight: 600; letter-spacing: 1px; opacity: 0.85; }
 .mode-btn.ghost { background: var(--paper-hi); color: var(--ink); }
 
-/* ============ Modo táctil: la barra de ajustes se va a una esquina ============ */
+/* ============ Modo táctil: la barra de ajustes se va a una esquina, solo iconos ============ */
 body.touch #hud-right { display: none; }
 body.touch #bottom-bar {
-  top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto;
-  left: auto; right: calc(8px + env(safe-area-inset-right, 0px));
-  transform: none; flex-direction: column; align-items: flex-end;
+  top: calc(6px + env(safe-area-inset-top, 0px)); bottom: auto;
+  left: auto; right: calc(6px + env(safe-area-inset-right, 0px));
+  transform: none; flex-direction: row; align-items: flex-start; gap: 4px;
 }
-body.touch #bottom-bar button { padding: 7px 12px; font-size: 12.5px; }
+body.touch #bottom-bar button { min-width: 44px; min-height: 34px; padding: 5px 7px; font-size: 15px; border-width: 2px; border-radius: 9px; }
+body.touch #bottom-bar .bb-label { display: none; }
 
 /* ============ Pantallas pequeñas o bajas (móvil vertical y horizontal) ============ */
 @media (max-width: 720px), (max-height: 480px) {
@@ -244,14 +238,15 @@ body.touch #bottom-bar button { padding: 7px 12px; font-size: 12.5px; }
   .card { padding: 26px 20px; }
   .card h2 { font-size: 28px; }
   .btn-row { flex-wrap: wrap; }
-  .panel { top: calc(8px + env(safe-area-inset-top, 0px)); border-width: 2px; padding: 7px 10px; }
+  .panel { top: calc(6px + env(safe-area-inset-top, 0px)); border-width: 2px; padding: 6px 9px; }
   .panel::before { display: none; }
   #hud-left {
-    left: 8px; right: 8px; width: auto; transform: none;
+    left: 6px; right: 6px; width: auto; transform: none;
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-    gap: 5px 10px;
+    gap: 4px 8px;
   }
-  body.touch #hud-left { right: 128px; justify-content: flex-start; }
+  body.touch #hud-left { right: 6px; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  body.touch #hud-left::-webkit-scrollbar { display: none; }
   .stat { margin: 0; display: flex; align-items: center; gap: 5px; }
   .stat label { display: none; }
   .stat strong { font-size: 17px; }
