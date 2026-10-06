@@ -81,7 +81,10 @@ let effectsOn = true;
 function applyEffects(on: boolean, immediate = false, persist = true): void {
   effectsOn = on;
   stage.setEffectsEnabled(on, immediate);
-  btnEffects.textContent = on ? '✨ Efectos: ON' : '✨ Efectos: OFF';
+  const label = on ? '✨ Efectos: ON' : '✨ Efectos: OFF';
+  const labelEl = btnEffects.querySelector('.bb-label');
+  if (labelEl) labelEl.textContent = label.replace('✨', '');
+  else btnEffects.textContent = label;
   btnEffects.setAttribute('aria-pressed', String(on));
   btnEffects.classList.toggle('off', !on);
   if (persist) saveEffectsEnabled(on);
@@ -298,9 +301,9 @@ function currentFrame(): Frame {
   const compact = window.innerWidth <= 720 || h <= 480;
   const touch = input.getMode() === 'touch';
   // Bandas de UI (fracción del alto) que se solapan con la columna del tablero:
-  // tira HUD arriba; en vertical táctil también joystick/botones abajo.
-  const top = (compact ? 72 : 0) / h;
-  const bottom = (touch && compact && camera.aspect < 1 ? 170 : 0) / h;
+  // tira HUD arriba; en vertical táctil también los botones de abajo.
+  const top = (compact ? 60 : 0) / h;
+  const bottom = (touch && compact && camera.aspect < 1 ? 104 : 0) / h;
   const key = camera.aspect + ':' + top + ':' + bottom;
   if (key !== frameKey) {
     frameKey = key;

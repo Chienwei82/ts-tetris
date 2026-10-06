@@ -1,7 +1,7 @@
 /**
  * Auto-repetición DAS/ARR para una dirección mantenida: paso inmediato al
  * pulsar (lo hace quien llama), pausa `das` y luego un paso cada `arr`.
- * Compartido por teclado y joystick táctil para que se sientan igual.
+ * Compartido por teclado y botones táctiles para que se sientan igual.
  */
 export class AutoShift {
   private held = false;

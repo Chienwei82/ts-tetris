@@ -133,27 +133,23 @@
     </div>
 
     <div id="bottom-bar">
-      <button id="btn-help" title="Ayuda (H)">❓ Ayuda</button>
-      <button id="btn-pause" title="Pausa (P)">⏸</button>
-      <button id="btn-effects" title="Efectos del fondo (E)" aria-pressed="true">✨ Efectos: ON</button>
-      <button id="btn-mode" title="Modo de controles (teclado o táctil)">⚙️ Controles</button>
+      <button id="btn-help" title="Ayuda (H)" aria-label="Ayuda">❓<span class="bb-label"> Ayuda</span></button>
+      <button id="btn-pause" title="Pausa (P)" aria-label="Pausa">⏸<span class="bb-label"> Pausa</span></button>
+      <button id="btn-effects" title="Efectos del fondo (E)" aria-pressed="true" aria-label="Efectos del fondo">✨<span class="bb-label"> Efectos: ON</span></button>
+      <button id="btn-mode" title="Modo de controles (teclado o táctil)" aria-label="Modo de controles">⚙️<span class="bb-label"> Controles</span></button>
     </div>
 
-    <!-- Controles táctiles (solo modo móvil/tableta): joystick + botones de acción -->
+    <!-- Controles táctiles (solo modo móvil/tableta): botones ←/→ + acciones -->
     <div id="touch-controls" class="hidden" aria-hidden="true">
-      <div id="joy" role="application" aria-label="Joystick: desliza para mover y caída suave; arriba, caída instantánea">
-        <div id="joy-knob"></div>
+      <div id="tc-move">
+        <button id="tc-left" type="button" class="tc-btn" aria-label="Mover a la izquierda">◀</button>
+        <button id="tc-right" type="button" class="tc-btn" aria-label="Mover a la derecha">▶</button>
       </div>
       <div id="tc-buttons">
         <button id="tc-ccw" type="button" class="tc-btn" aria-label="Rotar a la izquierda">↺</button>
         <button id="tc-cw" type="button" class="tc-btn" aria-label="Rotar a la derecha">↻</button>
         <button id="tc-hold" type="button" class="tc-btn tc-small" aria-label="Reserva">HOLD</button>
         <button id="tc-drop" type="button" class="tc-btn tc-small" aria-label="Caída instantánea">⇊</button>
-      </div>
-      <div id="tc-side">
-        <button id="tc-pause" type="button" class="tc-btn tc-small" aria-label="Pausa">⏸</button>
-        <button id="tc-help" type="button" class="tc-btn tc-small" aria-label="Ayuda">❓</button>
-        <button id="tc-restart" type="button" class="tc-btn tc-small" aria-label="Reiniciar">↻</button>
       </div>
     </div>
 

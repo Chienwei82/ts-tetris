@@ -39,19 +39,17 @@ npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 
 ### Controles táctiles (móvil / tableta)
 
-En modo táctil aparecen controles superpuestos al canvas (joystick virtual a la
-izquierda y botones de acción a la derecha), con multitáctil real (joystick +
-botón a la vez):
+En modo táctil aparecen controles superpuestos al canvas (botones ←/→ a la
+izquierda y botones de acción a la derecha), con multitáctil real (botón de
+movimiento + acción a la vez):
 
 | Control táctil | Acción |
 |---|---|
-| Joystick ← / → | Mover pieza (con auto-repetición DAS/ARR) |
-| Joystick ↓ | Caída suave (+1 pto/fila) |
-| Joystick ↑ (flick) | Caída instantánea |
+| ◀ / ▶ | Mover pieza (con auto-repetición DAS/ARR) |
 | ↺ / ↻ | Rotar antihorario / horario |
 | ⇊ | Caída instantánea |
 | HOLD | Reserva |
-| ⏸ · ❓ · ↻ | Pausa · Ayuda · Reinicio |
+| ❓ · ⏸ (arriba) | Ayuda · Pausa (Reiniciar vive en el overlay de pausa) |
 
 El modo se elige automáticamente por detección de dispositivo; si la detección
 es ambigua aparece una pantalla de selección al arrancar y la elección persiste
