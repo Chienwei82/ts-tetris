@@ -1,5 +1,6 @@
 const STORAGE_KEY = 'tetris-3d:fx';
 const MODE_KEY = 'tetris-3d:controls';
+const MUSIC_KEY = 'tetris-3d:music';
 
 /** Modo de control elegido por el usuario: teclado/ratón o táctil. */
 export type ControlMode = 'desktop' | 'touch';
@@ -33,4 +34,18 @@ export function loadControlMode(): ControlMode | null {
 
 export function saveControlMode(mode: ControlMode): void {
   try { window.localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ }
+}
+
+/** Preferencia de música procedural; por defecto activada. */
+export function loadMusicEnabled(): boolean {
+  try {
+    const v = window.localStorage.getItem(MUSIC_KEY);
+    if (v === '1') return true;
+    if (v === '0') return false;
+  } catch { /* storage unavailable (private mode) */ }
+  return true;
+}
+
+export function saveMusicEnabled(on: boolean): void {
+  try { window.localStorage.setItem(MUSIC_KEY, on ? '1' : '0'); } catch { /* ignore */ }
 }

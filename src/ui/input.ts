@@ -13,6 +13,7 @@ export interface InputActions {
   onRestart: () => void;
   onConfirm: () => void;
   onToggleEffects: () => void;
+  onToggleMusic: () => void;
   onHelp: () => void;
   setSoftDrop: (v: boolean) => void;
 }
@@ -89,6 +90,9 @@ export class InputController {
         break;
       case 'KeyE':
         if (!e.repeat) a.onToggleEffects();
+        break;
+      case 'KeyM':
+        if (!e.repeat) a.onToggleMusic();
         break;
       case 'KeyH':
         if (!e.repeat) a.onHelp();
