@@ -20,6 +20,9 @@ export interface Stage {
 }
 
 const TRANSITION_SECONDS = 1.6;
+/** Gradación de luz global: menos ambiente y más luz clave => sombras más marcadas. */
+const HEMI_GRADE = 0.62;
+const KEY_GRADE = 1.28;
 
 export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   const weather = new WeatherSystem(parts.scene);
@@ -90,9 +93,9 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
     parts.sunGroup.scale.setScalar(a.sun.scale + (b.sun.scale - a.sun.scale) * t);
     parts.hemi.color.setHex(mixHex(a.hemi.sky, b.hemi.sky, t, scratch));
     parts.hemi.groundColor.setHex(mixHex(a.hemi.ground, b.hemi.ground, t, scratch));
-    baseHemi = a.hemi.intensity + (b.hemi.intensity - a.hemi.intensity) * t;
+    baseHemi = (a.hemi.intensity + (b.hemi.intensity - a.hemi.intensity) * t) * HEMI_GRADE;
     parts.key.color.setHex(mixHex(a.dir.color, b.dir.color, t, scratch));
-    baseKey = a.dir.intensity + (b.dir.intensity - a.dir.intensity) * t;
+    baseKey = (a.dir.intensity + (b.dir.intensity - a.dir.intensity) * t) * KEY_GRADE;
     parts.groundMat.color.setHex(mixHex(a.ground.color, b.ground.color, t, scratch));
     parts.gridMat.opacity = a.ground.gridOpacity + (b.ground.gridOpacity - a.ground.gridOpacity) * t;
     parts.cloudMat.color.setHex(mixHex(a.clouds.color, b.clouds.color, t, scratch));

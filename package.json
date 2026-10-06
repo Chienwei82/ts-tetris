@@ -23,7 +23,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "curate": "node --experimental-strip-types --no-warnings tools/curate-seeds.ts"
+    "curate": "node --experimental-strip-types --no-warnings tools/curate-seeds.ts",
+    "shots": "node tools/screenshots.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",

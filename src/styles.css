@@ -187,23 +187,25 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #touch-controls { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
 #touch-controls.hidden { display: none; }
 #touch-controls * { touch-action: none; -webkit-user-select: none; user-select: none; }
-#tc-move {
-  position: absolute; left: calc(20px + env(safe-area-inset-left, 0px)); bottom: calc(26px + env(safe-area-inset-bottom, 0px));
-  display: flex; gap: 12px; pointer-events: none;
+/* Cluster izquierdo: rotación (grande) encima de ◀/▶ — lejos de ⇊ para no tirar piezas. */
+#tc-pad {
+  position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 12px; pointer-events: none;
 }
+#tc-rotate { display: flex; gap: 12px; pointer-events: none; }
+#tc-move { display: flex; gap: 12px; pointer-events: none; }
+/* Cluster derecho: HOLD sobre la caída instantánea (la acción más usada, grande). */
 #tc-buttons {
-  position: absolute; right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(26px + env(safe-area-inset-bottom, 0px));
-  display: grid; grid-template-columns: repeat(2, 64px); gap: 12px; pointer-events: none;
-}
-#tc-side {
-  display: none;
+  position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; align-items: flex-end; gap: 12px; pointer-events: none;
 }
 .tc-btn {
-  pointer-events: auto; width: 64px; height: 64px; padding: 0; border-radius: 16px;
-  background: rgba(253, 249, 238, 0.55); color: var(--ink); font-size: 24px;
+  pointer-events: auto; width: 72px; height: 72px; padding: 0; border-radius: 18px;
+  background: rgba(253, 249, 238, 0.55); color: var(--ink); font-size: 28px;
   border: 2.5px solid var(--ink); box-shadow: 3px 4px 0 rgba(var(--shadow), 0.25);
 }
-.tc-btn.tc-small { width: 48px; height: 48px; font-size: 16px; border-radius: 12px; }
+#tc-rotate .tc-btn { width: 80px; height: 80px; font-size: 34px; }
+.tc-btn.tc-small { width: 52px; height: 52px; font-size: 15px; border-radius: 13px; }
 .tc-btn.active, .tc-btn:active { transform: translate(3px, 4px); box-shadow: 0 0 0 rgba(var(--shadow), 0.25); background: var(--yellow); }
 
 /* ============ Pantalla de selección de modo (fallback) ============ */
@@ -222,14 +224,14 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 .mode-btn span { font-size: 12.5px; font-weight: 600; letter-spacing: 1px; opacity: 0.85; }
 .mode-btn.ghost { background: var(--paper-hi); color: var(--ink); }
 
-/* ============ Modo táctil: la barra de ajustes se va a una esquina, solo iconos ============ */
+/* ============ Modo táctil: utilidades en columna vertical a la derecha, solo iconos ============ */
 body.touch #hud-right { display: none; }
 body.touch #bottom-bar {
   top: calc(6px + env(safe-area-inset-top, 0px)); bottom: auto;
   left: auto; right: calc(6px + env(safe-area-inset-right, 0px));
-  transform: none; flex-direction: row; align-items: flex-start; gap: 4px;
+  transform: none; flex-direction: column; align-items: flex-end; gap: 6px; z-index: 7;
 }
-body.touch #bottom-bar button { min-width: 44px; min-height: 34px; padding: 5px 7px; font-size: 15px; border-width: 2px; border-radius: 9px; }
+body.touch #bottom-bar button { min-width: 44px; min-height: 38px; padding: 5px 8px; font-size: 15px; border-width: 2px; border-radius: 9px; }
 body.touch #bottom-bar .bb-label { display: none; }
 
 /* ============ Pantallas pequeñas o bajas (móvil vertical y horizontal) ============ */
@@ -245,7 +247,7 @@ body.touch #bottom-bar .bb-label { display: none; }
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
     gap: 4px 8px;
   }
-  body.touch #hud-left { right: 6px; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  body.touch #hud-left { right: calc(58px + env(safe-area-inset-right, 0px)); justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   body.touch #hud-left::-webkit-scrollbar { display: none; }
   .stat { margin: 0; display: flex; align-items: center; gap: 5px; }
   .stat label { display: none; }
@@ -257,4 +259,15 @@ body.touch #bottom-bar .bb-label { display: none; }
   #stage-chip { font-size: 9px; }
   #hud-right { display: none; }
   #help-overlay .help-card { max-height: 82dvh; }
+}
+
+
+/* ============ Pantallas bajas (móvil horizontal): botones compactos, sin solapes ============ */
+@media (max-height: 480px) {
+  .tc-btn { width: 60px; height: 60px; font-size: 22px; border-radius: 15px; }
+  #tc-rotate .tc-btn { width: 68px; height: 68px; font-size: 26px; }
+  .tc-btn.tc-small { width: 44px; height: 44px; font-size: 13px; border-radius: 11px; }
+  #tc-pad, #tc-buttons { gap: 10px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  body.touch #bottom-bar { gap: 4px; }
+  body.touch #bottom-bar button { min-height: 32px; font-size: 13px; padding: 4px 7px; }
 }

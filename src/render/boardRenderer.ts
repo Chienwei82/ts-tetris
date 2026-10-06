@@ -95,6 +95,19 @@ export class BoardRenderer {
     back.add(backEdge);
     this.group.add(back);
   }
+  /**
+   * Panel de fondo translúcido (efectos ON: el diorama se ve a través del
+   * tablero, con las sombras de los bloques recortadas contra el fondo) u
+   * opaco (OFF: sin blending ni ordenación, más barato). El marco de cartón y
+   * la plataforma permanecen sólidos siempre.
+   */
+  setBackdropTranslucent(on: boolean): void {
+    const mat = graphPaperMaterial();
+    mat.transparent = on;
+    mat.opacity = on ? 0.42 : 1;
+    mat.depthWrite = !on;
+    mat.needsUpdate = true;
+  }
   key(col: number, row: number): string { return col + ',' + row; }
   syncLocked(grid: Grid): void {
     // While a clear animation plays, the engine grid already collapsed but the

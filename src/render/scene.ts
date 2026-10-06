@@ -165,7 +165,8 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
   key.shadow.bias = -0.0004;
   key.shadow.normalBias = 0.02;
   scene.add(key);
-  const fill = new THREE.DirectionalLight(0xd8ecff, 0.45);
+  // Luz de relleno tenue: deja las sombras de la luz clave marcadas y dramáticas.
+  const fill = new THREE.DirectionalLight(0xd8ecff, 0.22);
   fill.position.set(-8, 5, 8);
   scene.add(fill);
 

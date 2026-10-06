@@ -4,6 +4,17 @@ Tetris 3D jugable en el navegador con **TypeScript + three.js**: bloques voxel c
 papel recortado, diorama de cartón y papel, partículas de confeti, cámara con deriva sutil, HUD
 como fichas de papel y efectos de sonido sintetizados con WebAudio.
 
+![Partida en escritorio: tablero translúcido con el diorama detrás y sombras marcadas](docs/screenshots/desktop.jpg)
+
+| Móvil vertical | Móvil horizontal |
+|---|---|
+| ![Controles táctiles en móvil vertical](docs/screenshots/mobile-portrait.jpg) | ![Controles táctiles en móvil horizontal](docs/screenshots/mobile-landscape.jpg) |
+
+> Con los **efectos activados** el panel del tablero es translúcido y el escenario se ve a
+> través de él (las sombras de los bloques se recortan contra el fondo); al apagarlos el
+> panel vuelve a ser sólido, más barato de renderizar. Capturas generadas con
+> `npm run shots` (`tools/screenshots.mjs`).
+
 ## Requisitos
 
 - Node.js 22.12+ y npm (Vite 8 y Vitest 5 exigen Node moderno).
@@ -16,10 +27,11 @@ npm run dev      # local: http://localhost:5173 · LAN: http://<tu-IP>:5173
 ```
 
 ```bash
-npm test         # tests de lógica (vitest 5, 64 tests)
+npm test         # tests de lógica (vitest 5, 72 tests)
 npm run build    # type-check (tsc 7 nativo) + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
+npm run shots    # (opcional) regenera las capturas del README (ver tools/screenshots.mjs)
 ```
 
 ## Controles
@@ -41,17 +53,29 @@ npm run curate   # (opcional) regenera las semillas curadas de la música
 
 ### Controles táctiles (móvil / tableta)
 
-En modo táctil aparecen controles superpuestos al canvas (botones ←/→ a la
-izquierda y botones de acción a la derecha), con multitáctil real (botón de
-movimiento + acción a la vez):
+En modo táctil los botones se agrupan en dos clusters a los lados del tablero
+(con multitáctil real: varios botones a la vez), más una **columna vertical de
+utilidades** (❓ ⏸ ✨ 🎵 ⚙️) pegada al borde derecho:
 
 | Control táctil | Acción |
 |---|---|
+| ↺ / ↻ (grandes, sobre ◀/▶) | Rotar antihorario / horario |
 | ◀ / ▶ | Mover pieza (con auto-repetición DAS/ARR) |
-| ↺ / ↻ | Rotar antihorario / horario |
-| ⇊ | Caída instantánea |
-| HOLD | Reserva |
-| ❓ · ⏸ (arriba) | Ayuda · Pausa (Reiniciar vive en el overlay de pausa) |
+| ⇊ (grande, abajo-derecha) | Caída instantánea |
+| HOLD (sobre ⇊) | Reserva |
+| ❓ · ⏸ · ✨ · 🎵 · ⚙️ (columna derecha) | Ayuda · Pausa · Efectos · Música · Controles |
+
+La rotación vive encima de ◀/▶ y lejos de ⇊ para no tirar la pieza al rotar.
+
+**Arrastrar y tocar la pieza** (siempre disponible junto a los botones):
+
+| Gesto | Acción |
+|---|---|
+| Arrastrar en horizontal | Mover la pieza celda a celda (sigue al dedo) |
+| Arrastrar hacia abajo | Caída suave celda a celda (subir no la retrocede) |
+| Tocar el tablero | Rotar en sentido horario |
+
+El gesto nunca dispara caída instantánea: eso solo vive en ⇊.
 
 El modo se elige automáticamente por detección de dispositivo; si la detección
 es ambigua aparece una pantalla de selección al arrancar y la elección persiste
@@ -75,8 +99,11 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   nieve, estrellas, luciérnagas, fugaces), más personajes de papel de fondo
   (globo, pájaros, conejo, pingüino y OVNI).
 - **Toggle de efectos** (botón o tecla E): apaga clima, personajes, confeti y
-  cambios de tema, dejando el fondo clásico congelado. La preferencia se guarda
-  en `localStorage` y arranca apagada si el sistema pide movimiento reducido.
+  cambios de tema, dejando el fondo clásico congelado. Con efectos el panel del
+  tablero es **translúcido** (el escenario se ve detrás de las piezas y las
+  sombras se recortan contra él); sin ellos vuelve a ser sólido para ahorrar
+  render. La preferencia se guarda en `localStorage` y arranca apagada si el
+  sistema pide movimiento reducido.
 - **Música procedural adaptativa** (botón o tecla M): generada en vivo con la
   Web Audio API, sin ficheros. Escala dórica de La; cada semilla fija una
   canción con variación (3 progresiones × 6 grooves × 4 rotaciones = 72
@@ -109,11 +136,11 @@ src/
     stage.ts        Controlador: transiciones de tema, rayos, toggle de efectos
     weather.ts      Clima procedural (lluvia, tormenta, nieve, hojas, estrellas, aurora, fugaces)
     characters.ts   Personajes de papel (globo, pájaros, conejo, pingüino, OVNI)
-    boardRenderer.ts Cubos con pool, fantasma, marco de cartón y washi tape
+    boardRenderer.ts Cubos con pool, fantasma, marco de cartón, washi tape y panel traslúcido
     particles.ts    Confeti de papel (ráfagas + ambiente) con shader propio y alpha global
     effects.ts      Vibración de cámara, destello de línea
     materials.ts    Texturas procedurales (papel, cartón, cuadrícula, cinta) + toon + tinta
-  ui/         Entrada con DAS/ARR, HUD, previews 2D canvas, preferencias (localStorage)
+  ui/         Entrada con DAS/ARR, gestos de arrastre de la pieza, HUD, previews 2D, preferencias
   platform/   Detección de dispositivo (escritorio/móvil/tableta) y ViewportManager
               (resize/orientation/visualViewport, pixel ratio limitado)
   audio/      Efectos sintetizados WebAudio (sin assets), incluido el trueno
@@ -123,7 +150,8 @@ src/
     musicEngine.ts     Grafo WebAudio + scheduler lookahead + voces
     musicDirector.ts   Fachada: start/stop/setIntensity + toggle on/off
     intensityTracker.ts Señales del juego → intensity suavizada (puro)
-  tools/     fuera del bundle: curate-seeds.ts (npm run curate) puntúa semillas
+  tools/     fuera del bundle: curate-seeds.ts (npm run curate) puntúa semillas;
+             screenshots.mjs (npm run shots) genera las capturas del README
   main.ts     Bucle, cámara con deriva, gauge/selector, toggle de efectos, eventos→efectos
 ```
 
@@ -155,6 +183,13 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
   simulación de clima, personajes, confeti, nubes y cubos flotantes (no solo los
   oculta), dejando el coste por frame como antes de la feature; se recuerda en
   `localStorage` y arranca apagado si el sistema pide movimiento reducido.
+- **Entrada por capas**: teclado, botones táctiles y gestos sobre el canvas producen
+  las mismas `InputActions` (`inputManager.ts`); la máquina de gestos (`pieceDrag.ts`)
+  es pura y testeada: arrastre convertido en pasos de celda con resto conservado,
+  caída por profundidad máxima del dedo y tap con slop + temporizador.
+- **Panel del tablero por modos**: translúcido con efectos (el fondo se ve detrás de
+  las piezas y las sombras se recortan contra el panel) y sólido sin ellos
+  (`transparent: false`, sin blending ni ordenación) para ahorrar GPU.
 - **Audio 100 % sintetizado**: osciladores WebAudio, cero ficheros. La música
   procedural se programa con scheduler lookahead (tipo *tale of two clocks*) y
   cambios de intensidad cuantizados al compás; incluye limitador (compresor) y
