@@ -21,6 +21,79 @@ export const MELODY_DEGREES = [0, 2, 3, 4, 6] as const;
 /** Progresión modal como raíces en índices de escala: Am – D – G – C. */
 export const CHORD_ROOT_DEGREES = [0, 3, 6, 2] as const;
 
+/**
+ * Tres progresiones modales (raíces en grados de escala), todas consonantes y
+ * diatónicas. El índice 0 es la progresión base (Am–D–G–C).
+ */
+export const CHORD_PROGRESSIONS = [
+  [0, 3, 6, 2],
+  [0, 6, 3, 4],
+  [2, 6, 3, 0],
+] as const;
+
+/**
+ * Seis patrones rítmicos por capa (pasos de semicorchea). El swing desplaza
+ * ligeramente los pasos débiles para un groove menos robótico.
+ */
+export const GROOVE_KICK_STEPS = [
+  [0, 8],
+  [0, 4, 8, 12],
+  [0, 7, 11],
+  [0],
+  [0, 8],
+  [0],
+] as const;
+export const GROOVE_HAT_STEPS = [
+  [2, 6, 10, 14],
+  [2, 6, 10, 14, 4, 12],
+  [2, 6, 10, 14],
+  [6, 14],
+  [2, 4, 6, 10, 12, 14],
+  [4, 12],
+] as const;
+export const GROOVE_BASS_STEPS = [
+  [0],
+  [0, 8],
+  [0, 10],
+  [0],
+  [0, 8],
+  [0, 8],
+] as const;
+export const GROOVE_SWING = [false, false, true, false, true, false] as const;
+
+/** Desplazamiento rítmico (segundos) de los pasos débiles con swing. */
+export const SWING_S = 0.04;
+
+/**
+ * Curación de canciones: qué se considera una "buena" semilla.
+ * - SONG_BARS: compases analizados al puntuar (un ciclo completo de 8).
+ * - HIGH_DENSITY: las notas por debajo de este umbral casi siempre suenan.
+ * - MIN_DEGREES: grados de escala distintos esperados en una buena melodía.
+ * - MAX_REPEAT: repeticiones seguidas toleradas antes de penalizar.
+ * - Pesos de variedad melódica, movimiento y anti-repetición (suman 1).
+ */
+export const SONG_BARS = 8;
+export const HIGH_DENSITY = 0.6;
+export const MIN_DEGREES = 5;
+export const MAX_REPEAT = 6;
+export const VARIETY_WEIGHT = 0.45;
+export const MOTION_WEIGHT = 0.3;
+export const REPEAT_WEIGHT = 0.25;
+export const MOTION_TARGET = 1.2;
+
+/** Nota mínima de calidad para entrar en la lista curada. */
+export const CURATED_MIN_SCORE = 78;
+
+// 50 semillas curadas (nota mínima 100, 18/18 estilos).
+// Generado con `npm run curate` — ver tools/curate-seeds.ts.
+export const CURATED_SONG_SEEDS = [
+  11, 16, 18, 37, 58, 71, 81, 208, 251, 325,
+  345, 354, 381, 401, 426, 485, 503, 580, 83, 164,
+  181, 205, 220, 230, 258, 280, 284, 292, 317, 348,
+  374, 376, 384, 388, 410, 414, 420, 457, 464, 468,
+  477, 494, 495, 530, 552, 569, 571, 576, 615, 649,
+] as const;
+
 /** Compases que dura cada acorde (progresión lenta de 8 compases). */
 export const BARS_PER_CHORD = 2;
 

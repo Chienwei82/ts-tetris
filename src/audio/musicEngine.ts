@@ -126,7 +126,7 @@ export class MusicEngine {
     this.fadeMaster(MASTER_PEAK, FADE_IN_S, t);
     this._running = true;
     const barDur = this.stepDur * STEPS_PER_BAR;
-    this.ensurePad(t, chordForBar(Math.floor(this.step / STEPS_PER_BAR)), barDur * BARS_PER_CHORD * 0.9);
+    this.ensurePad(t, chordForBar(this.seed, Math.floor(this.step / STEPS_PER_BAR)), barDur * BARS_PER_CHORD * 0.9);
     this.startScheduler();
   }
 
@@ -147,7 +147,7 @@ export class MusicEngine {
     this.stopScheduler();
     const barDur = this.stepDur * STEPS_PER_BAR;
     const t = this.ctx.currentTime + 0.05;
-    const chord = chordForBar(Math.floor(this.step / STEPS_PER_BAR));
+    const chord = chordForBar(this.seed, Math.floor(this.step / STEPS_PER_BAR));
     this.schedulePad(t, barDur * 1.4, chord);
     this.scheduleBass(t, barDur, chord[0] ?? 0);
     this.scheduleArp(t + barDur * 0.25, barDur * 0.9, (chord[2] ?? 0) + 7, 0.5);
@@ -231,14 +231,14 @@ export class MusicEngine {
     if (this.gates.bass) {
       for (const b of p.bass) {
         if (b.step === inStep && b.threshold < this.density) {
-          this.scheduleBass(at, stepDur * 3.5, p.chord[0] ?? 0);
+          this.scheduleBass(at + this.swingOffset(p.swing, b.step), stepDur * 3.5, p.chord[0] ?? 0);
         }
       }
     }
     if (this.gates.arpeggio) {
       for (const a of p.arpeggio) {
         if (a.step === inStep && a.threshold < this.density) {
-          this.scheduleArp(at, stepDur * 2.2, a.degree, a.velocity);
+          this.scheduleArp(at + this.swingOffset(p.swing, a.step), stepDur * 2.2, a.degree, a.velocity);
         }
       }
     }
@@ -250,6 +250,11 @@ export class MusicEngine {
         if (h.step === inStep && h.threshold < this.density) this.scheduleHat(at);
       }
     }
+  }
+
+  /** Swing determinista: desplaza solo los pasos débiles (impares). */
+  private swingOffset(swing: number, step: number): number {
+    return swing > 0 && step % 2 === 1 ? swing : 0;
   }
 
   /** Aplica intensidad → tempo, brillo y ganancias de capa, todo con rampas. */
