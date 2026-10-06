@@ -101,7 +101,7 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 .hint { font-size: 12px; margin-top: 16px; color: var(--muted); }
 #bottom-bar { position: fixed; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 5; }
 #bottom-bar button { padding: 8px 18px; font-size: 14px; background: var(--paper-hi); color: var(--ink); border-radius: 10px; }
-#btn-effects.off { background: var(--paper); color: var(--muted); }
+#btn-effects.off, #btn-music.off { background: var(--paper); color: var(--muted); }
 /* Difficulty gauge + stage chip */
 #gauge { height: 14px; border: 2px solid var(--ink); border-radius: 8px; background: var(--paper-hi); box-shadow: inset 0 2px 5px rgba(var(--shadow), 0.18); overflow: hidden; }
 #gauge-fill { height: 100%; width: 0%; border-radius: 6px; transition: width 0.25s linear; background: linear-gradient(90deg, var(--green), var(--yellow)); }

@@ -16,7 +16,7 @@ npm run dev      # local: http://localhost:5173 · LAN: http://<tu-IP>:5173
 ```
 
 ```bash
-npm test         # tests de lógica (vitest 5, 20 tests)
+npm test         # tests de lógica (vitest 5, 60 tests)
 npm run build    # type-check (tsc 7 nativo) + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 ```
@@ -32,6 +32,7 @@ npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 | Espacio | Caída instantánea (+2 ptos/fila, con fantasma) |
 | C | Reserva (hold, un uso por pieza) |
 | E | Efectos del fondo on/off (clima, personajes, temas) |
+| M | Música procedural on/off |
 | H | Ayuda (bloques y ayudas del juego) |
 | P / Esc | Pausa |
 | R | Reinicio |
@@ -75,6 +76,13 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
 - **Toggle de efectos** (botón o tecla E): apaga clima, personajes, confeti y
   cambios de tema, dejando el fondo clásico congelado. La preferencia se guarda
   en `localStorage` y arranca apagada si el sistema pide movimiento reducido.
+- **Música procedural adaptativa** (botón o tecla M): generada en vivo con la
+  Web Audio API, sin ficheros. Escala dórica de La con progresión Am–D–G–C y
+  arpegio pentatónico; un único parámetro `intensity` (0–1) controla capas
+  (pad siempre, bajo ≥ 0.2, arpegio ≥ 0.4, percusión ≥ 0.6), tempo (70→100 BPM)
+  y brillo. Se reproduce con lookahead determinista: misma semilla ⇒ misma
+  canción (la semilla de cada partida se loguea en consola). Pausa con el juego
+  y con la pestaña oculta; preferencia guardada en `localStorage`.
 - Lock delay de 0.5 s con hasta 15 reseteos al mover/rotar.
 - Pieza fantasma, vista previa de las 3 piezas siguientes y reserva.
 - **Pantalla de ayuda** (tecla `H`, visible al inicio): explica los 7 bloques y
@@ -104,6 +112,12 @@ src/
   platform/   Detección de dispositivo (escritorio/móvil/tableta) y ViewportManager
               (resize/orientation/visualViewport, pixel ratio limitado)
   audio/      Efectos sintetizados WebAudio (sin assets), incluido el trueno
+    musicConstants.ts  Tonalidad, BPM, umbrales de capas y mezcla (sin números mágicos)
+    musicRng.ts        RNG determinista (mulberry32) + RNG por compás
+    musicPatterns.ts   Progresión, arpegio y mapeo intensidad→capas/tempo (puro)
+    musicEngine.ts     Grafo WebAudio + scheduler lookahead + voces
+    musicDirector.ts   Fachada: start/stop/setIntensity + toggle on/off
+    intensityTracker.ts Señales del juego → intensity suavizada (puro)
   main.ts     Bucle, cámara con deriva, gauge/selector, toggle de efectos, eventos→efectos
 ```
 
@@ -135,7 +149,10 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
   simulación de clima, personajes, confeti, nubes y cubos flotantes (no solo los
   oculta), dejando el coste por frame como antes de la feature; se recuerda en
   `localStorage` y arranca apagado si el sistema pide movimiento reducido.
-- **Audio 100 % sintetizado**: osciladores WebAudio, cero ficheros.
+- **Audio 100 % sintetizado**: osciladores WebAudio, cero ficheros. La música
+  procedural se programa con scheduler lookahead (tipo *tale of two clocks*) y
+  cambios de intensidad cuantizados al compás; incluye limitador (compresor) y
+  libera nodos/fuentes al terminar cada nota.
 - **Analítica en Vercel**: `@vercel/analytics` + `@vercel/speed-insights` inyectados
   desde `src/analytics.ts` (`mode: 'auto'`: solo envía datos en producción; en local
   loguea en consola).
