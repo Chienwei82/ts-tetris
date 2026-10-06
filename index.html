@@ -119,6 +119,7 @@
           <li><strong>🔄 Wall-kicks <span class="key">↑</span>/<span class="key">X</span>/<span class="key">Z</span></strong> — al rotar junto a una pared o el suelo, la pieza se aparta sola.</li>
           <li><strong>⏱️ Nivel híbrido</strong> — subes cada 10 líneas o 45 s (lo que llegue antes), hasta el nivel 20.</li>
           <li><strong>🎵 Música procedural</strong> — se genera en vivo y se adapta a la acción: tranquila al principio y más enérgica cuando sube la intensidad. Actívala o apágala con <span class="key">M</span>.</li>
+          <li><strong>👆 Arrastrar y tocar (móvil)</strong> — arrastra la pieza para moverla (hacia abajo, caída suave) y toca el tablero para rotarla en sentido horario.</li>
         </ul>
         <p class="help-note">No hay objetos que recoger: estas ayudas están siempre disponibles.</p>
 
@@ -142,17 +143,22 @@
       <button id="btn-mode" title="Modo de controles (teclado o táctil)" aria-label="Modo de controles">⚙️<span class="bb-label"> Controles</span></button>
     </div>
 
-    <!-- Controles táctiles (solo modo móvil/tableta): botones ←/→ + acciones -->
+    <!-- Controles táctiles (solo modo móvil/tableta):
+         izquierda: rotación (grande) sobre ◀/▶ · derecha: HOLD + caída instantánea -->
     <div id="touch-controls" class="hidden" aria-hidden="true">
-      <div id="tc-move">
-        <button id="tc-left" type="button" class="tc-btn" aria-label="Mover a la izquierda">◀</button>
-        <button id="tc-right" type="button" class="tc-btn" aria-label="Mover a la derecha">▶</button>
+      <div id="tc-pad">
+        <div id="tc-rotate">
+          <button id="tc-ccw" type="button" class="tc-btn" aria-label="Rotar a la izquierda">↺</button>
+          <button id="tc-cw" type="button" class="tc-btn" aria-label="Rotar a la derecha">↻</button>
+        </div>
+        <div id="tc-move">
+          <button id="tc-left" type="button" class="tc-btn" aria-label="Mover a la izquierda">◀</button>
+          <button id="tc-right" type="button" class="tc-btn" aria-label="Mover a la derecha">▶</button>
+        </div>
       </div>
       <div id="tc-buttons">
-        <button id="tc-ccw" type="button" class="tc-btn" aria-label="Rotar a la izquierda">↺</button>
-        <button id="tc-cw" type="button" class="tc-btn" aria-label="Rotar a la derecha">↻</button>
         <button id="tc-hold" type="button" class="tc-btn tc-small" aria-label="Reserva">HOLD</button>
-        <button id="tc-drop" type="button" class="tc-btn tc-small" aria-label="Caída instantánea">⇊</button>
+        <button id="tc-drop" type="button" class="tc-btn" aria-label="Caída instantánea">⇊</button>
       </div>
     </div>
 

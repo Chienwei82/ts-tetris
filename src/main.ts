@@ -5,7 +5,7 @@ import { stackHeight } from './game/board.js';
 import { LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL, VISIBLE_ROWS } from './game/types.js';
 import type { GameEvent, LevelProgress, PieceKind } from './game/types.js';
 import { BoardRenderer } from './render/boardRenderer.js';
-import { cellToWorld } from './render/constants.js';
+import { cellToWorld, pxPerCell } from './render/constants.js';
 import { CameraShake, ClearFlash } from './render/effects.js';
 import { frameFor } from './render/framing.js';
 import type { Frame } from './render/framing.js';
@@ -85,11 +85,15 @@ function refreshLevelOut(): void {
   levelRangeOut.textContent = lv + ' · ' + stageLabelFor(lv);
 }
 levelRange.addEventListener('input', refreshLevelOut);
-/* Background-effects toggle: off = classic static diorama (saves every per-frame extra). */
+/* Background-effects toggle: off = classic static diorama (saves every per-frame
+   extra) and a solid board backdrop (no blending/sorting). */
 let effectsOn = true;
 function applyEffects(on: boolean, immediate = false, persist = true): void {
   effectsOn = on;
   stage.setEffectsEnabled(on, immediate);
+  // Con efectos el panel del tablero es translúcido (se ve el diorama detrás de
+  // las piezas); sin ellos vuelve a ser sólido para ahorrar blending.
+  board.setBackdropTranslucent(on);
   const label = on ? '✨ Efectos: ON' : '✨ Efectos: OFF';
   const labelEl = btnEffects.querySelector('.bb-label');
   if (labelEl) labelEl.textContent = label.replace('✨', '');
@@ -277,7 +281,7 @@ const input = new InputManager({
   },
   onHelp: () => toggleHelp(),
   setSoftDrop: (v) => { engine.softDrop = v; }
-}, el<HTMLDivElement>('touch-controls'));
+}, el<HTMLDivElement>('touch-controls'), el<HTMLCanvasElement>('scene'), () => pxPerCell(camera, canvas));
 /* Modo de controles: elección guardada > detección fiable > pantalla de selección. */
 const modeSelect = new ModeSelect({
   root: el<HTMLDivElement>('mode-overlay'),
@@ -348,7 +352,9 @@ function currentFrame(): Frame {
   // Bandas de UI (fracción del alto) que se solapan con la columna del tablero:
   // tira HUD arriba; en vertical táctil también los botones de abajo.
   const top = (compact ? 60 : 0) / h;
-  const bottom = (touch && compact && camera.aspect < 1 ? 104 : 0) / h;
+  // Vertical táctil: el cluster izquierdo (rotación sobre ◀/▶) ocupa ~186 px
+  // abajo y el derecho (HOLD + ⇊) ~158: banda inferior para que no tape celdas.
+  const bottom = (touch && compact && camera.aspect < 1 ? 190 : 0) / h;
   const key = camera.aspect + ':' + top + ':' + bottom;
   if (key !== frameKey) {
     frameKey = key;
