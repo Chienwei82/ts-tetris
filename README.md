@@ -16,9 +16,10 @@ npm run dev      # local: http://localhost:5173 · LAN: http://<tu-IP>:5173
 ```
 
 ```bash
-npm test         # tests de lógica (vitest 5, 60 tests)
+npm test         # tests de lógica (vitest 5, 64 tests)
 npm run build    # type-check (tsc 7 nativo) + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
+npm run curate   # (opcional) regenera las semillas curadas de la música
 ```
 
 ## Controles
@@ -77,12 +78,16 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   cambios de tema, dejando el fondo clásico congelado. La preferencia se guarda
   en `localStorage` y arranca apagada si el sistema pide movimiento reducido.
 - **Música procedural adaptativa** (botón o tecla M): generada en vivo con la
-  Web Audio API, sin ficheros. Escala dórica de La con progresión Am–D–G–C y
-  arpegio pentatónico; un único parámetro `intensity` (0–1) controla capas
-  (pad siempre, bajo ≥ 0.2, arpegio ≥ 0.4, percusión ≥ 0.6), tempo (70→100 BPM)
-  y brillo. Se reproduce con lookahead determinista: misma semilla ⇒ misma
-  canción (la semilla de cada partida se loguea en consola). Pausa con el juego
-  y con la pestaña oculta; preferencia guardada en `localStorage`.
+  Web Audio API, sin ficheros. Escala dórica de La; cada semilla fija una
+  canción con variación (3 progresiones × 6 grooves × 4 rotaciones = 72
+  combinaciones, con swing opcional) y el arpegio se mueve en pentatónica. Un
+  único parámetro `intensity` (0–1) controla capas (pad siempre, bajo ≥ 0.2,
+  arpegio ≥ 0.4, percusión ≥ 0.6), tempo (70→100 BPM) y brillo. Las partidas
+  usan semillas de una **lista curada** (`npm run curate`, 50 semillas con
+  cobertura de los 18 estilos); la semilla de cada partida se loguea en
+  consola para reproducirla. Scheduler lookahead determinista (misma semilla ⇒
+  misma canción). Pausa con el juego y con la pestaña oculta; preferencia
+  guardada en `localStorage`.
 - Lock delay de 0.5 s con hasta 15 reseteos al mover/rotar.
 - Pieza fantasma, vista previa de las 3 piezas siguientes y reserva.
 - **Pantalla de ayuda** (tecla `H`, visible al inicio): explica los 7 bloques y
@@ -112,12 +117,13 @@ src/
   platform/   Detección de dispositivo (escritorio/móvil/tableta) y ViewportManager
               (resize/orientation/visualViewport, pixel ratio limitado)
   audio/      Efectos sintetizados WebAudio (sin assets), incluido el trueno
-    musicConstants.ts  Tonalidad, BPM, umbrales de capas y mezcla (sin números mágicos)
+    musicConstants.ts  Tonalidad, BPM, umbrales de capas, semillas curadas
     musicRng.ts        RNG determinista (mulberry32) + RNG por compás
-    musicPatterns.ts   Progresión, arpegio y mapeo intensidad→capas/tempo (puro)
+    musicPatterns.ts   Progresiones/grooves, arpegio pentatónico, mapeo intensity (puro)
     musicEngine.ts     Grafo WebAudio + scheduler lookahead + voces
     musicDirector.ts   Fachada: start/stop/setIntensity + toggle on/off
     intensityTracker.ts Señales del juego → intensity suavizada (puro)
+  tools/     fuera del bundle: curate-seeds.ts (npm run curate) puntúa semillas
   main.ts     Bucle, cámara con deriva, gauge/selector, toggle de efectos, eventos→efectos
 ```
 

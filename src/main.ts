@@ -17,6 +17,7 @@ import { SoundFX } from './audio/sound.js';
 import { IntensityTracker } from './audio/intensityTracker.js';
 import type { IntensitySignals } from './audio/intensityTracker.js';
 import { MusicDirector } from './audio/musicDirector.js';
+import { pickCuratedSeed } from './audio/musicPatterns.js';
 import { detectDevice } from './platform/device.js';
 import { ViewportManager } from './platform/viewport.js';
 import { InputManager } from './ui/inputManager.js';
@@ -208,9 +209,10 @@ function startGame(): void {
   board.reset();
   board.setActive(engine.active?.kind ?? 'T', engine.activeCells(), true);
   stage.setLevel(lv, true);
-  // Reinicio/nueva partida: la música vuelve a la calma con una canción nueva.
+  // Reinicio/nueva partida: la música vuelve a la calma con una canción nueva
+  // elegida entre las semillas curadas (la semilla se loguea para reproducirla).
   intensity.reset();
-  const musicSeed = (Date.now() ^ Math.imul(lv, 2654435761)) >>> 0;
+  const musicSeed = pickCuratedSeed(Date.now() ^ Math.imul(lv, 2654435761));
   console.info('[música] semilla de la canción:', musicSeed);
   music.start(musicSeed);
   lastThemeIdx = themeIndexForLevel(lv);
