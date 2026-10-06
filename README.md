@@ -16,7 +16,7 @@ npm run dev      # local: http://localhost:5173 · LAN: http://<tu-IP>:5173
 ```
 
 ```bash
-npm test         # tests de lógica (vitest 5, 15 tests)
+npm test         # tests de lógica (vitest 5, 20 tests)
 npm run build    # type-check (tsc 7 nativo) + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 ```
@@ -32,6 +32,7 @@ npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 | Espacio | Caída instantánea (+2 ptos/fila, con fantasma) |
 | C | Reserva (hold, un uso por pieza) |
 | E | Efectos del fondo on/off (clima, personajes, temas) |
+| H | Ayuda (bloques y ayudas del juego) |
 | P / Esc | Pausa |
 | R | Reinicio |
 | Enter | Confirmar (jugar / continuar / reintentar) |
@@ -57,7 +58,9 @@ npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
   cambios de tema, dejando el fondo clásico congelado. La preferencia se guarda
   en `localStorage` y arranca apagada si el sistema pide movimiento reducido.
 - Lock delay de 0.5 s con hasta 15 reseteos al mover/rotar.
-- Pieza fantasma, vista previa (siguiente) y reserva.
+- Pieza fantasma, vista previa de las 3 piezas siguientes y reserva.
+- **Pantalla de ayuda** (tecla `H`, visible al inicio): explica los 7 bloques y
+  todas las ayudas del juego. Abrirla durante la partida pausa el juego.
 - Pausa, reinicio y pantalla de fin de juego con puntuación.
 
 ## Arquitectura
@@ -134,3 +137,7 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
 - Cámara en perspectiva con **deriva sinusoidal sutil** + trauma/shake en drops, clears y niveles.
 - Feedback en cada acción: rebote al fijar, fichas que vuelan + destello al limpiar,
   lluvia de confeti en hard drop, toasts de Tetris/combo/nivel y overlay cartón con cinta.
+
+## Licencia
+
+Distribuido bajo la licencia [MIT](LICENSE). Úsalo, modifícalo y compártelo libremente.

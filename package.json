@@ -4,6 +4,16 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Tetris 3D jugable en el navegador — TypeScript + three.js",
+  "license": "MIT",
+  "author": "Chienwei82",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Chienwei82/ts-tetris.git"
+  },
+  "homepage": "https://github.com/Chienwei82/ts-tetris#readme",
+  "bugs": {
+    "url": "https://github.com/Chienwei82/ts-tetris/issues"
+  },
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
