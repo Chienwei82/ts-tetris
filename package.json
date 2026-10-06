@@ -22,7 +22,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "curate": "node --experimental-strip-types --no-warnings tools/curate-seeds.ts"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",

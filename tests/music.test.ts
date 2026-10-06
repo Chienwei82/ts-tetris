@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BPM_MAX, BPM_MIN, CUTOFF_MAX_HZ, CUTOFF_MIN_HZ, MASK_DENSITY_MIN, MELODY_DEGREES,
+  BPM_MAX, BPM_MIN, CUTOFF_MAX_HZ, CUTOFF_MIN_HZ, CURATED_MIN_SCORE, CURATED_SONG_SEEDS,
+  MASK_DENSITY_MIN, MELODY_DEGREES,
   ROOT_FREQ, SCALE_INTERVALS, THRESHOLD_ARPEGIO, THRESHOLD_BASS, THRESHOLD_DRUMS
 } from '../src/audio/musicConstants.js';
 import { IntensityTracker } from '../src/audio/intensityTracker.js';
 import type { IntensitySignals } from '../src/audio/intensityTracker.js';
 import {
   barPattern, chordForBar, cutoffFor, freqForDegree, layersForIntensity,
-  maskDensityFor, tempoFor
+  maskDensityFor, pickCuratedSeed, songProfile, songScore, tempoFor
 } from '../src/audio/musicPatterns.js';
 import { hashSeed, mulberry32, rngForBar } from '../src/audio/musicRng.js';
 
@@ -82,15 +83,48 @@ describe('patrones musicales', () => {
       }
     }
   });
-  it('la progresión rota Am–D–G–C cada 2 compases', () => {
-    expect(chordForBar(0)).toEqual([0, 2, 4]);
-    expect(chordForBar(2)).toEqual([3, 5, 7]);
-    expect(chordForBar(4)).toEqual([6, 8, 10]);
-    expect(chordForBar(6)).toEqual([2, 4, 6]);
-    expect(chordForBar(8)).toEqual(chordForBar(0));
+  it('la progresión base rota Am–D–G–C cada 2 compases', () => {
+    // Semilla 0 → progresión 0, groove 2, rotación 2 (mismo contenido, otro orden).
+    expect(chordForBar(0, 0)).toEqual([6, 8, 10]);
+    expect(chordForBar(0, 2)).toEqual([2, 4, 6]);
+    expect(chordForBar(0, 4)).toEqual([0, 2, 4]);
+    expect(chordForBar(0, 6)).toEqual([3, 5, 7]);
+    expect(chordForBar(0, 8)).toEqual(chordForBar(0, 0));
     for (let bar = 0; bar < 8; bar++) {
-      for (const d of chordForBar(bar)) expect(inScale(freqForDegree(d))).toBe(true);
+      for (const d of chordForBar(0, bar)) expect(inScale(freqForDegree(d))).toBe(true);
     }
+  });
+  it('la semilla cambia la canción: 200 semillas dan > 40 combinaciones (progresión, groove, rotación)', () => {
+    const combos = new Set<string>();
+    for (let s = 0; s < 200; s++) {
+      const p = songProfile(s);
+      combos.add([p.progression, p.groove, p.rotation].join('-'));
+    }
+    expect(combos.size).toBeGreaterThan(40);
+  });
+  it('la puntuación de calidad es estable y acotada 0..100', () => {
+    expect(songScore(42)).toBe(songScore(42));
+    for (const s of [0, 1, 7, 42, 1234]) {
+      const score = songScore(s);
+      expect(score).toBeGreaterThanOrEqual(0);
+      expect(score).toBeLessThanOrEqual(100);
+    }
+  });
+  it('las semillas curadas superan la nota mínima y cubren estilos', () => {
+    expect(CURATED_SONG_SEEDS.length).toBeGreaterThanOrEqual(18);
+    const styles = new Set<string>();
+    for (const seed of CURATED_SONG_SEEDS) {
+      expect(songScore(seed)).toBeGreaterThanOrEqual(CURATED_MIN_SCORE);
+      const p = songProfile(seed);
+      styles.add(p.progression + '-' + p.groove);
+    }
+    expect(styles.size).toBe(18); // cobertura completa de progresión × groove
+  });
+  it('pickCuratedSeed devuelve siempre una semilla de la lista', () => {
+    for (const v of [0, 1, -1, 999999, 123456789]) {
+      expect(CURATED_SONG_SEEDS).toContain(pickCuratedSeed(v));
+    }
+    expect(pickCuratedSeed(42)).toBe(pickCuratedSeed(42)); // determinista
   });
   it('freqForDegree: la octava duplica la frecuencia', () => {
     expect(freqForDegree(0)).toBeCloseTo(ROOT_FREQ);
