@@ -14,11 +14,14 @@ import { InputController } from './ui/input.js';
 import { HUD } from './ui/hud.js';
 import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
 import { loadEffectsEnabled, saveEffectsEnabled } from './ui/settings.js';
+import { initAnalytics } from './analytics.js';
 function el<T extends HTMLElement>(id: string): T {
   const e = document.getElementById(id);
   if (!e) throw new Error('missing #' + id);
   return e as T;
 }
+/* Vercel Analytics + Speed Insights (mode auto: solo envía datos en producción). */
+initAnalytics();
 const canvas = el<HTMLCanvasElement>('scene');
 const nextCanvas = el<HTMLCanvasElement>('next');
 const holdCanvas = el<HTMLCanvasElement>('hold');

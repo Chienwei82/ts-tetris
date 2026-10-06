@@ -116,6 +116,9 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
   oculta), dejando el coste por frame como antes de la feature; se recuerda en
   `localStorage` y arranca apagado si el sistema pide movimiento reducido.
 - **Audio 100 % sintetizado**: osciladores WebAudio, cero ficheros.
+- **Analítica en Vercel**: `@vercel/analytics` + `@vercel/speed-insights` inyectados
+  desde `src/analytics.ts` (`mode: 'auto'`: solo envía datos en producción; en local
+  loguea en consola).
 
 ## Decisiones visuales
 
@@ -137,6 +140,15 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
 - Cámara en perspectiva con **deriva sinusoidal sutil** + trauma/shake en drops, clears y niveles.
 - Feedback en cada acción: rebote al fijar, fichas que vuelan + destello al limpiar,
   lluvia de confeti en hard drop, toasts de Tetris/combo/nivel y overlay cartón con cinta.
+
+## Despliegue (Vercel)
+
+- **Framework preset**: Vite (auto-detectado). Build `npm run build`, output `dist/`.
+- **Node 22.x** en el proyecto (ver `engines` en `package.json`).
+- No hace falta `vercel.json`; si despliegas por CLI, basta `vercel` desde la raíz.
+- **Web Analytics + Speed Insights** se inyectan automáticamente al cargar la app.
+  Actívalos en el dashboard del proyecto en Vercel (Analytics → *Enable*) para
+  empezar a ver tráfico y Web Vitals; en local solo se loguean en consola.
 
 ## Licencia
 
