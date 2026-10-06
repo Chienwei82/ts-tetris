@@ -8,24 +8,29 @@ function tiltFor(kind: PieceKind, i: number): number {
   for (let k = 0; k < kind.length; k++) h = (h * 31 + kind.charCodeAt(k)) % 97;
   return ((h % 5) - 2) * 0.022;
 }
-function drawPiece(canvas: HTMLCanvasElement, kind: PieceKind | null, ghost = false): void {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  const W = canvas.width; const H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
+interface Rect { x: number; y: number; w: number; h: number }
+/**
+ * Cell size for a `pw x ph` piece inside `rect`: the `rect.h / 2.5` cap keeps
+ * 1-row pieces (I) from dwarfing the 2-row ones in the queue.
+ */
+function fitCell(pw: number, ph: number, rect: Rect): number {
+  return Math.min((rect.w - 18) / pw, (rect.h - 18) / ph, rect.h / 2.5);
+}
+function drawPieceIn(ctx: CanvasRenderingContext2D, kind: PieceKind | null, rect: Rect, ghost = false): void {
+  ctx.clearRect(rect.x, rect.y, rect.w, rect.h);
   if (!kind) {
     ctx.fillStyle = 'rgba(59,43,32,0.45)';
     ctx.font = '600 16px system-ui'; ctx.textAlign = 'center';
-    ctx.fillText('—', W / 2, H / 2 + 5);
+    ctx.fillText('—', rect.x + rect.w / 2, rect.y + rect.h / 2 + 5);
     return;
   }
   const cells = cellsForRotation(kind, 0);
   let minX = 99, maxX = -99, minY = 99, maxY = -99;
   for (const c of cells) { minX = Math.min(minX, c.x); maxX = Math.max(maxX, c.x); minY = Math.min(minY, c.y); maxY = Math.max(maxY, c.y); }
   const pw = maxX - minX + 1; const ph = maxY - minY + 1;
-  const s = Math.min((W - 18) / pw, (H - 18) / ph);
-  const ox = W / 2 - ((pw * s) / 2);
-  const oy = H / 2 - ((ph * s) / 2);
+  const s = fitCell(pw, ph, rect);
+  const ox = rect.x + rect.w / 2 - (pw * s) / 2;
+  const oy = rect.y + rect.h / 2 - (ph * s) / 2;
   const hex = '#' + PIECE_COLORS[kind].toString(16).padStart(6, '0');
   cells.forEach((c, i) => {
     const x = ox + (c.x - minX) * s;
@@ -57,9 +62,32 @@ function drawPiece(canvas: HTMLCanvasElement, kind: PieceKind | null, ghost = fa
     ctx.restore();
   });
 }
+/** Next-queue preview: up to 3 upcoming pieces, the closest one in the big slot. */
 export function drawNext(canvas: HTMLCanvasElement, kinds: PieceKind[]): void {
-  drawPiece(canvas, kinds[0] ?? null);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const shown = kinds.slice(0, 3);
+  if (shown.length === 0) {
+    drawPieceIn(ctx, null, { x: 0, y: 0, w: canvas.width, h: canvas.height });
+    return;
+  }
+  const firstH = shown.length === 1 ? canvas.height : canvas.height * 0.4;
+  const restH = shown.length > 1 ? (canvas.height - firstH) / (shown.length - 1) : 0;
+  shown.forEach((kind, i) => {
+    const rect = i === 0
+      ? { x: 0, y: 0, w: canvas.width, h: firstH }
+      : { x: 0, y: firstH + (i - 1) * restH, w: canvas.width, h: restH };
+    drawPieceIn(ctx, kind, rect);
+  });
 }
 export function drawHold(canvas: HTMLCanvasElement, kind: PieceKind | null, canHold: boolean): void {
-  drawPiece(canvas, kind, !canHold);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  drawPieceIn(ctx, kind, { x: 0, y: 0, w: canvas.width, h: canvas.height }, !canHold);
+}
+/** Standalone piece icon used by the help screen. */
+export function drawPieceIcon(canvas: HTMLCanvasElement, kind: PieceKind): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  drawPieceIn(ctx, kind, { x: 0, y: 0, w: canvas.width, h: canvas.height });
 }

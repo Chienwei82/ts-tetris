@@ -2,8 +2,9 @@ import './styles.css';
 import * as THREE from 'three';
 import { TetrisEngine } from './game/engine.js';
 import { LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL } from './game/types.js';
-import type { GameEvent, LevelProgress } from './game/types.js';
+import type { GameEvent, LevelProgress, PieceKind } from './game/types.js';
 import { BoardRenderer } from './render/boardRenderer.js';
+import { cellToWorld } from './render/constants.js';
 import { CameraShake, ClearFlash } from './render/effects.js';
 import { createScene } from './render/scene.js';
 import { createStage } from './render/stage.js';
@@ -11,7 +12,7 @@ import { THEMES, themeIndexForLevel } from './render/themes.js';
 import { SoundFX } from './audio/sound.js';
 import { InputController } from './ui/input.js';
 import { HUD } from './ui/hud.js';
-import { drawHold, drawNext } from './ui/preview.js';
+import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
 import { loadEffectsEnabled, saveEffectsEnabled } from './ui/settings.js';
 function el<T extends HTMLElement>(id: string): T {
   const e = document.getElementById(id);
@@ -86,8 +87,8 @@ function handleEvent(e: GameEvent): void {
       sound.play('harddrop');
       shake.add(0.35);
       if (e.cells) for (const c of e.cells.slice(0, 4)) {
-        const wx = c.x - 5 + 0.5; const wy = c.y - 10 + 0.5;
-        board.particles.burst(new THREE.Vector3(wx, wy, 0.5), hex, 4, 1.4, 1.0);
+        const p = cellToWorld(c.x, c.y);
+        board.particles.burst(new THREE.Vector3(p.x, p.y, 0.5), hex, 4, 1.4, 1.0);
       }
       break;
     case 'lock':
@@ -104,7 +105,7 @@ function handleEvent(e: GameEvent): void {
       if (rows.length > 0) {
         const lo = Math.min(...rows); const hi = Math.max(...rows);
         flash.flash(lo, hi - lo + 1);
-        board.playClear(rows, engine.grid);
+        board.playClear(rows);
       }
       break;
     }
@@ -138,7 +139,7 @@ function handleEvent(e: GameEvent): void {
 }
 const engine = new TetrisEngine({ onEvent: handleEvent });
 function refreshPreviews(): void {
-  drawNext(nextCanvas, engine.peekNext(1));
+  drawNext(nextCanvas, engine.peekNext(3));
   drawHold(holdCanvas, engine.holdKind, engine.canHold);
 }
 function showStart(): void {
@@ -168,11 +169,32 @@ function startGame(): void {
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 }
 function togglePause(): void {
+  if (helpOpen) return;
   if (engine.phase === 'playing') {
-    engine.pause(); sound.play('pause');
+    engine.pause(); sound.play('pause'); input.releaseAll();
     hud.showOverlay('PAUSA', 'Pulsa <span class="key">P</span> o <span class="key">Enter</span> para continuar', '');
   } else if (engine.phase === 'paused') {
     engine.resume(); hud.hideOverlay();
+  }
+}
+/* Help screen: shown at startup and toggled with H. Opening it during play
+   auto-pauses the game so the player can read without losing the piece. */
+let helpOpen = false;
+let helpAutoPaused = false;
+const helpOverlay = el<HTMLDivElement>('help-overlay');
+function toggleHelp(): void {
+  if (!helpOpen) {
+    helpOpen = true;
+    helpAutoPaused = engine.phase === 'playing';
+    if (helpAutoPaused) engine.pause();
+    input.releaseAll();
+    helpOverlay.classList.remove('hidden-overlay');
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  } else {
+    helpOpen = false;
+    helpOverlay.classList.add('hidden-overlay');
+    if (helpAutoPaused && engine.phase === 'paused') engine.resume();
+    helpAutoPaused = false;
   }
 }
 const input = new InputController({
@@ -183,13 +205,15 @@ const input = new InputController({
   onRotateCCW: () => { engine.rotate(-1); },
   onHardDrop: () => { engine.hardDrop(); },
   onHold: () => { engine.hold(); refreshPreviews(); },
-  onPause: () => togglePause(),
-  onRestart: () => startGame(),
+  onPause: () => { if (helpOpen) toggleHelp(); else togglePause(); },
+  onRestart: () => { if (!helpOpen) startGame(); },
   onToggleEffects: () => { applyEffects(!effectsOn); },
   onConfirm: () => {
+    if (helpOpen) { toggleHelp(); return; }
     if (engine.phase === 'ready' || engine.phase === 'gameover') startGame();
     else if (engine.phase === 'paused') togglePause();
   },
+  onHelp: () => toggleHelp(),
   setSoftDrop: (v) => { engine.softDrop = v; }
 });
 const btnStart = el<HTMLButtonElement>('btn-start');
@@ -204,7 +228,17 @@ btnStart.addEventListener('click', () => {
 });
 btnRestart.addEventListener('click', () => { btnRestart.blur(); sound.unlock(); startGame(); });
 btnPause.addEventListener('click', () => { btnPause.blur(); togglePause(); });
+const btnHelp = el<HTMLButtonElement>('btn-help');
+btnHelp.addEventListener('click', () => { btnHelp.blur(); sound.unlock(); toggleHelp(); });
+const btnHelpClose = el<HTMLButtonElement>('btn-help-close');
+btnHelpClose.addEventListener('click', () => { btnHelpClose.blur(); sound.unlock(); toggleHelp(); });
+for (const canvas of document.querySelectorAll<HTMLCanvasElement>('.piece-icon')) {
+  const kind = canvas.dataset.piece as PieceKind | undefined;
+  if (kind) drawPieceIcon(canvas, kind);
+}
 showStart();
+// The help screen greets the player on every visit.
+toggleHelp();
 refreshLevelOut();
 hud.setStats(0, 1, 0);
 refreshGauge();

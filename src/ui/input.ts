@@ -10,6 +10,7 @@ export interface InputActions {
   onRestart: () => void;
   onConfirm: () => void;
   onToggleEffects: () => void;
+  onHelp: () => void;
   setSoftDrop: (v: boolean) => void;
 }
 const DAS = 0.15;
@@ -23,6 +24,9 @@ export class InputController {
     this.actions = actions;
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
     window.addEventListener('keyup', (e) => this.onKeyUp(e));
+    // Losing focus must never leave keys "stuck" (endless soft-drop / DAS).
+    window.addEventListener('blur', () => this.releaseAll());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.releaseAll(); });
   }
   private onKeyDown(e: KeyboardEvent): void {
     // Let focused form controls (start-level slider) keep their own arrow/space handling.
@@ -63,6 +67,9 @@ export class InputController {
         break;
       case 'KeyE':
         if (!e.repeat) a.onToggleEffects();
+        break;
+      case 'KeyH':
+        if (!e.repeat) a.onHelp();
         break;
       case 'Enter':
         if (!e.repeat) a.onConfirm();

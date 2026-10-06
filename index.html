@@ -30,7 +30,7 @@
         <p id="gauge-caption">0/10 líneas · 0:00/0:45</p>
         <span id="stage-chip">☀️ Pradera</span>
       </div>
-      <div class="stat"><label>Siguiente</label><canvas id="next" width="160" height="120"></canvas></div>
+      <div class="stat"><label>Siguiente</label><canvas id="next" width="160" height="190"></canvas></div>
       <div class="stat"><label>Reserva <span class="key">C</span></label><canvas id="hold" width="160" height="80"></canvas></div>
     </aside>
 
@@ -44,6 +44,7 @@
         <li><span class="key">Espacio</span> caída instantánea</li>
         <li><span class="key">C</span> reserva</li>
         <li><span class="key">E</span> efectos del fondo</li>
+        <li><span class="key">H</span> ayuda</li>
         <li><span class="key">P</span> pausa · <span class="key">R</span> reinicio</li>
       </ul>
       <div id="toast" class="hidden"></div>
@@ -65,7 +66,63 @@
           <button id="btn-start">▶ Jugar</button>
           <button id="btn-restart" class="ghost">↻ Reiniciar</button>
         </div>
-        <p class="hint">Sube de nivel cada 10 líneas o 45 s. Cada 2 niveles cambia el escenario y el clima.</p>
+        <p class="hint">Sube de nivel cada 10 líneas o 45 s. Cada 2 niveles cambia el escenario y el clima.<br>Pulsa <span class="key">H</span> para ver la ayuda completa.</p>
+      </div>
+    </div>
+
+    <div id="help-overlay" class="hidden-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div class="card help-card">
+        <h2 id="help-title">AYUDA</h2>
+        <p class="help-sub">Bloques y ayudas disponibles en cada partida</p>
+
+        <h3>🧩 Bloques (tetrominós)</h3>
+        <div class="piece-grid">
+          <div class="piece-item">
+            <canvas class="piece-icon" width="88" height="64" data-piece="I"></canvas>
+            <strong>I</strong><span>Barra de 4 casillas: limpia 4 líneas de golpe (¡TETRIS!).</span>
+          </div>
+          <div class="piece-item">
+            <canvas class="piece-icon" width="88" height="64" data-piece="O"></canvas>
+            <strong>O</strong><span>Cuadrado 2×2: no rota y encaja en casi cualquier hueco.</span>
+          </div>
+          <div class="piece-item">
+            <canvas class="piece-icon" width="88" height="64" data-piece="T"></canvas>
+            <strong>T</strong><span>Su forma en T rellena huecos y esquinas con precisión.</span>
+          </div>
+          <div class="piece-item">
+            <canvas class="piece-icon" width="88" height="64" data-piece="S"></canvas>
+            <strong>S</strong><span>Zigzag: sirve para puentes y escalones.</span>
+          </div>
+          <div class="piece-item">
+            <canvas class="piece-icon" width="88" height="64" data-piece="Z"></canvas>
+            <strong>Z</strong><span>Zigzag inverso: la S al revés.</span>
+          </div>
+          <div class="piece-item">
+            <canvas class="piece-icon" width="88" height="64" data-piece="J"></canvas>
+            <strong>J</strong><span>Gancho a la izquierda: tapa huecos pegados al lado izquierdo.</span>
+          </div>
+          <div class="piece-item">
+            <canvas class="piece-icon" width="88" height="64" data-piece="L"></canvas>
+            <strong>L</strong><span>Gancho a la derecha: tapa huecos pegados al lado derecho.</span>
+          </div>
+        </div>
+
+        <h3>✨ Ayudas especiales</h3>
+        <ul class="help-list">
+          <li><strong>👻 Pieza fantasma</strong> — la sombra marca dónde aterrizará la pieza.</li>
+          <li><strong>📦 Reserva <span class="key">C</span></strong> — guarda la pieza actual para más tarde (un uso por pieza).</li>
+          <li><strong>⚡ Caída instantánea <span class="key">Espacio</span></strong> — lanza la pieza abajo: +2 puntos por fila.</li>
+          <li><strong>🌧️ Caída suave <span class="key">↓</span></strong> — baja más rápido: +1 punto por fila.</li>
+          <li><strong>🔥 Combos</strong> — limpiar líneas seguidas suma +50 × combo × nivel.</li>
+          <li><strong>🔄 Wall-kicks <span class="key">↑</span>/<span class="key">X</span>/<span class="key">Z</span></strong> — al rotar junto a una pared o el suelo, la pieza se aparta sola.</li>
+          <li><strong>⏱️ Nivel híbrido</strong> — subes cada 10 líneas o 45 s (lo que llegue antes), hasta el nivel 20.</li>
+        </ul>
+        <p class="help-note">No hay objetos que recoger: estas ayudas están siempre disponibles.</p>
+
+        <div class="btn-row">
+          <button id="btn-help-close">✔ Entendido</button>
+        </div>
+        <p class="hint">Pulsa <span class="key">H</span>, <span class="key">Esc</span> o <span class="key">Enter</span> para cerrar</p>
       </div>
     </div>
 
@@ -75,6 +132,7 @@
     </div>
 
     <div id="bottom-bar">
+      <button id="btn-help" title="Ayuda (H)">❓ Ayuda</button>
       <button id="btn-pause" title="Pausa (P)">⏸</button>
       <button id="btn-effects" title="Efectos del fondo (E)" aria-pressed="true">✨ Efectos: ON</button>
     </div>

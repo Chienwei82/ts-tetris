@@ -1,6 +1,6 @@
 import { clearFullRows, collides, createGrid, mergePiece } from './board.js';
 import { cellsForPiece, getKicks, shuffledBag } from './pieces.js';
-import { COLS, LINES_PER_LEVEL, LINE_POINTS, MAX_LEVEL, SECONDS_PER_LEVEL, TOTAL_ROWS, VISIBLE_ROWS } from './types.js';
+import { COLS, LINES_PER_LEVEL, LINE_POINTS, MAX_LEVEL, SECONDS_PER_LEVEL, VISIBLE_ROWS } from './types.js';
 import type { ActivePiece, GameEvent, GamePhase, Grid, LevelProgress, PieceKind, RotationState, Vec2 } from './types.js';
 
 export interface EngineOptions { rng?: () => number; onEvent?: (e: GameEvent) => void; }
@@ -148,8 +148,9 @@ export class TetrisEngine {
   }
   hardDrop(): void {
     if (this.phase !== 'playing' || !this.active) return;
-    const distance = this.active.y - this.ghostY();
-    this.active.y = this.ghostY();
+    const landingY = this.ghostY();
+    const distance = this.active.y - landingY;
+    this.active.y = landingY;
     this.score += distance * 2;
     this.emit({ type: 'harddrop', cells: this.activeCells() });
     this.lockPiece();
@@ -164,6 +165,8 @@ export class TetrisEngine {
       this.fallAcc = 0; this.lockAcc = 0; this.lockResets = 0;
       if (collides(this.grid, this.activeCells())) { this.phase = 'gameover'; this.emit({ type: 'gameover', scoreGained: this.score }); }
     }
+    // A swap that ended the game must not consume the hold slot nor report a hold.
+    if (this.phase !== 'playing') return;
     this.canHold = false;
     this.emit({ type: 'hold' });
   }
@@ -172,7 +175,7 @@ export class TetrisEngine {
     if (!this.active) return;
     const cells = this.activeCells();
     mergePiece(this.grid, cells, this.active.kind);
-    this.emit({ type: 'lock', cells: cells.filter((c) => c.y < TOTAL_ROWS) });
+    this.emit({ type: 'lock', cells });
     const cleared = clearFullRows(this.grid);
     if (cleared.length > 0) {
       const n = Math.min(4, cleared.length);

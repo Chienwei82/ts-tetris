@@ -1,22 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import { collides, createGrid } from '../src/game/board.js';
 import { TetrisEngine } from '../src/game/engine.js';
-import { cellsForPiece } from '../src/game/pieces.js';
+import { cellsForPiece, getKicks } from '../src/game/pieces.js';
 import { LINES_PER_LEVEL, MAX_LEVEL, SECONDS_PER_LEVEL } from '../src/game/types.js';
+import type { GameEventType, RotationState } from '../src/game/types.js';
 function seqRng(): () => number { let i = 0; return () => { i = (i + 1) % 100; return i / 100; }; }
 describe('pieces', () => {
   it('I piece has 4 cells in a row at spawn', () => {
     expect(cellsForPiece('I', 0, 0, 0)).toHaveLength(4);
   });
   it('O piece does not change shape when rotated', () => {
-    const a = cellsForPiece('O', 0, 5, 5);
     const e = new TetrisEngine({ rng: seqRng() });
     e.start();
     e.active = { kind: 'O', rotation: 0, x: 5, y: 10 };
-    e.rotate(1);
-    const b = e.activeCells();
-    expect(a).toHaveLength(4);
-    expect(b).toHaveLength(4);
+    const before = e.activeCells();
+    expect(e.rotate(1)).toBe(true);
+    expect(e.activeCells()).toEqual(before);
+    expect(e.activeCells()).toEqual(cellsForPiece('O', 0, 5, 10));
+  });
+  it('provides SRS wall-kicks for every rotation transition', () => {
+    const pairs: Array<[RotationState, RotationState]> = [
+      [0, 1], [1, 0], [1, 2], [2, 1], [2, 3], [3, 2], [3, 0], [0, 3]
+    ];
+    for (const kind of ['I', 'J', 'L', 'S', 'T', 'Z'] as const) {
+      for (const [from, to] of pairs) {
+        const kicks = getKicks(kind, from, to);
+        expect(kicks).toHaveLength(5);
+        expect(kicks[0]).toEqual({ x: 0, y: 0 });
+      }
+    }
+    expect(getKicks('O', 0, 1)).toEqual([{ x: 0, y: 0 }]);
+    expect(getKicks('J', 0, 2)).toEqual([{ x: 0, y: 0 }]); // non-adjacent: fallback
   });
 });
 describe('collisions', () => {
@@ -36,14 +50,28 @@ describe('engine', () => {
     expect(e.active).not.toBeNull();
     expect(e.peekNext(3)).toHaveLength(3);
   });
-  it('clears a full line and scores', () => {
+  it('clears a full line and scores exactly', () => {
     const e = new TetrisEngine({ rng: seqRng() });
     e.start();
     for (let c = 0; c < 10; c++) e.grid[0]![c] = 'I';
     e.active = { kind: 'O', rotation: 0, x: 4, y: 4 };
     e.hardDrop();
-    expect(e.lines).toBeGreaterThanOrEqual(1);
-    expect(e.score).toBeGreaterThan(0);
+    // O lands at y=1: 3 rows of hard-drop (6 pts) + single line at level 1 (100 pts).
+    expect(e.lines).toBe(1);
+    expect(e.score).toBe(106);
+    expect(e.combo).toBe(0);
+  });
+  it('does not consume the hold slot when the swap ends the game', () => {
+    const events: GameEventType[] = [];
+    const e = new TetrisEngine({ rng: seqRng(), onEvent: (ev) => events.push(ev.type) });
+    e.start();
+    // Fill the spawn rows so the swapped-in piece cannot enter.
+    for (const r of [19, 20]) for (let c = 0; c < 10; c++) e.grid[r]![c] = 'I';
+    e.hold();
+    expect(e.phase).toBe('gameover');
+    expect(e.canHold).toBe(true);
+    expect(events).toContain('gameover');
+    expect(events).not.toContain('hold');
   });
   it('hold swaps once per lock', () => {
     const e = new TetrisEngine({ rng: seqRng() });

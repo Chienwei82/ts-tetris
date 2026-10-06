@@ -16,7 +16,7 @@ export class BoardRenderer {
   private activeGroup = new THREE.Group();
   private ghostGroup = new THREE.Group();
   private clearingRows = new Map<number, { t: number; meshes: THREE.Group[] }>();
-  private lockAnims: { mesh: THREE.Group; t: number }[] = [];
+  private lockAnims: { mesh: THREE.Group; t: number; row: number }[] = [];
   private activeTarget = new Map<string, THREE.Vector3>();
   private pullFree: THREE.Group[] = [];
   constructor(scene: THREE.Scene) {
@@ -27,7 +27,8 @@ export class BoardRenderer {
   }
   private makeBlock(kind: PieceKind): THREE.Group {
     let g = this.pullFree.pop();
-    if (g) { g.visible = true; g.scale.setScalar(1); g.rotation.set(0, 0, 0); return g; }
+    // Recycled blocks carry the previous kind/material: always re-colorize.
+    if (g) { g.visible = true; g.scale.setScalar(1); g.rotation.set(0, 0, 0); this.colorize(g, kind); return g; }
     g = new THREE.Group();
     const mesh = new THREE.Mesh(this.geo, blockMaterial(kind));
     mesh.castShadow = true; mesh.receiveShadow = true;
@@ -181,24 +182,35 @@ export class BoardRenderer {
       const p = cellToWorld(c.x, c.y);
       g.position.set(p.x, p.y, 0.4);
       this.group.add(g);
-      this.lockAnims.push({ mesh: g, t: 0 });
+      this.lockAnims.push({ mesh: g, t: 0, row: c.y });
       this.particles.burst(new THREE.Vector3(p.x, p.y, 0.5), PIECE_COLORS[kind], 6, 1.6, 1.2);
     }
   }
-  playClear(rows: number[], grid: Grid): void {
+  playClear(rows: number[]): void {
     for (const r of rows) {
       const meshes: THREE.Group[] = [];
       for (const [k, g] of [...this.lockedMeshes]) {
         if (Number(k.split(',')[1]) === r) { meshes.push(g); this.lockedMeshes.delete(k); }
       }
-      void grid;
+      // The piece that just locked is still animating in `lockAnims`: let those
+      // blocks explode with the row instead of fading out on their own.
+      for (let i = this.lockAnims.length - 1; i >= 0; i--) {
+        const a = this.lockAnims[i];
+        if (!a || a.row !== r) continue;
+        meshes.push(a.mesh);
+        this.lockAnims.splice(i, 1);
+      }
+      // A second clear on the same row index while the first animates would
+      // overwrite the entry and orphan its meshes: recycle them first.
+      const prev = this.clearingRows.get(r);
+      if (prev) for (const m of prev.meshes) { this.group.remove(m); this.pullFree.push(m); m.visible = false; }
       this.clearingRows.set(r, { t: 0, meshes });
-      for (let c = 0; c < 10; c++) {
-        const p = cellToWorld(c, r);
-        const rowArr = grid[r] ?? [];
-        const cell: PieceKind | 0 = (rowArr[c] as PieceKind | 0) ?? 0;
-        const hex = cell === 0 ? 0xffffff : PIECE_COLORS[cell];
-        this.particles.burst(new THREE.Vector3(p.x, p.y, 0.6), hex, 7, 3.2, 3.4);
+      // One scrap burst per block, tinted with the block's own color: the engine
+      // grid has already collapsed when this runs, so it cannot be trusted.
+      for (const m of meshes) {
+        const kind = m.userData.kind as PieceKind | undefined;
+        const hex = kind ? PIECE_COLORS[kind] : 0xffffff;
+        this.particles.burst(new THREE.Vector3(m.position.x, m.position.y, 0.6), hex, 7, 3.2, 3.4);
       }
     }
   }
@@ -236,10 +248,19 @@ export class BoardRenderer {
   }
   get busyClearing(): boolean { return this.clearingRows.size > 0; }
   reset(): void {
-    for (const [, g] of this.lockedMeshes) { this.group.remove(g); this.pullFree.push(g); g.visible = false; }
+    const recycle = (g: THREE.Group): void => {
+      this.group.remove(g); this.pullFree.push(g); g.visible = false;
+    };
+    for (const [, g] of this.lockedMeshes) recycle(g);
     this.lockedMeshes.clear();
+    // Meshes mid clear/lock animation are no longer in `lockedMeshes`: without
+    // this they would stay in the scene forever after a restart.
+    for (const [, c] of this.clearingRows) for (const m of c.meshes) recycle(m);
     this.clearingRows.clear();
+    for (const a of this.lockAnims) recycle(a.mesh);
+    this.lockAnims.length = 0;
     this.activeTarget.clear();
+    for (const [, m] of this.activeMeshes) recycle(m);
     this.activeMeshes.clear();
     this.activeGroup.clear();
     this.ghostGroup.clear();
