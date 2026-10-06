@@ -1,4 +1,8 @@
 const STORAGE_KEY = 'tetris-3d:fx';
+const MODE_KEY = 'tetris-3d:controls';
+
+/** Modo de control elegido por el usuario: teclado/ratón o táctil. */
+export type ControlMode = 'desktop' | 'touch';
 
 export function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -16,4 +20,17 @@ export function loadEffectsEnabled(): boolean {
 
 export function saveEffectsEnabled(on: boolean): void {
   try { window.localStorage.setItem(STORAGE_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+}
+
+/** Elección de controles guardada; `null` si el usuario nunca eligió. */
+export function loadControlMode(): ControlMode | null {
+  try {
+    const v = window.localStorage.getItem(MODE_KEY);
+    if (v === 'desktop' || v === 'touch') return v;
+  } catch { /* storage unavailable (private mode) */ }
+  return null;
+}
+
+export function saveControlMode(mode: ControlMode): void {
+  try { window.localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ }
 }

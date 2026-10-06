@@ -2,12 +2,16 @@ import * as THREE from 'three';
 import { BOARD_H } from './constants.js';
 export class CameraShake {
   trauma = 0;
+  /** Offset reutilizado cada frame: cero asignaciones en el game loop. */
+  private readonly offset = { x: 0, y: 0 };
   add(amount: number): void { this.trauma = Math.min(1, this.trauma + amount); }
   update(dt: number): { x: number; y: number } {
     this.trauma = Math.max(0, this.trauma - dt * 1.6);
     const s = this.trauma * this.trauma;
     const t = performance.now() / 1000;
-    return { x: s * 0.55 * Math.sin(t * 61.7), y: s * 0.45 * Math.cos(t * 53.3) };
+    this.offset.x = s * 0.55 * Math.sin(t * 61.7);
+    this.offset.y = s * 0.45 * Math.cos(t * 53.3);
+    return this.offset;
   }
 }
 export class ClearFlash {

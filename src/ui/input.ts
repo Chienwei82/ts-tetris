@@ -1,3 +1,6 @@
+import { AutoShift } from './autoShift.js';
+
+/** Acciones abstractas: teclado y táctil producen las mismas; la lógica no conoce el origen. */
 export interface InputActions {
   onLeft: () => void;
   onRight: () => void;
@@ -16,19 +19,38 @@ export interface InputActions {
 const DAS = 0.15;
 const ARR = 0.045;
 export class InputController {
-  leftHeld = false; rightHeld = false;
-  private leftT = 0; private rightT = 0;
-  private leftAcc = 0; private rightAcc = 0;
   private readonly actions: InputActions;
+  private readonly leftShift = new AutoShift(DAS, ARR);
+  private readonly rightShift = new AutoShift(DAS, ARR);
+  private readonly stepLeft = (): void => { this.actions.onLeft(); };
+  private readonly stepRight = (): void => { this.actions.onRight(); };
+  private readonly cleanups: Array<() => void> = [];
+  private enabled = true;
   constructor(actions: InputActions) {
     this.actions = actions;
-    window.addEventListener('keydown', (e) => this.onKeyDown(e));
-    window.addEventListener('keyup', (e) => this.onKeyUp(e));
+    const onKeyDown = (e: KeyboardEvent): void => this.onKeyDown(e);
+    const onKeyUp = (e: KeyboardEvent): void => this.onKeyUp(e);
+    const onBlur = (): void => this.releaseAll();
+    const onVisibility = (): void => { if (document.hidden) this.releaseAll(); };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
     // Losing focus must never leave keys "stuck" (endless soft-drop / DAS).
-    window.addEventListener('blur', () => this.releaseAll());
-    document.addEventListener('visibilitychange', () => { if (document.hidden) this.releaseAll(); });
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onVisibility);
+    this.cleanups.push(() => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onVisibility);
+    });
+  }
+  /** Silencia el teclado mientras un diálogo modal captura la interacción. */
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (!enabled) this.releaseAll();
   }
   private onKeyDown(e: KeyboardEvent): void {
+    if (!this.enabled) return;
     // Let focused form controls (start-level slider) keep their own arrow/space handling.
     const target = e.target;
     if ((target instanceof HTMLInputElement || target instanceof HTMLSelectElement) &&
@@ -39,10 +61,10 @@ export class InputController {
     const a = this.actions;
     switch (e.code) {
       case 'ArrowLeft':
-        if (!e.repeat) { a.onLeft(); this.leftHeld = true; this.leftT = 0; this.leftAcc = 0; }
+        if (!e.repeat) { a.onLeft(); this.leftShift.press(); }
         break;
       case 'ArrowRight':
-        if (!e.repeat) { a.onRight(); this.rightHeld = true; this.rightT = 0; this.rightAcc = 0; }
+        if (!e.repeat) { a.onRight(); this.rightShift.press(); }
         break;
       case 'ArrowDown':
         if (!e.repeat) { a.setSoftDrop(true); a.onDown(); }
@@ -78,21 +100,26 @@ export class InputController {
   }
   private onKeyUp(e: KeyboardEvent): void {
     switch (e.code) {
-      case 'ArrowLeft': this.leftHeld = false; break;
-      case 'ArrowRight': this.rightHeld = false; break;
+      case 'ArrowLeft': this.leftShift.release(); break;
+      case 'ArrowRight': this.rightShift.release(); break;
       case 'ArrowDown': this.actions.setSoftDrop(false); break;
     }
   }
   /** Call each frame for auto-shift. */
   update(dt: number): void {
-    if (this.leftHeld && !this.rightHeld) {
-      this.leftT += dt;
-      if (this.leftT >= DAS) { this.leftAcc += dt; while (this.leftAcc >= ARR) { this.leftAcc -= ARR; this.actions.onLeft(); } }
-    } else this.leftAcc = 0;
-    if (this.rightHeld && !this.leftHeld) {
-      this.rightT += dt;
-      if (this.rightT >= DAS) { this.rightAcc += dt; while (this.rightAcc >= ARR) { this.rightAcc -= ARR; this.actions.onRight(); } }
-    } else this.rightAcc = 0;
+    const left = this.leftShift.isHeld();
+    const right = this.rightShift.isHeld();
+    if (left && !right) this.leftShift.update(dt, this.stepLeft);
+    if (right && !left) this.rightShift.update(dt, this.stepRight);
   }
-  releaseAll(): void { this.leftHeld = false; this.rightHeld = false; this.actions.setSoftDrop(false); this.leftT = 0; this.rightT = 0; }
+  releaseAll(): void {
+    this.leftShift.release();
+    this.rightShift.release();
+    this.actions.setSoftDrop(false);
+  }
+  dispose(): void {
+    for (const cleanup of this.cleanups) cleanup();
+    this.cleanups.length = 0;
+    this.releaseAll();
+  }
 }

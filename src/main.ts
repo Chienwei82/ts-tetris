@@ -6,11 +6,17 @@ import type { GameEvent, LevelProgress, PieceKind } from './game/types.js';
 import { BoardRenderer } from './render/boardRenderer.js';
 import { cellToWorld } from './render/constants.js';
 import { CameraShake, ClearFlash } from './render/effects.js';
+import { frameFor } from './render/framing.js';
+import type { Frame } from './render/framing.js';
 import { createScene } from './render/scene.js';
+import type { SceneOptions } from './render/scene.js';
 import { createStage } from './render/stage.js';
 import { THEMES, themeIndexForLevel } from './render/themes.js';
 import { SoundFX } from './audio/sound.js';
-import { InputController } from './ui/input.js';
+import { detectDevice } from './platform/device.js';
+import { ViewportManager } from './platform/viewport.js';
+import { InputManager } from './ui/inputManager.js';
+import { ModeSelect } from './ui/modeSelect.js';
 import { HUD } from './ui/hud.js';
 import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
 import { loadEffectsEnabled, saveEffectsEnabled } from './ui/settings.js';
@@ -30,7 +36,12 @@ const levelRangeOut = el<HTMLOutputElement>('level-range-out');
 const btnEffects = el<HTMLButtonElement>('btn-effects');
 const hud = new HUD();
 const sound = new SoundFX();
-const { renderer, scene, camera, parts } = createScene(canvas);
+const device = detectDevice();
+/* Calidad reducida en móvil: sin MSAA y shadow map más barato. */
+const quality: SceneOptions = device.kind === 'desktop' ? {} : { antialias: false, shadowMapSize: 1024 };
+const { renderer, scene, camera, parts } = createScene(canvas, quality);
+/* Tamaño, aspecto y pixel ratio centralizados fuera de la lógica de escena. */
+new ViewportManager(renderer, camera, canvas);
 const board = new BoardRenderer(scene);
 const flash = new ClearFlash(scene, 10);
 const shake = new CameraShake();
@@ -79,6 +90,8 @@ btnEffects.addEventListener('click', () => { btnEffects.blur(); sound.unlock(); 
 const unlockAudio = (): void => sound.unlock();
 window.addEventListener('pointerdown', unlockAudio, { once: true });
 window.addEventListener('keydown', unlockAudio, { once: true });
+// Cobertura extra para WebViews/iOS antiguos donde pointerdown no activa el audio.
+window.addEventListener('touchend', unlockAudio, { once: true });
 function handleEvent(e: GameEvent): void {
   const kind = engine.active?.kind ?? 'T';
   const hex = PIECE_COLORS[kind];
@@ -200,7 +213,7 @@ function toggleHelp(): void {
     helpAutoPaused = false;
   }
 }
-const input = new InputController({
+const input = new InputManager({
   onLeft: () => { engine.move(-1); },
   onRight: () => { engine.move(1); },
   onDown: () => { engine.moveDown(); },
@@ -218,7 +231,18 @@ const input = new InputController({
   },
   onHelp: () => toggleHelp(),
   setSoftDrop: (v) => { engine.softDrop = v; }
+}, el<HTMLDivElement>('touch-controls'));
+/* Modo de controles: elección guardada > detección fiable > pantalla de selección. */
+const modeSelect = new ModeSelect({
+  root: el<HTMLDivElement>('mode-overlay'),
+  profile: device,
+  onChoose: (mode) => {
+    input.setMode(mode);
+    document.body.classList.toggle('touch', mode === 'touch');
+  },
+  onOpenChange: (open) => { input.setEnabled(!open); }
 });
+modeSelect.resolve();
 const btnStart = el<HTMLButtonElement>('btn-start');
 const btnRestart = el<HTMLButtonElement>('btn-restart');
 const btnPause = el<HTMLButtonElement>('btn-pause');
@@ -235,6 +259,18 @@ const btnHelp = el<HTMLButtonElement>('btn-help');
 btnHelp.addEventListener('click', () => { btnHelp.blur(); sound.unlock(); toggleHelp(); });
 const btnHelpClose = el<HTMLButtonElement>('btn-help-close');
 btnHelpClose.addEventListener('click', () => { btnHelpClose.blur(); sound.unlock(); toggleHelp(); });
+const btnMode = el<HTMLButtonElement>('btn-mode');
+btnMode.addEventListener('click', () => {
+  btnMode.blur();
+  sound.unlock();
+  // Cambiar de controles en caliente: pausa para no perder la pieza.
+  if (engine.phase === 'playing') {
+    engine.pause();
+    input.releaseAll();
+    hud.showOverlay('PAUSA', 'Pulsa <span class="key">P</span> o <span class="key">Enter</span> para continuar', '');
+  }
+  modeSelect.show();
+});
 for (const canvas of document.querySelectorAll<HTMLCanvasElement>('.piece-icon')) {
   const kind = canvas.dataset.piece as PieceKind | undefined;
   if (kind) drawPieceIcon(canvas, kind);
@@ -254,10 +290,30 @@ const timer = new THREE.Timer();
 // Page Visibility API: evita deltas gigantes al volver de una pestaña oculta.
 timer.connect(document);
 let hudAcc = 0;
+/* Encuadre del área de juego: solo se recalcula al cambiar de formato o modo. */
+let frameKey = '';
+let frame: Frame = { dist: 31.5, targetY: 0 };
+function currentFrame(): Frame {
+  const h = window.innerHeight;
+  const compact = window.innerWidth <= 720 || h <= 480;
+  const touch = input.getMode() === 'touch';
+  // Bandas de UI (fracción del alto) que se solapan con la columna del tablero:
+  // tira HUD arriba; en vertical táctil también joystick/botones abajo.
+  const top = (compact ? 72 : 0) / h;
+  const bottom = (touch && compact && camera.aspect < 1 ? 170 : 0) / h;
+  const key = camera.aspect + ':' + top + ':' + bottom;
+  if (key !== frameKey) {
+    frameKey = key;
+    frame = frameFor(camera.aspect, { top, bottom });
+  }
+  return frame;
+}
 function animate(): void {
   requestAnimationFrame(animate);
   timer.update();
   const rawDt = Math.min(timer.getDelta(), 0.1);
+  // Pestaña oculta: no se simula ni se renderiza (algunos WebViews siguen llamando a rAF).
+  if (document.hidden) return;
   const t = timer.getElapsed();
   input.update(rawDt);
   if (engine.phase === 'playing') {
@@ -274,10 +330,12 @@ function animate(): void {
   const s = shake.update(rawDt);
   const swayX = Math.sin(t * 0.35) * 0.55;
   const swayY = Math.sin(t * 0.27) * 0.35;
-  // Board is 10 wide x 20 tall: pull back enough to frame it whole.
-  // Slight tilt (camera above look-target) gives depth without hiding rows.
-  camera.position.set(swayX + s.x, 0.9 + swayY + s.y, 31.5);
-  camera.lookAt(swayX * 0.25, 0.3, 0);
+  // Encuadre responsivo: el tablero completo (con marco) siempre centrado.
+  // La deriva y el shake se aplican a la posición pero el eje apunta al centro
+  // del tablero: solo se balancea la cámara, nunca se desplaza el tablero.
+  const f = currentFrame();
+  camera.position.set(swayX + s.x, f.targetY + 0.9 + swayY + s.y, f.dist);
+  camera.lookAt(0, f.targetY + 0.3, 0);
   hudAcc += rawDt;
   if (hudAcc > 0.08) {
     hudAcc = 0;

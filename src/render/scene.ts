@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BOARD_H } from './constants.js';
+import { BOARD_H, CAMERA_FOV } from './constants.js';
 import { AmbientConfetti } from './particles.js';
 import { outlineMaterial, paperNoiseTex, questionBlockTexture, toonGradient } from './materials.js';
 import { THEMES } from './themes.js';
@@ -122,10 +122,19 @@ function questionBlock(): THREE.Group {
   return g;
 }
 
-export function createScene(canvas: HTMLCanvasElement): SceneSetup {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
+export interface SceneOptions {
+  /** MSAA; se desactiva en calidad baja (móvil) para ahorrar GPU. */
+  antialias?: boolean;
+  /** Tamaño del shadow map de la luz clave (mitad en calidad baja). */
+  shadowMapSize?: number;
+}
+
+/**
+ * Crea el diorama. El tamaño del canvas y el aspecto de la cámara los gestiona
+ * `ViewportManager` (src/platform/viewport.ts), no esta función.
+ */
+export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}): SceneSetup {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: opts.antialias ?? true });
   renderer.shadowMap.enabled = true;
   // PCFShadowMap ya es suave desde r182; PCFSoftShadowMap quedó deprecado.
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -138,7 +147,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneSetup {
   const fog = new THREE.Fog(0xd5ebf5, 34, 95);
   scene.fog = fog;
 
-  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 200);
+  const camera = new THREE.PerspectiveCamera(CAMERA_FOV, window.innerWidth / window.innerHeight, 0.1, 200);
   camera.position.set(0, 0.9, 31.5);
   camera.lookAt(0, 0.3, 0);
 
@@ -148,7 +157,8 @@ export function createScene(canvas: HTMLCanvasElement): SceneSetup {
   const key = new THREE.DirectionalLight(0xfff1d6, 1.5);
   key.position.set(6, 12, 10);
   key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
+  const shadowSize = opts.shadowMapSize ?? 2048;
+  key.shadow.mapSize.set(shadowSize, shadowSize);
   key.shadow.camera.left = -10; key.shadow.camera.right = 10;
   key.shadow.camera.top = 14; key.shadow.camera.bottom = -12;
   key.shadow.camera.near = 1; key.shadow.camera.far = 40;
@@ -229,12 +239,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneSetup {
   const confetti = new AmbientConfetti(150, { x0: -36, x1: 36, y0: -13, y1: 30, z0: -26, z1: -2 });
   scene.add(confetti.points);
 
-  const onResize = (): void => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  };
-  window.addEventListener('resize', onResize);
+  // El resize/orientation lo gestiona ViewportManager (src/platform/viewport.ts).
 
   const parts: SceneParts = {
     scene, sky, fog, hills, sunGroup, sunMat, rayMat, rays,
