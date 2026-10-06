@@ -5,10 +5,14 @@
   --shadow: 26, 18, 10;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: var(--sky); color: var(--ink); font-family: 'Fredoka', 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif; }
-#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--sky); color: var(--ink); font-family: 'Fredoka', 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif; }
+/* Sin zoom por doble toque, sin selección de texto ni menú contextual táctil. */
+html { touch-action: manipulation; }
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* 100dvh evita que la barra de direcciones de Android recorte la escena. */
+#scene { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; height: 100dvh; display: block; touch-action: none; }
 #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 52%, rgba(var(--shadow), 0.32) 100%); }
-#brand { position: fixed; top: 6px; left: 50%; transform: translateX(-50%) rotate(-1deg); text-align: center; pointer-events: none; z-index: 5; }
+#brand { position: fixed; top: calc(6px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%) rotate(-1deg); text-align: center; pointer-events: none; z-index: 5; }
 #brand h1 {
   margin: 0; font-size: 30px; letter-spacing: 5px; font-weight: 700; color: var(--paper-hi);
   text-shadow:
@@ -22,7 +26,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--sky); 
   box-shadow: 2px 3px 0 rgba(var(--shadow), 0.3); transform: rotate(-1.5deg);
 }
 .panel {
-  position: fixed; top: 92px; width: 210px;
+  position: fixed; top: calc(92px + env(safe-area-inset-top, 0px)); width: 210px;
   background-color: var(--paper);
   background-image: repeating-linear-gradient(0deg, rgba(59,43,32,0.045) 0 1px, transparent 1px 4px);
   border: 2.5px solid var(--ink); border-radius: 14px; padding: 16px 14px;
@@ -36,8 +40,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--sky); 
   border: 1.5px solid rgba(59,43,32,0.5); border-radius: 2px;
   box-shadow: 0 2px 4px rgba(var(--shadow), 0.18);
 }
-#hud-left { left: 18px; transform: rotate(-1deg); }
-#hud-right { right: 18px; width: 216px; transform: rotate(0.8deg); }
+#hud-left { left: calc(18px + env(safe-area-inset-left, 0px)); transform: rotate(-1deg); }
+#hud-right { right: calc(18px + env(safe-area-inset-right, 0px)); width: 216px; transform: rotate(0.8deg); }
 .stat { margin-bottom: 12px; }
 .stat label { display: block; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
 .stat strong { font-size: 30px; font-variant-numeric: tabular-nums; color: var(--ink); text-shadow: 2px 2px 0 rgba(255,255,255,0.7); }
@@ -95,7 +99,7 @@ button:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0 rgba(var(--
 button:active { transform: translate(4px, 5px); box-shadow: 0 0 0 rgba(var(--shadow), 0.32); }
 button.ghost { background: var(--paper-hi); color: var(--ink); }
 .hint { font-size: 12px; margin-top: 16px; color: var(--muted); }
-#bottom-bar { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 5; }
+#bottom-bar { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 5; }
 #bottom-bar button { padding: 8px 18px; font-size: 14px; background: var(--paper-hi); color: var(--ink); border-radius: 10px; }
 #btn-effects.off { background: var(--paper); color: var(--muted); }
 /* Difficulty gauge + stage chip */
@@ -178,3 +182,84 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 .help-card .btn-row { margin-top: 16px; }
 .help-card .hint { text-align: center; }
 @media (max-width: 900px) { .panel { width: 150px; padding: 10px; } #hud-right { display: none; } #brand h1 { font-size: 22px; } #gauge-caption { font-size: 9.5px; } }
+
+/* ============ Controles táctiles (solo modo móvil/tableta) ============ */
+#touch-controls { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
+#touch-controls.hidden { display: none; }
+#touch-controls * { touch-action: none; -webkit-user-select: none; user-select: none; }
+#joy {
+  position: absolute; left: calc(20px + env(safe-area-inset-left, 0px)); bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+  width: 132px; height: 132px; border-radius: 50%; pointer-events: auto;
+  background: rgba(247, 239, 219, 0.26); border: 2.5px solid rgba(59, 43, 32, 0.55);
+}
+#joy-knob {
+  position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px;
+  border-radius: 50%; background: rgba(253, 249, 238, 0.6); border: 2.5px solid var(--ink);
+  box-shadow: 3px 4px 0 rgba(var(--shadow), 0.2);
+}
+#tc-buttons {
+  position: absolute; right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+  display: grid; grid-template-columns: repeat(2, 64px); gap: 12px; pointer-events: none;
+}
+#tc-side {
+  position: absolute; right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(182px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+}
+.tc-btn {
+  pointer-events: auto; width: 64px; height: 64px; padding: 0; border-radius: 16px;
+  background: rgba(253, 249, 238, 0.55); color: var(--ink); font-size: 24px;
+  border: 2.5px solid var(--ink); box-shadow: 3px 4px 0 rgba(var(--shadow), 0.25);
+}
+.tc-btn.tc-small { width: 48px; height: 48px; font-size: 16px; border-radius: 12px; }
+.tc-btn.active, .tc-btn:active { transform: translate(3px, 4px); box-shadow: 0 0 0 rgba(var(--shadow), 0.25); background: var(--yellow); }
+
+/* ============ Pantalla de selección de modo (fallback) ============ */
+#mode-overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(43, 62, 79, 0.58); backdrop-filter: blur(3px); z-index: 30; transition: opacity 0.25s;
+}
+#mode-overlay.hidden-overlay { opacity: 0; pointer-events: none; }
+.mode-card { width: min(520px, 92vw); text-align: center; padding: 34px 30px; }
+.mode-sub { font-size: 13px; margin: 6px 0 0; }
+.mode-options { display: flex; flex-direction: column; gap: 14px; margin-top: 20px; }
+.mode-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  min-height: 64px; padding: 14px 18px; font-size: 19px; border-radius: 14px;
+}
+.mode-btn span { font-size: 12.5px; font-weight: 600; letter-spacing: 1px; opacity: 0.85; }
+.mode-btn.ghost { background: var(--paper-hi); color: var(--ink); }
+
+/* ============ Modo táctil: la barra de ajustes se va a una esquina ============ */
+body.touch #hud-right { display: none; }
+body.touch #bottom-bar {
+  top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto;
+  left: auto; right: calc(8px + env(safe-area-inset-right, 0px));
+  transform: none; flex-direction: column; align-items: flex-end;
+}
+body.touch #bottom-bar button { padding: 7px 12px; font-size: 12.5px; }
+
+/* ============ Pantallas pequeñas o bajas (móvil vertical y horizontal) ============ */
+@media (max-width: 720px), (max-height: 480px) {
+  #brand { display: none; }
+  .card { padding: 26px 20px; }
+  .card h2 { font-size: 28px; }
+  .btn-row { flex-wrap: wrap; }
+  .panel { top: calc(8px + env(safe-area-inset-top, 0px)); border-width: 2px; padding: 7px 10px; }
+  .panel::before { display: none; }
+  #hud-left {
+    left: 8px; right: 8px; width: auto; transform: none;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 5px 10px;
+  }
+  body.touch #hud-left { right: 128px; justify-content: flex-start; }
+  .stat { margin: 0; display: flex; align-items: center; gap: 5px; }
+  .stat label { display: none; }
+  .stat strong { font-size: 17px; }
+  .stat-row { gap: 10px; }
+  .stat canvas { width: 44px; height: auto; }
+  #gauge { width: 84px; height: 11px; }
+  #gauge-caption { display: none; }
+  #stage-chip { font-size: 9px; }
+  #hud-right { display: none; }
+  #help-overlay .help-card { max-height: 82dvh; }
+}

@@ -2,7 +2,8 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, maximum-scale=1" />
+    <meta name="theme-color" content="#bfe3f5" />
     <title>TETRIS 3D · Paper Quest</title>
     <meta name="description" content="Tetris 3D jugable en el navegador — TypeScript + three.js, estilo papercraft" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -135,6 +136,37 @@
       <button id="btn-help" title="Ayuda (H)">❓ Ayuda</button>
       <button id="btn-pause" title="Pausa (P)">⏸</button>
       <button id="btn-effects" title="Efectos del fondo (E)" aria-pressed="true">✨ Efectos: ON</button>
+      <button id="btn-mode" title="Modo de controles (teclado o táctil)">⚙️ Controles</button>
+    </div>
+
+    <!-- Controles táctiles (solo modo móvil/tableta): joystick + botones de acción -->
+    <div id="touch-controls" class="hidden" aria-hidden="true">
+      <div id="joy" role="application" aria-label="Joystick: desliza para mover y caída suave; arriba, caída instantánea">
+        <div id="joy-knob"></div>
+      </div>
+      <div id="tc-buttons">
+        <button id="tc-ccw" type="button" class="tc-btn" aria-label="Rotar a la izquierda">↺</button>
+        <button id="tc-cw" type="button" class="tc-btn" aria-label="Rotar a la derecha">↻</button>
+        <button id="tc-hold" type="button" class="tc-btn tc-small" aria-label="Reserva">HOLD</button>
+        <button id="tc-drop" type="button" class="tc-btn tc-small" aria-label="Caída instantánea">⇊</button>
+      </div>
+      <div id="tc-side">
+        <button id="tc-pause" type="button" class="tc-btn tc-small" aria-label="Pausa">⏸</button>
+        <button id="tc-help" type="button" class="tc-btn tc-small" aria-label="Ayuda">❓</button>
+        <button id="tc-restart" type="button" class="tc-btn tc-small" aria-label="Reiniciar">↻</button>
+      </div>
+    </div>
+
+    <!-- Selección de modo (fallback cuando la detección de dispositivo es ambigua) -->
+    <div id="mode-overlay" class="hidden-overlay" role="dialog" aria-modal="true" aria-labelledby="mode-title">
+      <div class="card mode-card">
+        <h2 id="mode-title">¿CÓMO VAS A JUGAR?</h2>
+        <p class="mode-sub">Elige tus controles · puedes cambiarlo después con <span class="key">⚙️ Controles</span></p>
+        <div class="mode-options">
+          <button id="btn-mode-desktop" type="button" class="mode-btn">🖥️ Escritorio<span>Teclado y ratón</span></button>
+          <button id="btn-mode-touch" type="button" class="mode-btn ghost">📱 Móvil / Tableta<span>Controles táctiles en pantalla</span></button>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

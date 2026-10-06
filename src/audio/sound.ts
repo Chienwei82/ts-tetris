@@ -2,9 +2,14 @@ export type SoundName = 'move' | 'rotate' | 'lock' | 'clear' | 'tetris' | 'level
 export class SoundFX {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** true desde el primer gesto de usuario: la política de autoplay exige crear
+      y reanudar el AudioContext dentro de un gesto (si no, Chrome lo bloquea). */
+  private unlocked = false;
   enabled = true;
   private ensure(): AudioContext | null {
-    if (!this.enabled) return null;
+    // Sin gesto previo no se crea el contexto: el navegador lo bloquearía y
+    // mostraría el warning "The AudioContext was not allowed to start".
+    if (!this.enabled || !this.unlocked) return null;
     try {
       if (!this.ctx) {
         const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -13,11 +18,16 @@ export class SoundFX {
         this.master.gain.value = 0.18;
         this.master.connect(this.ctx.destination);
       }
+      // Tras un gesto ya ha habido interacción: reanudar es seguro (sin warning).
       if (this.ctx.state === 'suspended') void this.ctx.resume();
       return this.ctx;
     } catch { return null; }
   }
-  unlock(): void { this.ensure(); }
+  /** Llamar desde un gesto de usuario (pointerdown/keydown/touchend/click). */
+  unlock(): void {
+    this.unlocked = true;
+    this.ensure();
+  }
   private tone(freq: number, dur: number, type: OscillatorType = 'square', vol = 1, when = 0, slide = 0): void {
     const ctx = this.ensure();
     if (!ctx || !this.master) return;

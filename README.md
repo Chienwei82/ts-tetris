@@ -37,6 +37,26 @@ npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 | R | Reinicio |
 | Enter | Confirmar (jugar / continuar / reintentar) |
 
+### Controles táctiles (móvil / tableta)
+
+En modo táctil aparecen controles superpuestos al canvas (joystick virtual a la
+izquierda y botones de acción a la derecha), con multitáctil real (joystick +
+botón a la vez):
+
+| Control táctil | Acción |
+|---|---|
+| Joystick ← / → | Mover pieza (con auto-repetición DAS/ARR) |
+| Joystick ↓ | Caída suave (+1 pto/fila) |
+| Joystick ↑ (flick) | Caída instantánea |
+| ↺ / ↻ | Rotar antihorario / horario |
+| ⇊ | Caída instantánea |
+| HOLD | Reserva |
+| ⏸ · ❓ · ↻ | Pausa · Ayuda · Reinicio |
+
+El modo se elige automáticamente por detección de dispositivo; si la detección
+es ambigua aparece una pantalla de selección al arrancar y la elección persiste
+en `localStorage` (se puede cambiar con **⚙️ Controles**).
+
 ## Reglas
 
 - Tablero 10×20, 7 piezas clásicas con aleatorio 7-bag.
@@ -83,6 +103,8 @@ src/
     effects.ts      Vibración de cámara, destello de línea
     materials.ts    Texturas procedurales (papel, cartón, cuadrícula, cinta) + toon + tinta
   ui/         Entrada con DAS/ARR, HUD, previews 2D canvas, preferencias (localStorage)
+  platform/   Detección de dispositivo (escritorio/móvil/tableta) y ViewportManager
+              (resize/orientation/visualViewport, pixel ratio limitado)
   audio/      Efectos sintetizados WebAudio (sin assets), incluido el trueno
   main.ts     Bucle, cámara con deriva, gauge/selector, toggle de efectos, eventos→efectos
 ```
