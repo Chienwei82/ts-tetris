@@ -150,6 +150,32 @@ export class TetrisEngine {
         this.emit({ type: 'rotate' }); this.resetLockDelay(); return true;
       }
     }
+    // Fallback: la SRS no cubre todas las pegadas al borde (p. ej. I vertical
+    // contra el muro). Para que la pieza rote igual, buscamos el desplazamiento
+    // mínimo que la deje en una posición válida, priorizando el empuje
+    // horizontal hacia dentro del tablero.
+    const tried = new Set(kicks.map((k) => `${k.x},${k.y}`));
+    const candidates: Vec2[] = [];
+    for (let dx = -4; dx <= 4; dx++) {
+      for (let dy = -2; dy <= 3; dy++) {
+        const key = `${dx},${dy}`;
+        if (tried.has(key)) continue;
+        candidates.push({ x: dx, y: dy });
+      }
+    }
+    candidates.sort((a, b) =>
+      (Math.abs(a.x) + Math.abs(a.y)) - (Math.abs(b.x) + Math.abs(b.y)) ||
+      Math.abs(a.x) - Math.abs(b.x) ||
+      Math.abs(b.y) - Math.abs(a.y),
+    );
+    for (const k of candidates) {
+      const cells = cellsForPiece(this.active.kind, to, this.active.x + k.x, this.active.y + k.y);
+      if (!collides(this.grid, cells)) {
+        this.active.rotation = to; this.active.x += k.x; this.active.y += k.y;
+        this.pieceVersion++;
+        this.emit({ type: 'rotate' }); this.resetLockDelay(); return true;
+      }
+    }
     return false;
   }
   private resetLockDelay(): void {
