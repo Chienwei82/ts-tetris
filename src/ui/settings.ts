@@ -49,3 +49,18 @@ export function loadMusicEnabled(): boolean {
 export function saveMusicEnabled(on: boolean): void {
   try { window.localStorage.setItem(MUSIC_KEY, on ? '1' : '0'); } catch { /* ignore */ }
 }
+
+import type { GenreId } from '../audio/genreProfiles.js';
+const GENRE_KEY = 'tetris-3d:music-genre';
+/** Genero musical elegido; por defecto Electronic. */
+export type MusicGenre = GenreId;
+export function loadMusicGenre(): MusicGenre {
+  try {
+    const v = window.localStorage.getItem(GENRE_KEY);
+    if (v === 'electronic' || v === 'pop' || v === 'techno' || v === 'dance' || v === 'classic') return v;
+  } catch { /* storage unavailable (private mode) */ }
+  return 'electronic';
+}
+export function saveMusicGenre(genre: MusicGenre): void {
+  try { window.localStorage.setItem(GENRE_KEY, genre); } catch { /* ignore */ }
+}

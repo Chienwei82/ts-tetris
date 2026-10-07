@@ -6,29 +6,24 @@
  * compás siguiente con rampas, para que ninguna transición suene brusca.
  */
 import {
-  ARP_GAIN, BARS_PER_CHORD, BASS_GAIN, CUTOFF_MIN_HZ, DELAY_FEEDBACK, DELAY_FILTER_HZ,
-  DELAY_TIME_S, DRUM_GAIN, FADE_IN_S, LOOKAHEAD_S, MASTER_PEAK, PAD_ATTACK_S,
-  PAD_DETUNE_CENTS, PAD_GAIN, PAD_RELEASE_S, STEPS_PER_BAR, TICK_MS,
+  BARS_PER_CHORD, CUTOFF_MIN_HZ, DELAY_FEEDBACK, DELAY_FILTER_HZ,
+  DELAY_TIME_S, FADE_IN_S, LOOKAHEAD_S, MASTER_PEAK, STEPS_PER_BAR, TICK_MS,
 } from './musicConstants.js';
-import {
-  barPattern, chordForBar, clamp01, cutoffFor, freqForDegree,
-  layersForIntensity, maskDensityFor, tempoFor,
-} from './musicPatterns.js';
 import type { BarPattern, LayerGates } from './musicPatterns.js';
+import { clamp01 } from './musicPatterns.js';
+import type { GenreId, GenreProfile } from './genreProfiles.js';
+import { DEFAULT_GENRE, GENRE_PROFILES } from './genreProfiles.js';
+import {
+  barPatternFor, chordForGenreBar, cutoffForGenre, freqForGenreDegree,
+  layersForGenre, maskDensityForGenre, songProfileFor, tempoForGenre,
+} from './genrePatterns.js';
 import { mulberry32 } from './musicRng.js';
 
 /* Envolventes de las voces de percusión/ataque (segundos / Hz). */
 const KICK_START_HZ = 120;
 const KICK_END_HZ = 45;
 const KICK_DECAY_S = 0.18;
-const KICK_LEVEL = 0.8;
-const HAT_HP_HZ = 6500;
 const HAT_DECAY_S = 0.05;
-const HAT_LEVEL = 0.35;
-const BASS_LEVEL = 0.9;
-const ARP_LEVEL = 0.7;
-const PAD_BODY_LEVEL = 0.14;
-const PAD_AIR_LEVEL = 0.08;
 const SEND_LEVEL = 0.35;
 const NOISE_SECONDS = 1;
 
@@ -48,9 +43,11 @@ export class MusicEngine {
   private step = 0;
   private seed = 1;
   private intensity = 0;
-  private stepDur = 60 / tempoFor(0) / 4;
+  private genre: GenreId = DEFAULT_GENRE;
+  private tonicOffset = 0;
+  private stepDur = 60 / tempoForGenre(GENRE_PROFILES[DEFAULT_GENRE], 0) / 4;
   private gates: LayerGates = { bass: false, arpeggio: false, drums: false };
-  private density = maskDensityFor(0);
+  private density = maskDensityForGenre(GENRE_PROFILES[DEFAULT_GENRE], 0);
   private pattern: BarPattern | null = null;
   private padUntil = 0;
   private hatCount = 0;
@@ -72,11 +69,11 @@ export class MusicEngine {
     this.master.connect(this.compressor);
     this.compressor.connect(this.ctx.destination);
 
-    this.padBus = this.createBus(PAD_GAIN);
-    this.bassBus = this.createBus(BASS_GAIN);
-    this.arpBus = this.createBus(ARP_GAIN);
+    this.padBus = this.createBus(this.profile().gains.pad);
+    this.bassBus = this.createBus(this.profile().gains.bass);
+    this.arpBus = this.createBus(this.profile().gains.arp);
     this.drumBus = this.ctx.createGain();
-    this.drumBus.gain.value = DRUM_GAIN;
+    this.drumBus.gain.value = this.profile().gains.drums;
     this.drumBus.connect(this.master);
 
     /* "Reverb" simple: delay con feedback filtrado sobre el arpegio. */
@@ -102,20 +99,47 @@ export class MusicEngine {
   get running(): boolean {
     return this._running;
   }
-  /** Arranca la canción desde el compás 0 con una semilla dada. */
-  start(seed: number, intensity: number): void {
+  /** Arranca la canción desde el compás 0 con una semilla y género dados. */
+  start(seed: number, intensity: number, genre: GenreId = DEFAULT_GENRE): void {
+    this.genre = genre;
     this.seed = seed >>> 0;
+    this.tonicOffset = songProfileFor(this.genre, this.seed).tonicOffset;
     this.intensity = clamp01(intensity);
     this.step = 0;
     this.pattern = null;
     this.padUntil = 0;
-    this.stepDur = 60 / tempoFor(this.intensity) / 4;
+    this.stepDur = 60 / tempoForGenre(this.profile(), this.intensity) / 4;
     void this.ctx.resume();
     const t = this.ctx.currentTime;
     this.nextStepTime = t + 0.08;
     this.fadeMaster(MASTER_PEAK, FADE_IN_S, t);
     this._running = true;
     this.startScheduler();
+  }
+
+  getGenre(): GenreId {
+    return this.genre;
+  }
+
+  getTonicOffset(): number {
+    return this.tonicOffset;
+  }
+
+  /** Perfil activo (una sola lectura por llamada; el motor no ramifica por género). */
+  private profile(): GenreProfile {
+    return GENRE_PROFILES[this.genre];
+  }
+
+  /**
+   * Cambio de género cuantizado al compás: el scheduler lo aplica al inicio
+   * del compás siguiente (donde ya recalcula tempo y patrón).
+   */
+  switchGenre(genre: GenreId, seed: number): void {
+    this.genre = genre;
+    this.seed = seed >>> 0;
+    this.tonicOffset = songProfileFor(this.genre, this.seed).tonicOffset;
+    this.pattern = null;
+    this.drumBus.gain.value = this.profile().gains.drums;
   }
 
   /** Continúa donde quedó (toggle/pausa/pestaña): fade-in y reenganche del pad. */
@@ -126,7 +150,7 @@ export class MusicEngine {
     this.fadeMaster(MASTER_PEAK, FADE_IN_S, t);
     this._running = true;
     const barDur = this.stepDur * STEPS_PER_BAR;
-    this.ensurePad(t, chordForBar(this.seed, Math.floor(this.step / STEPS_PER_BAR)), barDur * BARS_PER_CHORD * 0.9);
+    this.ensurePad(t, chordForGenreBar(this.genre, this.seed, Math.floor(this.step / STEPS_PER_BAR)), barDur * BARS_PER_CHORD * 0.9);
     this.startScheduler();
   }
 
@@ -147,7 +171,7 @@ export class MusicEngine {
     this.stopScheduler();
     const barDur = this.stepDur * STEPS_PER_BAR;
     const t = this.ctx.currentTime + 0.05;
-    const chord = chordForBar(this.seed, Math.floor(this.step / STEPS_PER_BAR));
+    const chord = chordForGenreBar(this.genre, this.seed, Math.floor(this.step / STEPS_PER_BAR));
     this.schedulePad(t, barDur * 1.4, chord);
     this.scheduleBass(t, barDur, chord[0] ?? 0);
     this.scheduleArp(t + barDur * 0.25, barDur * 0.9, (chord[2] ?? 0) + 7, 0.5);
@@ -213,9 +237,9 @@ export class MusicEngine {
 
   /** Al inicio de cada compás: patrón nuevo + ajuste cuantizado de intensidad. */
   private beginBar(bar: number, at: number): void {
-    this.pattern = barPattern(this.seed, bar);
+    this.pattern = barPatternFor(this.genre, this.seed, bar);
     this.applyIntensity(at);
-    this.stepDur = 60 / tempoFor(this.intensity) / 4;
+    this.stepDur = 60 / tempoForGenre(this.profile(), this.intensity) / 4;
     if (bar % BARS_PER_CHORD === 0) {
       const barDur = this.stepDur * STEPS_PER_BAR;
       this.ensurePad(at, this.pattern.chord, barDur * BARS_PER_CHORD * 0.9);
@@ -249,6 +273,9 @@ export class MusicEngine {
       for (const h of p.hat) {
         if (h.step === inStep && h.threshold < this.density) this.scheduleHat(at);
       }
+      for (const s of p.snare) {
+        if (s.step === inStep && s.threshold < this.density) this.scheduleSnare(at);
+      }
     }
   }
 
@@ -260,14 +287,15 @@ export class MusicEngine {
   /** Aplica intensidad → tempo, brillo y ganancias de capa, todo con rampas. */
   private applyIntensity(at: number): void {
     const v = this.intensity;
-    const cutoff = cutoffFor(v);
+    const profile = this.profile();
+    const cutoff = cutoffForGenre(profile, v);
     for (const f of this.brightness) f.frequency.setTargetAtTime(cutoff, at, 0.4);
-    this.gates = layersForIntensity(v);
-    this.density = maskDensityFor(v);
-    this.padBus.gain.setTargetAtTime(PAD_GAIN * (0.75 + 0.25 * v), at, 0.6);
-    this.bassBus.gain.setTargetAtTime(this.gates.bass ? BASS_GAIN : 0.0001, at, 0.6);
-    this.arpBus.gain.setTargetAtTime(this.gates.arpeggio ? ARP_GAIN : 0.0001, at, 0.6);
-    this.drumBus.gain.setTargetAtTime(this.gates.drums ? DRUM_GAIN : 0.0001, at, 0.6);
+    this.gates = layersForGenre(profile, v);
+    this.density = maskDensityForGenre(profile, v);
+    this.padBus.gain.setTargetAtTime(profile.gains.pad * (0.75 + 0.25 * v), at, 0.6);
+    this.bassBus.gain.setTargetAtTime(this.gates.bass ? profile.gains.bass : 0.0001, at, 0.6);
+    this.arpBus.gain.setTargetAtTime(this.gates.arpeggio ? profile.gains.arp : 0.0001, at, 0.6);
+    this.drumBus.gain.setTargetAtTime(this.gates.drums ? profile.gains.drums : 0.0001, at, 0.6);
   }
   /* ------------------------------- voces ---------------------------------- */
 
@@ -279,23 +307,26 @@ export class MusicEngine {
 
   private schedulePad(at: number, dur: number, chord: number[]): void {
     this.padUntil = at + dur;
+    const timbre = this.profile().timbre.pad;
+    const bodyLevel = 0.14 * timbre.level;
+    const airLevel = 0.08 * timbre.level;
     for (const degree of chord) {
       for (const octave of [0, 7]) {
-        const freq = freqForDegree(degree + octave);
-        const level = octave === 0 ? PAD_BODY_LEVEL : PAD_AIR_LEVEL;
-        for (const detune of [-PAD_DETUNE_CENTS, PAD_DETUNE_CENTS]) {
+        const freq = freqForGenreDegree(this.profile(), this.tonicOffset, degree + octave);
+        const level = octave === 0 ? bodyLevel : airLevel;
+        for (const detune of [-timbre.detuneCents, timbre.detuneCents]) {
           const osc = this.ctx.createOscillator();
           const g = this.ctx.createGain();
-          osc.type = 'sine';
+          osc.type = timbre.wave;
           osc.frequency.value = freq;
           osc.detune.value = detune;
           g.gain.setValueAtTime(0.0001, at);
-          g.gain.linearRampToValueAtTime(level, at + PAD_ATTACK_S);
-          g.gain.setTargetAtTime(0.0001, at + dur, PAD_RELEASE_S / 3);
+          g.gain.linearRampToValueAtTime(level, at + timbre.attackS);
+          g.gain.setTargetAtTime(0.0001, at + dur, timbre.releaseS / 3);
           osc.connect(g);
           g.connect(this.padBus);
           osc.start(at);
-          osc.stop(at + dur + PAD_RELEASE_S * 1.5);
+          osc.stop(at + dur + timbre.releaseS * 1.5);
           this.trackVoice(osc, g);
         }
       }
@@ -303,12 +334,13 @@ export class MusicEngine {
   }
 
   private scheduleBass(at: number, dur: number, degree: number): void {
+    const timbre = this.profile().timbre.bass;
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.value = freqForDegree(degree);
+    osc.type = timbre.wave;
+    osc.frequency.value = freqForGenreDegree(this.profile(), this.tonicOffset, degree);
     g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(BASS_LEVEL, at + 0.03);
+    g.gain.exponentialRampToValueAtTime(timbre.level, at + timbre.attackS);
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     osc.connect(g);
     g.connect(this.bassBus);
@@ -318,12 +350,13 @@ export class MusicEngine {
   }
 
   private scheduleArp(at: number, dur: number, degree: number, velocity: number): void {
+    const timbre = this.profile().timbre.arp;
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.value = freqForDegree(degree + 7);
+    osc.type = timbre.wave;
+    osc.frequency.value = freqForGenreDegree(this.profile(), this.tonicOffset, degree + 7);
     g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(Math.max(0.02, velocity * ARP_LEVEL), at + 0.012);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.02, velocity * timbre.level), at + timbre.attackS);
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     osc.connect(g);
     g.connect(this.arpBus);
@@ -333,12 +366,13 @@ export class MusicEngine {
   }
 
   private scheduleKick(at: number): void {
+    const drums = this.profile().timbre.drums;
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(KICK_START_HZ, at);
     osc.frequency.exponentialRampToValueAtTime(KICK_END_HZ, at + 0.12);
-    g.gain.setValueAtTime(KICK_LEVEL, at);
+    g.gain.setValueAtTime(drums.kick, at);
     g.gain.exponentialRampToValueAtTime(0.0001, at + KICK_DECAY_S);
     osc.connect(g);
     g.connect(this.drumBus);
@@ -348,13 +382,14 @@ export class MusicEngine {
   }
 
   private scheduleHat(at: number): void {
+    const drums = this.profile().timbre.drums;
     const src = this.ctx.createBufferSource();
     const hp = this.ctx.createBiquadFilter();
     const g = this.ctx.createGain();
     src.buffer = this.noise;
     hp.type = 'highpass';
-    hp.frequency.value = HAT_HP_HZ;
-    g.gain.setValueAtTime(HAT_LEVEL, at);
+    hp.frequency.value = drums.hatHpHz;
+    g.gain.setValueAtTime(drums.hat, at);
     g.gain.exponentialRampToValueAtTime(0.0001, at + HAT_DECAY_S);
     src.connect(hp);
     hp.connect(g);
@@ -365,6 +400,28 @@ export class MusicEngine {
     src.start(at, offset);
     src.stop(at + HAT_DECAY_S + 0.05);
     this.trackVoice(src, g, hp);
+  }
+
+  /** Caja/clap: ruido con bandpass corto (nivel del perfil; 0 = ausente). */
+  private scheduleSnare(at: number): void {
+    const level = this.profile().timbre.drums.snare;
+    if (level <= 0) return;
+    const src = this.ctx.createBufferSource();
+    const bp = this.ctx.createBiquadFilter();
+    const g = this.ctx.createGain();
+    src.buffer = this.noise;
+    bp.type = 'bandpass';
+    bp.frequency.value = 1800;
+    bp.Q.value = 0.9;
+    g.gain.setValueAtTime(level, at);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.12);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(this.drumBus);
+    const offset = (this.hatCount % 7) * 0.11;
+    src.start(at, offset);
+    src.stop(at + 0.17);
+    this.trackVoice(src, g, bp);
   }
 
   /* ------------------------------ utilidades ------------------------------ */
