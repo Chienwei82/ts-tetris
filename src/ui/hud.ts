@@ -16,6 +16,13 @@ export class HUD {
   private bannerSubEl: HTMLElement;
   private toastTimer = 0;
   private bannerTimer = 0;
+  /* Last written values: the HUD is polled every frame, so identical updates skip the DOM. */
+  private lastScore = Number.NaN;
+  private lastLevel = Number.NaN;
+  private lastLines = Number.NaN;
+  private lastGaugeW = '';
+  private lastGaugeClass = '';
+  private lastGaugeCaption = '';
   constructor() {
     const q = (id: string): HTMLElement => {
       const el = document.getElementById(id);
@@ -30,15 +37,35 @@ export class HUD {
     this.bannerEl = q('level-banner'); this.bannerTitleEl = q('level-banner-title'); this.bannerSubEl = q('level-banner-sub');
   }
   setStats(score: number, level: number, lines: number): void {
-    this.scoreEl.textContent = score.toLocaleString('es');
-    this.levelEl.textContent = String(level);
-    this.linesEl.textContent = String(lines);
+    if (score !== this.lastScore) {
+      this.lastScore = score;
+      this.scoreEl.textContent = score.toLocaleString('es');
+    }
+    if (level !== this.lastLevel) {
+      this.lastLevel = level;
+      this.levelEl.textContent = String(level);
+    }
+    if (lines !== this.lastLines) {
+      this.lastLines = lines;
+      this.linesEl.textContent = String(lines);
+    }
   }
   /** Difficulty gauge: fill ratio plus the rule that is currently ahead. */
   setLevelGauge(ratio: number, caption: string, source: 'lines' | 'time' | 'max'): void {
-    this.gaugeFillEl.style.width = (Math.max(0, Math.min(1, ratio)) * 100).toFixed(1) + '%';
-    this.gaugeFillEl.className = source;
-    this.gaugeCaptionEl.textContent = caption;
+    // 0.1 % steps: identical strings are deduped below (sub-pixel width changes).
+    const w = (Math.round(Math.max(0, Math.min(1, ratio)) * 1000) / 10).toFixed(1) + '%';
+    if (w !== this.lastGaugeW) {
+      this.lastGaugeW = w;
+      this.gaugeFillEl.style.width = w;
+    }
+    if (source !== this.lastGaugeClass) {
+      this.lastGaugeClass = source;
+      this.gaugeFillEl.className = source;
+    }
+    if (caption !== this.lastGaugeCaption) {
+      this.lastGaugeCaption = caption;
+      this.gaugeCaptionEl.textContent = caption;
+    }
   }
   setStageChip(text: string): void {
     if (this.stageChipEl.textContent !== text) this.stageChipEl.textContent = text;

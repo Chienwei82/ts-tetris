@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { setSpriteAlpha, spriteMaterial, updatePointScale } from './particles.js';
+import { setSpriteAlpha, spriteMaterial } from './particles.js';
 import type { WeatherKind } from './themes.js';
 
 interface Box { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number }
@@ -213,37 +213,47 @@ class FallField {
     const a = this.attr.array as Float32Array;
     const n = this.opts.count;
     const b = this.opts.box;
+    const speed = this.speed;
+    const phase = this.phase;
+    const t = this.time;
     if (this.opts.fall) {
+      const sway = dt * this.opts.swayAmp * (0.4 + wind * 0.6);
+      const freq = this.opts.swayFreq;
       for (let i = 0; i < n; i++) {
         const ix = i * 3;
-        a[ix + 1] = (a[ix + 1] ?? 0) - (this.speed[i] ?? 1) * dt;
-        a[ix] = (a[ix] ?? 0) + Math.sin(this.time * this.opts.swayFreq + (this.phase[i] ?? 0)) * dt * this.opts.swayAmp * (0.4 + wind * 0.6);
-        if ((a[ix + 1] ?? 0) < b.y0) {
-          a[ix + 1] = b.y1;
-          a[ix] = b.x0 + Math.random() * (b.x1 - b.x0);
+        let y = (a[ix + 1] ?? 0) - (speed[i] ?? 1) * dt;
+        let x = (a[ix] ?? 0) + Math.sin(t * freq + (phase[i] ?? 0)) * sway;
+        if (y < b.y0) {
+          y = b.y1;
+          x = b.x0 + Math.random() * (b.x1 - b.x0);
         }
+        a[ix] = x;
+        a[ix + 1] = y;
       }
       this.attr.needsUpdate = true;
     } else if (this.opts.wander > 0) {
+      const wander = this.opts.wander;
       for (let i = 0; i < n; i++) {
         const ix = i * 3;
-        a[ix] = (a[ix] ?? 0) + Math.sin(this.time * 0.6 + (this.phase[i] ?? 0)) * dt * this.opts.wander;
-        a[ix + 1] = (a[ix + 1] ?? 0) + Math.cos(this.time * 0.45 + (this.phase[i] ?? 0) * 1.7) * dt * this.opts.wander * 0.6;
-        if ((a[ix] ?? 0) < b.x0) a[ix] = b.x1;
-        if ((a[ix] ?? 0) > b.x1) a[ix] = b.x0;
-        if ((a[ix + 1] ?? 0) < b.y0) a[ix + 1] = b.y1;
-        if ((a[ix + 1] ?? 0) > b.y1) a[ix + 1] = b.y0;
+        let x = (a[ix] ?? 0) + Math.sin(t * 0.6 + (phase[i] ?? 0)) * dt * wander;
+        let y = (a[ix + 1] ?? 0) + Math.cos(t * 0.45 + (phase[i] ?? 0) * 1.7) * dt * wander * 0.6;
+        if (x < b.x0) x = b.x1;
+        if (x > b.x1) x = b.x0;
+        if (y < b.y0) y = b.y1;
+        if (y > b.y1) y = b.y0;
+        a[ix] = x;
+        a[ix + 1] = y;
       }
       this.attr.needsUpdate = true;
     }
     if (this.opts.twinkle > 0) {
       const alp = this.alphaAttr.array as Float32Array;
+      const tw = this.opts.twinkle;
       for (let i = 0; i < n; i++) {
-        alp[i] = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(this.time * this.opts.twinkle + (this.phase[i] ?? 0) * 3));
+        alp[i] = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(t * tw + (phase[i] ?? 0) * 3));
       }
       this.alphaAttr.needsUpdate = true;
     }
-    updatePointScale(this.mat, this.opts.size);
   }
 }
 

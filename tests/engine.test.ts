@@ -139,3 +139,45 @@ describe('engine', () => {
     expect(p.source).toBe('lines');
   });
 });
+
+describe('dirty-flag versions (gridVersion / pieceVersion)', () => {
+  it('gridVersion only bumps when the grid changes (lock), not on gravity ticks', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    const g0 = e.gridVersion;
+    e.update(0.001); // too little time for one gravity step
+    expect(e.gridVersion).toBe(g0);
+    e.active = { kind: 'O', rotation: 0, x: 4, y: 10 };
+    e.hardDrop();
+    expect(e.gridVersion).toBeGreaterThan(g0);
+  });
+  it('pieceVersion bumps on successful move/rotate and on spawn', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    const p0 = e.pieceVersion;
+    e.active = { kind: 'O', rotation: 0, x: 4, y: 10 };
+    expect(e.move(1)).toBe(true);
+    expect(e.pieceVersion).toBeGreaterThan(p0);
+    const p1 = e.pieceVersion;
+    expect(e.rotate(1)).toBe(true); // O keeps shape but counts as a rotation event
+    expect(e.pieceVersion).toBeGreaterThan(p1);
+  });
+  it('failed moves/rotations do not bump pieceVersion', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    e.active = { kind: 'O', rotation: 0, x: 0, y: 10 };
+    const p0 = e.pieceVersion;
+    expect(e.move(-1)).toBe(false); // already against the left wall
+    expect(e.pieceVersion).toBe(p0);
+  });
+  it('hold swaps the piece without touching the grid', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    e.active = { kind: 'O', rotation: 0, x: 4, y: 10 };
+    const g0 = e.gridVersion;
+    const p0 = e.pieceVersion;
+    e.hold();
+    expect(e.gridVersion).toBe(g0);
+    expect(e.pieceVersion).toBeGreaterThan(p0);
+  });
+});

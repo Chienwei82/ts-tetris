@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clearFullRows, createGrid } from '../src/game/board.js';
+import { clearFullRows, createGrid, stackHeight } from '../src/game/board.js';
 import { COLS, TOTAL_ROWS } from '../src/game/types.js';
 import type { Grid } from '../src/game/types.js';
 
@@ -36,5 +36,18 @@ describe('clearFullRows', () => {
     g[4]![7] = 0;
     expect(clearFullRows(g)).toEqual([]);
     expect(g[4]![7]).toBe(0);
+  });
+});
+
+describe('stackHeight', () => {
+  it('returns -1 on an empty grid', () => {
+    expect(stackHeight(createGrid())).toBe(-1);
+  });
+
+  it('returns the highest occupied row', () => {
+    const g = createGrid();
+    g[0]![0] = 'I';
+    g[7]![3] = 'T';
+    expect(stackHeight(g)).toBe(7);
   });
 });

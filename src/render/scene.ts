@@ -138,6 +138,10 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
   renderer.shadowMap.enabled = true;
   // PCFShadowMap ya es suave desde r182; PCFSoftShadowMap quedó deprecado.
   renderer.shadowMap.type = THREE.PCFShadowMap;
+  // Sombras bajo demanda: el mapa solo se re-renderiza cuando BoardRenderer
+  // detecta movimiento de casters (los personajes/clima no proyectan sombra).
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
   // Flat, vivid paper colours — no filmic tone mapping.
   renderer.toneMapping = THREE.NoToneMapping;
 

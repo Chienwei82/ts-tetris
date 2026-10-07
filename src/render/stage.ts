@@ -51,6 +51,7 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   let flashK = 0;
   let thunderIn = -1;
   let nextStrike = 5 + Math.random() * 6;
+  let skyTick = false;
 
   const scratch = new THREE.Color();
   const tmpColor = new THREE.Color();
@@ -66,14 +67,15 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
     return out.getHex();
   }
   /** Pushes the interpolated look between `fromIdx` and `toIdx` into the scene. */
-  function apply(t: number): void {
+  function apply(t: number, repaintSky = true): void {
     const a = themeAt(fromIdx);
     const b = themeAt(toIdx);
     skyStops[0] = mixHex(a.sky[0], b.sky[0], t, scratch);
     skyStops[1] = mixHex(a.sky[1], b.sky[1], t, scratch);
     skyStops[2] = mixHex(a.sky[2], b.sky[2], t, scratch);
     skyStops[3] = mixHex(a.sky[3], b.sky[3], t, scratch);
-    paintSky(parts.sky, skyStops);
+    // La lenta gradación del cielo admite media tasa: el resto va a 60 fps.
+    if (repaintSky) paintSky(parts.sky, skyStops);
     mixHex(a.fog.color, b.fog.color, t, parts.fog.color);
     parts.fog.near = a.fog.near + (b.fog.near - a.fog.near) * t;
     parts.fog.far = a.fog.far + (b.fog.far - a.fog.far) * t;
@@ -197,8 +199,11 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
       if (enabled) {
         if (transitioning) {
           k = Math.min(1, k + dt / TRANSITION_SECONDS);
-          if (k >= 1) transitioning = false;
-          apply(k);
+          const done = k >= 1;
+          if (done) transitioning = false;
+          // Cielo a media tasa durante la transición; frame final siempre pintado.
+          skyTick = !skyTick;
+          apply(k, done || skyTick);
         }
         for (const c of parts.clouds) {
           if (!c.mesh.visible) continue;

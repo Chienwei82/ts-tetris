@@ -1,5 +1,12 @@
 import * as THREE from 'three';
 import { COLS, VISIBLE_ROWS } from '../game/types.js';
+
+/* ── Configuración rápida del juego ────────────────────────────────────────
+ * MAX_FPS: tope de frames por segundo del game loop. Es un juego casual: si la
+ * pantalla es más rápida (120/144 Hz), el bucle se frena a este valor para
+ * ahorrar batería y GPU. Cámbialo aquí (p. ej. 30 para ahorrar aún más). */
+export const MAX_FPS = 60;
+
 export const CELL = 1;
 export const BOARD_W = COLS * CELL;
 export const BOARD_H = VISIBLE_ROWS * CELL;

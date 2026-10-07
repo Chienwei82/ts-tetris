@@ -31,11 +31,25 @@ function pointScale(worldSize: number): number {
 }
 
 /**
+ * Sprite materials whose `uScale` depends on the framebuffer height. The uniform
+ * only needs recomputing on resize (`refreshPointScales`), never per frame.
+ */
+const pointScaleUsers = new Map<THREE.ShaderMaterial, number>();
+
+/** Recomputes `uScale` for every registered sprite material (call on resize). */
+export function refreshPointScales(): void {
+  for (const [mat, worldSize] of pointScaleUsers) {
+    const u = mat.uniforms['uScale'];
+    if (u) u.value = pointScale(worldSize);
+  }
+}
+
+/**
  * Point-sprite material shared by confetti and weather fields.
  * `uGlobal` fades a whole field in/out (weather transitions, theme attenuation).
  */
 export function spriteMaterial(tex: THREE.CanvasTexture, worldSize: number): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  const mat = new THREE.ShaderMaterial({
     uniforms: {
       uMap: { value: tex },
       uScale: { value: pointScale(worldSize) },
@@ -70,11 +84,8 @@ export function spriteMaterial(tex: THREE.CanvasTexture, worldSize: number): THR
     transparent: true,
     depthWrite: false
   });
-}
-
-export function updatePointScale(mat: THREE.ShaderMaterial, worldSize: number): void {
-  const u = mat.uniforms['uScale'];
-  if (u) u.value = pointScale(worldSize);
+  pointScaleUsers.set(mat, worldSize);
+  return mat;
 }
 
 /** Sets the whole-field alpha multiplier (0 hides a field without touching its vertices). */
@@ -89,6 +100,7 @@ export class ParticleSystem {
   private mat: THREE.ShaderMaterial;
   private parts: P[] = [];
   private max = 900;
+  private drawn = false;
   private posAttr: THREE.BufferAttribute;
   private colAttr: THREE.BufferAttribute;
   private alphaAttr: THREE.BufferAttribute;
@@ -126,6 +138,12 @@ export class ParticleSystem {
     }
   }
   update(dt: number): void {
+    // Idle burst pool: skip all buffer uploads when no scrap is alive.
+    if (this.parts.length === 0) {
+      if (this.drawn) { this.drawn = false; this.geo.setDrawRange(0, 0); }
+      return;
+    }
+    this.drawn = true;
     const pos = this.posAttr.array as Float32Array;
     const col = this.colAttr.array as Float32Array;
     const alp = this.alphaAttr.array as Float32Array;
@@ -145,12 +163,17 @@ export class ParticleSystem {
       alp[w] = k * k;
       w++;
     }
-    this.parts = this.parts.filter((p) => p.life < p.maxLife);
+    // Compact in place: no per-frame array allocation on the render loop.
+    let alive = 0;
+    for (let i = 0; i < this.parts.length; i++) {
+      const p = this.parts[i];
+      if (p && p.life < p.maxLife) this.parts[alive++] = p;
+    }
+    this.parts.length = alive;
     this.geo.setDrawRange(0, w);
     this.posAttr.needsUpdate = true;
     this.colAttr.needsUpdate = true;
     this.alphaAttr.needsUpdate = true;
-    updatePointScale(this.mat, 0.24);
   }
 }
 
@@ -203,12 +226,14 @@ export class AmbientConfetti {
   update(dt: number): void {
     this.t += dt;
     const a = this.posAttr.array as Float32Array;
+    const speed = this.speed;
+    const phase = this.phase;
     for (let i = 0; i < this.n; i++) {
       const ix = i * 3;
       const x = a[ix] ?? 0;
       const y = a[ix + 1] ?? 0;
-      let ny = y - (this.speed[i] ?? 0.8) * dt;
-      let nx = x + Math.sin(this.t * 1.3 + (this.phase[i] ?? 0)) * dt * 0.7;
+      let ny = y - (speed[i] ?? 0.8) * dt;
+      let nx = x + Math.sin(this.t * 1.3 + (phase[i] ?? 0)) * dt * 0.7;
       if (ny < this.y0) {
         ny = this.y1;
         nx = this.x0 + Math.random() * (this.x1 - this.x0);
@@ -217,7 +242,6 @@ export class AmbientConfetti {
       a[ix + 1] = ny;
     }
     this.posAttr.needsUpdate = true;
-    updatePointScale(this.mat, 0.3);
   }
 }
 

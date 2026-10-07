@@ -51,11 +51,14 @@ export function clearFullRows(grid: Grid): number[] {
   return cleared.sort((a, b) => a - b);
 }
 
-/** Highest occupied row (-1 when empty). */
+/** Highest occupied row (-1 when empty). Plain loops: runs once per frame for music signals. */
 export function stackHeight(grid: Grid): number {
   for (let r = grid.length - 1; r >= 0; r--) {
     const row = grid[r];
-    if (row !== undefined && row.some((v) => v !== 0)) return r;
+    if (row === undefined) continue;
+    for (let c = 0; c < row.length; c++) {
+      if (row[c] !== 0) return r;
+    }
   }
   return -1;
 }

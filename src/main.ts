@@ -5,10 +5,11 @@ import { stackHeight } from './game/board.js';
 import { LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL, VISIBLE_ROWS } from './game/types.js';
 import type { GameEvent, LevelProgress, PieceKind } from './game/types.js';
 import { BoardRenderer } from './render/boardRenderer.js';
-import { cellToWorld, pxPerCell } from './render/constants.js';
+import { cellToWorld, MAX_FPS, pxPerCell } from './render/constants.js';
 import { CameraShake, ClearFlash } from './render/effects.js';
 import { frameFor } from './render/framing.js';
 import type { Frame } from './render/framing.js';
+import { refreshPointScales } from './render/particles.js';
 import { createScene } from './render/scene.js';
 import type { SceneOptions } from './render/scene.js';
 import { createStage } from './render/stage.js';
@@ -19,6 +20,7 @@ import type { IntensitySignals } from './audio/intensityTracker.js';
 import { MusicDirector } from './audio/musicDirector.js';
 import { pickCuratedSeed } from './audio/musicPatterns.js';
 import { detectDevice } from './platform/device.js';
+import { FrameLimiter } from './platform/frameLimiter.js';
 import { ViewportManager } from './platform/viewport.js';
 import { InputManager } from './ui/inputManager.js';
 import { ModeSelect } from './ui/modeSelect.js';
@@ -49,8 +51,9 @@ const device = detectDevice();
 /* Calidad reducida en móvil: sin MSAA y shadow map más barato. */
 const quality: SceneOptions = device.kind === 'desktop' ? {} : { antialias: false, shadowMapSize: 1024 };
 const { renderer, scene, camera, parts } = createScene(canvas, quality);
-/* Tamaño, aspecto y pixel ratio centralizados fuera de la lógica de escena. */
-new ViewportManager(renderer, camera, canvas);
+/* Tamaño, aspecto y pixel ratio centralizados fuera de la lógica de escena.
+   onChange refresca las escalas de los sprites (gl_PointSize depende del alto). */
+new ViewportManager(renderer, camera, canvas, { onChange: refreshPointScales });
 const board = new BoardRenderer(scene);
 const flash = new ClearFlash(scene, 10);
 const shake = new CameraShake();
@@ -191,9 +194,21 @@ function handleEvent(e: GameEvent): void {
   }
 }
 const engine = new TetrisEngine({ onEvent: handleEvent });
+/* Previews solo cambian al spawnear/holdear: los canvas 2D no se repintan si no cambian. */
+let lastNextKey = '';
+let lastHoldKey = '';
 function refreshPreviews(): void {
-  drawNext(nextCanvas, engine.peekNext(3));
-  drawHold(holdCanvas, engine.holdKind, engine.canHold);
+  const next = engine.peekNext(3);
+  const nk = next.join('');
+  if (nk !== lastNextKey) {
+    lastNextKey = nk;
+    drawNext(nextCanvas, next);
+  }
+  const hk = String(engine.holdKind) + ':' + engine.canHold;
+  if (hk !== lastHoldKey) {
+    lastHoldKey = hk;
+    drawHold(holdCanvas, engine.holdKind, engine.canHold);
+  }
 }
 function showStart(): void {
   hud.showOverlay('TETRIS 3D', 'Pulsa <span class="key">Enter</span> o haz clic en Jugar', '', true);
@@ -341,7 +356,15 @@ applyMusic(loadMusicEnabled(), false);
 const timer = new THREE.Timer();
 // Page Visibility API: evita deltas gigantes al volver de una pestaña oculta.
 timer.connect(document);
+// Tope de FPS para pantallas más rápidas (juego casual): MAX_FPS está en
+// src/render/constants.ts, es el único valor que hay que tocar.
+const frameLimiter = new FrameLimiter(MAX_FPS);
 let hudAcc = 0;
+let musicAcc = 0;
+/* Dirty-flag: la vista solo sincroniza tablero/pieza cuando el motor cambió. */
+let lastGridV = -1;
+let lastPieceV = -1;
+const musicSig: IntensitySignals = { stackHeight: 0, level: 0, levelProgress: 0, combo: 0 };
 /* Encuadre del área de juego: solo se recalcula al cambiar de formato o modo. */
 let frameKey = '';
 let frame: Frame = { dist: 31.5, targetY: 0 };
@@ -362,9 +385,12 @@ function currentFrame(): Frame {
   }
   return frame;
 }
-function animate(): void {
+function animate(now: number): void {
   requestAnimationFrame(animate);
-  timer.update();
+  // Limitador de FPS: en pantallas > MAX_FPS se descartan frames antes de
+  // simular/renderizar. El juego es dt-based, así que no cambia de velocidad.
+  if (!frameLimiter.shouldProcess(now)) return;
+  timer.update(now);
   const rawDt = Math.min(timer.getDelta(), 0.1);
   // Pestaña oculta: no se simula ni se renderiza (algunos WebViews siguen llamando a rAF).
   if (document.hidden) return;
@@ -372,21 +398,33 @@ function animate(): void {
   input.update(rawDt);
   if (engine.phase === 'playing') {
     engine.update(rawDt);
-    board.syncLocked(engine.grid);
-    if (engine.active) {
-      board.setActive(engine.active.kind, engine.activeCells());
-      board.setGhost(engine.ghostCells());
+    // Sync diferido: el grid cambia solo al fijar piezas; mientras dura una
+    // animación de clear se reintenta (syncLocked se auto-inhibe hasta el final).
+    // La versión solo se da por sincronizada cuando pudo sincronizar de verdad.
+    if (engine.gridVersion !== lastGridV || board.busyClearing) {
+      board.syncLocked(engine.grid);
+      if (!board.busyClearing) lastGridV = engine.gridVersion;
+    }
+    if (engine.pieceVersion !== lastPieceV) {
+      lastPieceV = engine.pieceVersion;
+      if (engine.active) {
+        board.setActive(engine.active.kind, engine.activeCells());
+        board.setGhost(engine.ghostCells());
+      }
     }
     // Único punto donde el juego alimenta la música: intensidad suavizada por frame.
-    const sig: IntensitySignals = {
-      stackHeight: (stackHeight(engine.grid) + 1) / VISIBLE_ROWS,
-      level: (engine.level - 1) / (MAX_LEVEL - 1),
-      levelProgress: engine.levelProgress().ratio,
-      combo: Math.max(0, engine.combo)
-    };
-    music.setIntensity(intensity.update(rawDt, sig));
+    musicSig.stackHeight = (stackHeight(engine.grid) + 1) / VISIBLE_ROWS;
+    musicSig.level = (engine.level - 1) / (MAX_LEVEL - 1);
+    musicSig.levelProgress = engine.levelProgress().ratio;
+    musicSig.combo = Math.max(0, engine.combo);
+    const v = intensity.update(rawDt, musicSig);
+    // `setIntensity` se muestrea a 10 Hz: el motor de música solo aplica cambios
+    // al inicio del compás, así que no hay efecto audible.
+    musicAcc += rawDt;
+    if (musicAcc >= 0.1) { musicAcc = 0; music.setIntensity(v); }
   }
-  board.update(rawDt);
+  // Sombras bajo demanda: solo se re-renderiza el shadow map si hubo movimiento.
+  if (board.update(rawDt)) renderer.shadowMap.needsUpdate = true;
   stage.update(rawDt);
   flash.update(rawDt);
   const s = shake.update(rawDt);
@@ -407,4 +445,4 @@ function animate(): void {
   }
   renderer.render(scene, camera);
 }
-animate();
+requestAnimationFrame(animate);
