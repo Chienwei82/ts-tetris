@@ -50,6 +50,8 @@ export interface BarPattern {
   arpeggio: ArpStep[];
   kick: MaskedStep[];
   hat: MaskedStep[];
+  /** Caja/clap (vacío en el material clásico). */
+  snare: MaskedStep[];
 }
 
 /** Canción elegida por semilla: misma semilla ⇒ misma canción siempre. */
@@ -150,7 +152,7 @@ export function barPattern(seed: number, bar: number): BarPattern {
       velocity: 0.55 + rng() * 0.45
     });
   }
-  return { bar, chord, swing, bass, arpeggio, kick, hat };
+  return { bar, chord, swing, bass, arpeggio, kick, hat, snare: [] };
 }
 
 /**

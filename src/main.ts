@@ -18,7 +18,9 @@ import { SoundFX } from './audio/sound.js';
 import { IntensityTracker } from './audio/intensityTracker.js';
 import type { IntensitySignals } from './audio/intensityTracker.js';
 import { MusicDirector } from './audio/musicDirector.js';
-import { pickCuratedSeed } from './audio/musicPatterns.js';
+import type { GenreId } from './audio/genreProfiles.js';
+import { GENRE_META } from './audio/genreProfiles.js';
+import { normalizeGenre } from './audio/genreRegistry.js';
 import { detectDevice } from './platform/device.js';
 import { FrameLimiter } from './platform/frameLimiter.js';
 import { ViewportManager } from './platform/viewport.js';
@@ -26,7 +28,8 @@ import { InputManager } from './ui/inputManager.js';
 import { ModeSelect } from './ui/modeSelect.js';
 import { HUD } from './ui/hud.js';
 import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
-import { loadEffectsEnabled, loadMusicEnabled, saveEffectsEnabled, saveMusicEnabled } from './ui/settings.js';
+import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, saveEffectsEnabled, saveMusicEnabled, saveMusicGenre } from './ui/settings.js';
+import { MusicMenu } from './ui/musicMenu.js';
 import { initAnalytics } from './analytics.js';
 function el<T extends HTMLElement>(id: string): T {
   const e = document.getElementById(id);
@@ -45,7 +48,8 @@ const btnMusic = el<HTMLButtonElement>('btn-music');
 const hud = new HUD();
 const sound = new SoundFX();
 /* Música procedural: el juego solo aporta intensidad; el audio se gestiona solo. */
-const music = new MusicDirector();
+const initialGenre = normalizeGenre(loadMusicGenre());
+const music = new MusicDirector({ initialGenre });
 const intensity = new IntensityTracker();
 const device = detectDevice();
 /* Calidad reducida en móvil: sin MSAA y shadow map más barato. */
@@ -106,20 +110,40 @@ function applyEffects(on: boolean, immediate = false, persist = true): void {
   if (persist) saveEffectsEnabled(on);
 }
 btnEffects.addEventListener('click', () => { btnEffects.blur(); sound.unlock(); applyEffects(!effectsOn); });
-/* Music toggle: off = fade-out + AudioContext suspend (sin CPU) y preferencia guardada. */
+/* Menu de musica: toggle on/off + selector de genero (popover accesible). */
 let musicOn = true;
+let musicGenre: GenreId = initialGenre;
+function refreshMusicButton(): void {
+  const meta = GENRE_META[musicGenre];
+  const labelEl = btnMusic.querySelector('.bb-label');
+  const label = ' ' + meta.label + ': ' + (musicOn ? 'ON' : 'OFF');
+  if (labelEl) labelEl.textContent = label;
+  else btnMusic.textContent = (musicOn ? '🎵' : '🔇') + label;
+  btnMusic.setAttribute('aria-pressed', String(musicOn));
+  btnMusic.setAttribute('aria-label', 'Musica procedural: ' + meta.label + ', ' + (musicOn ? 'activada' : 'desactivada') + '. Abrir menu');
+  btnMusic.classList.toggle('off', !musicOn);
+}
 function applyMusic(on: boolean, persist = true): void {
   musicOn = on;
   if (on) music.enable(); else music.disable();
-  const labelEl = btnMusic.querySelector('.bb-label');
-  const label = on ? ' Música: ON' : ' Música: OFF';
-  if (labelEl) labelEl.textContent = label;
-  else btnMusic.textContent = (on ? '🎵' : '🔇') + label;
-  btnMusic.setAttribute('aria-pressed', String(on));
-  btnMusic.classList.toggle('off', !on);
+  refreshMusicButton();
+  musicMenu.setEnabled(on);
   if (persist) saveMusicEnabled(on);
 }
-btnMusic.addEventListener('click', () => { btnMusic.blur(); sound.unlock(); music.unlock(); applyMusic(!musicOn); });
+function applyGenre(genre: GenreId, persist = true): void {
+  musicGenre = genre;
+  music.setGenre(genre);
+  refreshMusicButton();
+  musicMenu.setGenre(genre);
+  if (persist) saveMusicGenre(genre);
+}
+const musicMenu = new MusicMenu({
+  button: btnMusic,
+  enabled: musicOn,
+  genre: musicGenre,
+  onToggle: (on) => { sound.unlock(); music.unlock(); applyMusic(on); },
+  onGenre: (genre) => { sound.unlock(); music.unlock(); applyGenre(genre); },
+});
 const unlockAudio = (): void => { sound.unlock(); music.unlock(); };
 window.addEventListener('pointerdown', unlockAudio, { once: true });
 window.addEventListener('keydown', unlockAudio, { once: true });
@@ -231,9 +255,8 @@ function startGame(): void {
   // Reinicio/nueva partida: la música vuelve a la calma con una canción nueva
   // elegida entre las semillas curadas (la semilla se loguea para reproducirla).
   intensity.reset();
-  const musicSeed = pickCuratedSeed(Date.now() ^ Math.imul(lv, 2654435761));
-  console.info('[música] semilla de la canción:', musicSeed);
-  music.start(musicSeed);
+  music.startWithGenreSeed();
+  console.info('[música] género:', music.getGenre(), '· semilla:', music.getSeed());
   lastThemeIdx = themeIndexForLevel(lv);
   hud.setStageChip(stageLabelFor(lv));
   hud.hideOverlay();
@@ -352,6 +375,7 @@ if (firstTheme) hud.setStageChip(firstTheme.icon + ' ' + firstTheme.name);
 refreshPreviews();
 applyEffects(loadEffectsEnabled(), true, false);
 applyMusic(loadMusicEnabled(), false);
+applyGenre(initialGenre, false);
 // three r183 deprecó `Clock`: `Timer` es la API moderna (en el core desde r179).
 const timer = new THREE.Timer();
 // Page Visibility API: evita deltas gigantes al volver de una pestaña oculta.
