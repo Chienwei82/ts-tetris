@@ -1,29 +1,95 @@
 import * as THREE from 'three';
-import { PIECE_COLORS, VISIBLE_ROWS } from '../game/types.js';
+import { ALL_KINDS, COLS, PIECE_COLORS, VISIBLE_ROWS } from '../game/types.js';
 import type { Grid, PieceKind, Vec2 } from '../game/types.js';
 import { BOARD_D, BOARD_H, BOARD_W, cellToWorld } from './constants.js';
 import { INK, blockMaterial, cardboardMaterial, graphPaperMaterial, outlineMaterial, tapeMaterial } from './materials.js';
 import { ParticleSystem } from './particles.js';
 const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false });
 const ghostEdgeMat = new THREE.LineBasicMaterial({ color: INK, transparent: true, opacity: 0.7 });
+/** Instanced-render capacity: every visible cell at once. */
+const MAX_LOCKED = COLS * VISIBLE_ROWS;
+/** Inverted-hull ink outline scale (cut-out edge). */
+const HULL_SCALE = 1.07;
+/** A locked tile: what the instanced meshes need to place a block and its ink hull. */
+interface LockedCell {
+  kind: PieceKind;
+  /** Hand-placed paper: tiny per-tile tilt, kept across syncs. */
+  tilt: number;
+  x: number;
+  y: number;
+}
+const AXIS_Z = new THREE.Vector3(0, 0, 1);
+const scratchMatrix = new THREE.Matrix4();
+const scratchQuat = new THREE.Quaternion();
+const scratchPos = new THREE.Vector3();
+const scratchScale = new THREE.Vector3();
 export class BoardRenderer {
   group = new THREE.Group();
   particles = new ParticleSystem();
   private geo = new THREE.BoxGeometry(0.92, 0.92, 0.92);
   private ghostGeo = new THREE.BoxGeometry(0.86, 0.86, 0.5);
   private ghostEdgeGeo = new THREE.EdgesGeometry(this.ghostGeo);
-  private lockedMeshes = new Map<string, THREE.Group>();
+  /** Locked tiles by cell key; rendered as one InstancedMesh per piece kind. */
+  private lockedState = new Map<number, LockedCell>();
+  private lockIMeshes = new Map<PieceKind, THREE.InstancedMesh>();
+  private hullIMesh = new THREE.InstancedMesh(this.geo, outlineMaterial(), MAX_LOCKED);
+  private seenScratch = new Set<number>();
   private activeGroup = new THREE.Group();
   private ghostGroup = new THREE.Group();
   private clearingRows = new Map<number, { t: number; meshes: THREE.Group[] }>();
   private lockAnims: { mesh: THREE.Group; t: number; row: number }[] = [];
-  private activeTarget = new Map<string, THREE.Vector3>();
+  private activeMeshes = new Map<number, THREE.Group>();
+  private activeTarget = new Map<number, THREE.Vector3>();
   private pullFree: THREE.Group[] = [];
+  /** True when shadow-casting geometry changed since the last `update()`. */
+  private shadowDirty = true;
   constructor(scene: THREE.Scene) {
     this.buildFrame();
+    this.buildLockedMeshes();
     this.group.add(this.activeGroup, this.ghostGroup);
     this.group.add(this.particles.points);
     scene.add(this.group);
+  }
+  /**
+   * Locked tiles render as one InstancedMesh per piece kind (7 draw calls) plus a
+   * single shared ink-hull mesh: O(1) draw calls instead of O(blocks).
+   */
+  private buildLockedMeshes(): void {
+    for (const kind of ALL_KINDS) {
+      const im = new THREE.InstancedMesh(this.geo, blockMaterial(kind), MAX_LOCKED);
+      im.count = 0;
+      im.castShadow = true;
+      im.receiveShadow = true;
+      im.frustumCulled = false;
+      this.lockIMeshes.set(kind, im);
+      this.group.add(im);
+    }
+    const hull = this.hullIMesh;
+    hull.count = 0;
+    hull.frustumCulled = false;
+    this.group.add(hull);
+  }
+  /** Rewrites every instance matrix from `lockedState` (runs only on board changes). */
+  private rebuildLocked(): void {
+    for (const im of this.lockIMeshes.values()) im.count = 0;
+    this.hullIMesh.count = 0;
+    for (const cell of this.lockedState.values()) {
+      const im = this.lockIMeshes.get(cell.kind);
+      if (!im) continue;
+      scratchQuat.setFromAxisAngle(AXIS_Z, cell.tilt);
+      scratchPos.set(cell.x, cell.y, 0);
+      scratchScale.set(1, 1, 1);
+      scratchMatrix.compose(scratchPos, scratchQuat, scratchScale);
+      im.setMatrixAt(im.count, scratchMatrix);
+      im.count++;
+      scratchScale.setScalar(HULL_SCALE);
+      scratchMatrix.compose(scratchPos, scratchQuat, scratchScale);
+      this.hullIMesh.setMatrixAt(this.hullIMesh.count, scratchMatrix);
+      this.hullIMesh.count++;
+    }
+    for (const im of this.lockIMeshes.values()) im.instanceMatrix.needsUpdate = true;
+    this.hullIMesh.instanceMatrix.needsUpdate = true;
+    this.shadowDirty = true;
   }
   private makeBlock(kind: PieceKind): THREE.Group {
     let g = this.pullFree.pop();
@@ -108,12 +174,15 @@ export class BoardRenderer {
     mat.depthWrite = !on;
     mat.needsUpdate = true;
   }
-  key(col: number, row: number): string { return col + ',' + row; }
+  /** Numeric cell key: no string garbage in the hot paths. */
+  key(col: number, row: number): number { return col + row * COLS; }
   syncLocked(grid: Grid): void {
     // While a clear animation plays, the engine grid already collapsed but the
     // old blocks are still flying — skip syncing until the animation finishes.
     if (this.clearingRows.size > 0) return;
-    const seen = new Set<string>();
+    const seen = this.seenScratch;
+    seen.clear();
+    let changed = false;
     for (let r = 0; r < VISIBLE_ROWS; r++) {
       const row = grid[r];
       if (!row) continue;
@@ -122,29 +191,29 @@ export class BoardRenderer {
         if (v === 0 || v === undefined) continue;
         const k = this.key(c, r);
         seen.add(k);
-        let g = this.lockedMeshes.get(k);
-        if (!g) {
-          g = this.makeBlock(v);
+        const cell = this.lockedState.get(k);
+        if (!cell) {
           const p = cellToWorld(c, r);
-          g.position.set(p.x, p.y, 0);
           // hand-placed paper: tiny random tilt per locked tile
-          g.rotation.z = (Math.random() - 0.5) * 0.05;
-          this.group.add(g);
-          this.lockedMeshes.set(k, g);
-        } else if (g.userData.kind !== v) this.colorize(g, v);
+          this.lockedState.set(k, { kind: v, tilt: (Math.random() - 0.5) * 0.05, x: p.x, y: p.y });
+          changed = true;
+        } else if (cell.kind !== v) {
+          cell.kind = v;
+          changed = true;
+        }
       }
     }
-    for (const [k, g] of [...this.lockedMeshes]) {
-      if (!seen.has(k)) { this.group.remove(g); this.pullFree.push(g); g.visible = false; this.lockedMeshes.delete(k); }
+    for (const k of this.lockedState.keys()) {
+      if (!seen.has(k)) { this.lockedState.delete(k); changed = true; }
     }
+    if (changed) this.rebuildLocked();
   }
-  private activeMeshes = new Map<string, THREE.Group>();
 
   setActive(kind: PieceKind, cells: Vec2[], instant = false): void {
-    const wanted = new Map<string, Vec2>();
+    const wanted = new Map<number, Vec2>();
     for (const c of cells) wanted.set(this.key(c.x, c.y), c);
-    // Remove meshes whose cell no longer exists.
-    for (const [k, m] of [...this.activeMeshes]) {
+    // Remove meshes whose cell no longer exists (Map iteration tolerates deletes).
+    for (const [k, m] of this.activeMeshes) {
       if (!wanted.has(k)) {
         this.activeGroup.remove(m);
         this.pullFree.push(m);
@@ -160,14 +229,14 @@ export class BoardRenderer {
         m = this.makeBlock(kind);
         this.activeGroup.add(m);
         this.activeMeshes.set(k, m);
-      }
-      this.colorize(m, kind);
+      } else if (m.userData.kind !== kind) this.colorize(m, kind);
       const p = cellToWorld(c.x, c.y);
       const target = new THREE.Vector3(p.x, p.y, 0.15);
       this.activeTarget.set(k, target);
       if (instant) m.position.copy(target);
       else if (m.position.lengthSq() === 0) m.position.copy(target);
     }
+    this.shadowDirty = true;
   }
   setGhost(cells: Vec2[]): void {
     while (this.ghostGroup.children.length > cells.length) {
@@ -198,12 +267,22 @@ export class BoardRenderer {
       this.lockAnims.push({ mesh: g, t: 0, row: c.y });
       this.particles.burst(new THREE.Vector3(p.x, p.y, 0.5), PIECE_COLORS[kind], 6, 1.6, 1.2);
     }
+    this.shadowDirty = true;
   }
   playClear(rows: number[]): void {
     for (const r of rows) {
       const meshes: THREE.Group[] = [];
-      for (const [k, g] of [...this.lockedMeshes]) {
-        if (Number(k.split(',')[1]) === r) { meshes.push(g); this.lockedMeshes.delete(k); }
+      // Materialize the row's instances as regular blocks so they can fly away.
+      for (let c = 0; c < COLS; c++) {
+        const k = this.key(c, r);
+        const cell = this.lockedState.get(k);
+        if (!cell) continue;
+        const g = this.makeBlock(cell.kind);
+        g.position.set(cell.x, cell.y, 0);
+        g.rotation.z = cell.tilt;
+        this.group.add(g);
+        meshes.push(g);
+        this.lockedState.delete(k);
       }
       // The piece that just locked is still animating in `lockAnims`: let those
       // blocks explode with the row instead of fading out on their own.
@@ -226,13 +305,20 @@ export class BoardRenderer {
         this.particles.burst(new THREE.Vector3(m.position.x, m.position.y, 0.6), hex, 7, 3.2, 3.4);
       }
     }
+    this.rebuildLocked();
   }
-  update(dt: number): void {
+  /** Advances animations; returns true when shadow-casting geometry moved. */
+  update(dt: number): boolean {
+    let moved = this.shadowDirty;
+    this.shadowDirty = false;
     const speed = 1 - Math.pow(0.0001, dt);
     for (const [k, g] of this.activeMeshes) {
       const t = this.activeTarget.get(k);
-      if (t) g.position.lerp(t, Math.min(1, speed * 1.4));
+      if (!t) continue;
+      g.position.lerp(t, Math.min(1, speed * 1.4));
+      if (g.position.distanceToSquared(t) > 1e-6) moved = true;
     }
+    if (this.lockAnims.length > 0) moved = true;
     for (let i = this.lockAnims.length - 1; i >= 0; i--) {
       const a = this.lockAnims[i];
       if (!a) continue;
@@ -242,7 +328,8 @@ export class BoardRenderer {
       a.mesh.scale.setScalar(1 + 0.25 * Math.sin(k * Math.PI));
       if (k >= 1) { this.group.remove(a.mesh); this.pullFree.push(a.mesh); a.mesh.visible = false; this.lockAnims.splice(i, 1); }
     }
-    for (const [r, c] of [...this.clearingRows]) {
+    if (this.clearingRows.size > 0) moved = true;
+    for (const [r, c] of this.clearingRows) {
       c.t += dt * 4;
       const k = Math.min(1, c.t);
       for (let i = 0; i < c.meshes.length; i++) {
@@ -258,15 +345,16 @@ export class BoardRenderer {
       }
     }
     this.particles.update(dt);
+    return moved;
   }
   get busyClearing(): boolean { return this.clearingRows.size > 0; }
   reset(): void {
     const recycle = (g: THREE.Group): void => {
       this.group.remove(g); this.pullFree.push(g); g.visible = false;
     };
-    for (const [, g] of this.lockedMeshes) recycle(g);
-    this.lockedMeshes.clear();
-    // Meshes mid clear/lock animation are no longer in `lockedMeshes`: without
+    this.lockedState.clear();
+    this.rebuildLocked();
+    // Meshes mid clear/lock animation are no longer in `lockedState`: without
     // this they would stay in the scene forever after a restart.
     for (const [, c] of this.clearingRows) for (const m of c.meshes) recycle(m);
     this.clearingRows.clear();
@@ -277,5 +365,6 @@ export class BoardRenderer {
     this.activeMeshes.clear();
     this.activeGroup.clear();
     this.ghostGroup.clear();
+    this.shadowDirty = true;
   }
 }

@@ -24,6 +24,10 @@ export class TetrisEngine {
   /** Seconds of play accumulated inside the current level (drives the gauge). */
   levelTime = 0;
   softDrop = false;
+  /** Bump counter: changes whenever the grid changes (merge/clear/reset). Lets the view sync lazily. */
+  gridVersion = 0;
+  /** Bump counter: changes whenever the active piece moves, rotates or is replaced. */
+  pieceVersion = 0;
   private fallAcc = 0; private lockAcc = 0; private lockResets = 0;
   private readonly rng: () => number;
   private readonly onEvent?: (e: GameEvent) => void;
@@ -37,6 +41,7 @@ export class TetrisEngine {
     this.score = 0; this.lines = 0; this.level = firstLevel; this.combo = -1;
     this.levelTime = 0;
     this.fallAcc = 0; this.lockAcc = 0; this.lockResets = 0; this.softDrop = false;
+    this.gridVersion++;
     this.refillQueue(); this.phase = 'playing'; this.spawn();
   }
   pause(): void { if (this.phase === 'playing') this.phase = 'paused'; }
@@ -48,6 +53,7 @@ export class TetrisEngine {
     this.refillQueue();
     this.active = { kind, rotation: 0, x: Math.floor(COLS / 2) - 1, y: VISIBLE_ROWS - 1 };
     this.fallAcc = 0; this.lockAcc = 0; this.lockResets = 0;
+    this.pieceVersion++;
     if (collides(this.grid, this.activeCells())) { this.phase = 'gameover'; this.emit({ type: 'gameover', scoreGained: this.score }); }
   }
   activeCells(): Vec2[] {
@@ -111,6 +117,7 @@ export class TetrisEngine {
     const next = cellsForPiece(this.active.kind, this.active.rotation, this.active.x, this.active.y - 1);
     if (collides(this.grid, next)) return false;
     this.active.y -= 1;
+    this.pieceVersion++;
     if (softPoints > 0) this.score += softPoints;
     return true;
   }
@@ -119,6 +126,7 @@ export class TetrisEngine {
     const next = cellsForPiece(this.active.kind, this.active.rotation, this.active.x + dx, this.active.y);
     if (collides(this.grid, next)) return false;
     this.active.x += dx;
+    this.pieceVersion++;
     this.emit({ type: 'move' });
     this.resetLockDelay();
     return true;
@@ -138,6 +146,7 @@ export class TetrisEngine {
       const cells = cellsForPiece(this.active.kind, to, this.active.x + k.x, this.active.y + k.y);
       if (!collides(this.grid, cells)) {
         this.active.rotation = to; this.active.x += k.x; this.active.y += k.y;
+        this.pieceVersion++;
         this.emit({ type: 'rotate' }); this.resetLockDelay(); return true;
       }
     }
@@ -151,6 +160,7 @@ export class TetrisEngine {
     const landingY = this.ghostY();
     const distance = this.active.y - landingY;
     this.active.y = landingY;
+    this.pieceVersion++;
     this.score += distance * 2;
     this.emit({ type: 'harddrop', cells: this.activeCells() });
     this.lockPiece();
@@ -163,6 +173,7 @@ export class TetrisEngine {
       const tmp = this.holdKind; this.holdKind = cur;
       this.active = { kind: tmp, rotation: 0, x: Math.floor(COLS / 2) - 1, y: VISIBLE_ROWS - 1 };
       this.fallAcc = 0; this.lockAcc = 0; this.lockResets = 0;
+      this.pieceVersion++;
       if (collides(this.grid, this.activeCells())) { this.phase = 'gameover'; this.emit({ type: 'gameover', scoreGained: this.score }); }
     }
     // A swap that ended the game must not consume the hold slot nor report a hold.
@@ -175,6 +186,7 @@ export class TetrisEngine {
     if (!this.active) return;
     const cells = this.activeCells();
     mergePiece(this.grid, cells, this.active.kind);
+    this.gridVersion++;
     this.emit({ type: 'lock', cells });
     const cleared = clearFullRows(this.grid);
     if (cleared.length > 0) {

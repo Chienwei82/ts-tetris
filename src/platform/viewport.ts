@@ -3,6 +3,8 @@ import type { PerspectiveCamera, WebGLRenderer } from 'three';
 export interface ViewportOptions {
   /** Tope de `devicePixelRatio` para cuidar las GPUs móviles. */
   maxPixelRatio?: number;
+  /** Se llama tras cada resize/orientación (p. ej. para refrescar escalas de sprites). */
+  onChange?: () => void;
 }
 
 /**
@@ -15,6 +17,7 @@ export class ViewportManager {
   private readonly camera: PerspectiveCamera;
   private readonly canvas: HTMLCanvasElement;
   private readonly maxPixelRatio: number;
+  private readonly opts: ViewportOptions;
   private readonly cleanups: Array<() => void> = [];
   private orientationTimer = 0;
 
@@ -22,6 +25,7 @@ export class ViewportManager {
     this.renderer = renderer;
     this.camera = camera;
     this.canvas = canvas;
+    this.opts = opts;
     this.maxPixelRatio = opts.maxPixelRatio ?? 2;
 
     const apply = (): void => this.apply();
@@ -59,6 +63,7 @@ export class ViewportManager {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.opts.onChange?.();
   }
 
   dispose(): void {
