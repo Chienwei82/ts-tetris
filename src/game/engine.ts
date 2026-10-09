@@ -7,9 +7,16 @@ export interface EngineOptions { rng?: () => number; onEvent?: (e: GameEvent) =>
 const LOCK_DELAY = 0.5;
 const MAX_LOCK_RESETS = 15;
 
+/**
+ * Curva logarítmica de gravedad: el intervalo cae como `1 - K·ln(nivel)`.
+ * K se calibra para que el nivel 20 nuevo tenga la velocidad del antiguo
+ * nivel 10 (~0.064 s), estirando la progresión en todo el rango 1–20.
+ */
+const LOG_GRAVITY_K = (1 - 0.06415158495985583) / Math.log(20);
+
 export function gravityInterval(level: number): number {
   const l = Math.max(1, level);
-  const t = Math.pow(0.8 - (l - 1) * 0.007, l - 1);
+  const t = 1 - LOG_GRAVITY_K * Math.log(l);
   return Math.min(1, Math.max(0.03, t));
 }
 
