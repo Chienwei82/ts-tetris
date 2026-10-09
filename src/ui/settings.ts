@@ -64,3 +64,17 @@ export function loadMusicGenre(): MusicGenre {
 export function saveMusicGenre(genre: MusicGenre): void {
   try { window.localStorage.setItem(GENRE_KEY, genre); } catch { /* ignore */ }
 }
+
+const GAME_MODE_KEY = 'tetris-3d:game-mode';
+import type { GameMode } from '../game/types.js';
+/** Modo de juego elegido; por defecto clasico. */
+export function loadGameMode(): GameMode {
+  try {
+    const v = window.localStorage.getItem(GAME_MODE_KEY);
+    if (v === 'chaos') return 'chaos';
+  } catch { /* storage unavailable */ }
+  return 'classic';
+}
+export function saveGameMode(mode: GameMode): void {
+  try { window.localStorage.setItem(GAME_MODE_KEY, mode); } catch { /* ignore */ }
+}

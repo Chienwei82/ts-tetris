@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BOARD_H, CAMERA_FOV } from './constants.js';
 import { AmbientConfetti } from './particles.js';
-import { outlineMaterial, paperNoiseTex, questionBlockTexture, toonGradient } from './materials.js';
+import { outlineMaterial, paperNoiseTex, toonGradient } from './materials.js';
 import { THEMES } from './themes.js';
 
 /** Re-paintable sky backdrop: a 4x256 canvas texture used as scene.background. */
@@ -111,14 +111,26 @@ function cloudGeometry(): THREE.ShapeGeometry {
   return new THREE.ShapeGeometry(s);
 }
 
-/** Voxel "?" block (Mario reference) with ink outline hull. */
-function questionBlock(): THREE.Group {
+/** Soft paper-cloud floater (replaces the old "?" voxel block). */
+function cloudFloater(): THREE.Group {
   const g = new THREE.Group();
-  const geo = new THREE.BoxGeometry(1.7, 1.7, 1.7);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ map: questionBlockTexture(), gradientMap: toonGradient }));
-  const hull = new THREE.Mesh(geo, outlineMaterial());
-  hull.scale.setScalar(1.06);
-  g.add(mesh, hull);
+  const mat = new THREE.MeshToonMaterial({ color: 0xfffdf4, gradientMap: toonGradient });
+  const puffs: Array<[number, number, number, number]> = [
+    [0, 0, 0, 0.85],
+    [-0.9, -0.15, 0.1, 0.6],
+    [0.9, -0.15, -0.1, 0.62],
+    [0.15, 0.55, -0.2, 0.55]
+  ];
+  for (const [x, y, z, s] of puffs) {
+    const geo = new THREE.SphereGeometry(s, 18, 14);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    const hull = new THREE.Mesh(geo, outlineMaterial());
+    hull.scale.setScalar(1.06);
+    mesh.add(hull);
+    mesh.castShadow = true;
+    g.add(mesh);
+  }
   return g;
 }
 
@@ -228,13 +240,13 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
     return { mesh: m, x, y, phase: Math.random() * Math.PI * 2, speed: 0.4 + Math.random() * 0.4 };
   });
 
-  // Floating voxel question blocks.
+  // Soft paper-cloud floaters (ex "?" blocks).
   const floaters: { group: THREE.Group; y: number; phase: number }[] = [];
   const floaterSpecs: Array<[number, number, number]> = [
     [-11.5, 6.5, -10], [12.5, 2.5, -13], [-13.5, -3, -16]
   ];
   for (const [x, y, z] of floaterSpecs) {
-    const g = questionBlock();
+    const g = cloudFloater();
     g.position.set(x, y, z);
     scene.add(g);
     floaters.push({ group: g, y, phase: Math.random() * Math.PI * 2 });

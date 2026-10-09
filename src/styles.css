@@ -111,6 +111,14 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #stage-chip { display: inline-block; padding: 1px 9px; border: 1.5px solid var(--ink); border-radius: 8px; background: var(--paper-hi); font-size: 11px; font-weight: 700; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.16); transform: rotate(-1deg); }
 
 /* Start-level selector (start overlay only) */
+/* ============ Selector de modo Tradicional / Caos ============ */
+#mode-picker { display: flex; gap: 8px; justify-content: center; margin: 12px 0 4px; }
+#mode-picker label { display: inline-flex; align-items: center; gap: 6px; background: var(--paper-hi); border: 2px solid var(--ink); border-radius: 10px; padding: 6px 12px; font-weight: 600; font-size: 14px; cursor: pointer; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.25); }
+#mode-picker input { accent-color: var(--red); width: 16px; height: 16px; }
+#mode-chip { display: inline-block; background: var(--blue); color: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 1px 10px; font-size: 11px; font-weight: 700; letter-spacing: 1px; margin-right: 6px; text-shadow: none; }
+#stage-chip { display: inline-block; }
+#chaos-status { margin-top: 10px; padding: 6px 10px; background: var(--red); color: #fff; border: 2px solid var(--ink); border-radius: 10px; font-weight: 700; font-size: 14px; text-align: center; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.3); }
+#chaos-status.hidden { display: none; }
 #start-options { margin: 18px auto 0; max-width: 330px; text-align: left; }
 #start-options.hidden { display: none; }
 #start-options label { display: block; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 8px; }

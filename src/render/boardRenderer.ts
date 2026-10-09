@@ -38,6 +38,8 @@ export class BoardRenderer {
   private ghostGroup = new THREE.Group();
   private clearingRows = new Map<number, { t: number; meshes: THREE.Group[] }>();
   private lockAnims: { mesh: THREE.Group; t: number; row: number }[] = [];
+  private fogMesh: THREE.Mesh | null = null;
+  private fogOn = false;
   private activeMeshes = new Map<number, THREE.Group>();
   private activeTarget = new Map<number, THREE.Vector3>();
   private pullFree: THREE.Group[] = [];
@@ -209,7 +211,7 @@ export class BoardRenderer {
     if (changed) this.rebuildLocked();
   }
 
-  setActive(kind: PieceKind, cells: Vec2[], instant = false): void {
+  setActive(kind: PieceKind, cells: Vec2[], instant = false, special: string | null = null): void {
     const wanted = new Map<number, Vec2>();
     for (const c of cells) wanted.set(this.key(c.x, c.y), c);
     // Remove meshes whose cell no longer exists (Map iteration tolerates deletes).
@@ -230,12 +232,51 @@ export class BoardRenderer {
         this.activeGroup.add(m);
         this.activeMeshes.set(k, m);
       } else if (m.userData.kind !== kind) this.colorize(m, kind);
+      // Piezas especiales: tinte propio (material clonado) para distinguirlas
+      // sin mutar el material compartido de `blockMaterial(kind)`.
+      const tint = special === 'bomb' ? 0xe04e39 : special === 'bolt' ? 0xffd23f : special === 'drill' ? 0x9aa7ff : special === 'wild' ? 0x7dff9a : null;
+      if (tint !== null) {
+        const body = m.children[0] as THREE.Mesh | undefined;
+        const mesh = body as unknown as { material?: THREE.MeshToonMaterial } | undefined;
+        const mat = mesh?.material;
+        if (body && mat && !body.userData.specialTint) {
+          body.userData.specialTint = true;
+          body.material = mat.clone();
+        }
+        const own = (body?.material as unknown as { color?: { setHex: (h: number) => void }; emissive?: { setHex: (h: number) => void } } | undefined);
+        own?.color?.setHex(tint);
+        own?.emissive?.setHex(tint);
+      } else {
+        const body = m.children[0] as THREE.Mesh | undefined;
+        if (body?.userData.specialTint) {
+          body.userData.specialTint = false;
+          this.colorize(m, kind);
+        }
+      }
       const p = cellToWorld(c.x, c.y);
       const target = new THREE.Vector3(p.x, p.y, 0.15);
       this.activeTarget.set(k, target);
       if (instant) m.position.copy(target);
       else if (m.position.lengthSq() === 0) m.position.copy(target);
     }
+    this.shadowDirty = true;
+  }
+  setActiveVisible(visible: boolean): void {
+    this.activeGroup.visible = visible;
+  }
+  setFog(on: boolean): void {
+    if (on === this.fogOn) return;
+    this.fogOn = on;
+    if (on && !this.fogMesh) {
+      const geo = new THREE.PlaneGeometry(BOARD_W + 1.4, BOARD_H / 2 + 0.6);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xf7efdb, transparent: true, opacity: 0.45, depthWrite: false });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(0, BOARD_H / 4 + 0.2, 2.6);
+      mesh.renderOrder = 5;
+      this.fogMesh = mesh;
+      this.group.add(mesh);
+    }
+    if (this.fogMesh) this.fogMesh.visible = on;
     this.shadowDirty = true;
   }
   setGhost(cells: Vec2[]): void {
@@ -360,6 +401,8 @@ export class BoardRenderer {
     this.clearingRows.clear();
     for (const a of this.lockAnims) recycle(a.mesh);
     this.lockAnims.length = 0;
+    this.activeGroup.visible = true;
+    this.setFog(false);
     this.activeTarget.clear();
     for (const [, m] of this.activeMeshes) recycle(m);
     this.activeMeshes.clear();

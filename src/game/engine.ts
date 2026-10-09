@@ -1,9 +1,19 @@
 import { clearFullRows, collides, createGrid, mergePiece } from './board.js';
+import { mulberry32 } from './chaos/rng.js';
 import { cellsForPiece, getKicks, shuffledBag } from './pieces.js';
 import { COLS, LINES_PER_LEVEL, LINE_POINTS, MAX_LEVEL, SECONDS_PER_LEVEL, VISIBLE_ROWS } from './types.js';
-import type { ActivePiece, GameEvent, GamePhase, Grid, LevelProgress, PieceKind, RotationState, Vec2 } from './types.js';
+import type { ActivePiece, GameEvent, GameMode, GamePhase, Grid, LevelProgress, PieceKind, RotationState, Vec2 } from './types.js';
 
-export interface EngineOptions { rng?: () => number; onEvent?: (e: GameEvent) => void; }
+export type SpecialKind = 'bomb' | 'bolt' | 'wild' | 'drill';
+
+export interface ChaosHooks {
+  gravityMultiplier?: number;
+  nextSpecial?: () => SpecialKind | null;
+  beforeLock?: (cells: Vec2[]) => void;
+  afterLock?: (info: { cells: Vec2[]; cleared: number[] }) => void;
+}
+
+export interface EngineOptions { rng?: () => number; onEvent?: (e: GameEvent) => void; mode?: GameMode; seed?: number; chaos?: ChaosHooks; }
 const LOCK_DELAY = 0.5;
 const MAX_LOCK_RESETS = 15;
 
@@ -23,6 +33,8 @@ export function gravityInterval(level: number): number {
 export class TetrisEngine {
   grid: Grid = createGrid();
   active: ActivePiece | null = null;
+  /** Comodin: monomino 1x1 (una sola celda en el origen). */
+  activeSingle = false;
   queue: PieceKind[] = [];
   holdKind: PieceKind | null = null;
   canHold = true;
@@ -31,6 +43,10 @@ export class TetrisEngine {
   /** Seconds of play accumulated inside the current level (drives the gauge). */
   levelTime = 0;
   softDrop = false;
+  readonly mode: GameMode;
+  readonly seed?: number;
+  special: SpecialKind | null = null;
+  chaos: ChaosHooks | null = null;
   /** Bump counter: changes whenever the grid changes (merge/clear/reset). Lets the view sync lazily. */
   gridVersion = 0;
   /** Bump counter: changes whenever the active piece moves, rotates or is replaced. */
@@ -38,7 +54,7 @@ export class TetrisEngine {
   private fallAcc = 0; private lockAcc = 0; private lockResets = 0;
   private readonly rng: () => number;
   private readonly onEvent?: (e: GameEvent) => void;
-  constructor(opts: EngineOptions = {}) { this.rng = opts.rng ?? Math.random; this.onEvent = opts.onEvent; }
+  constructor(opts: EngineOptions = {}) { this.rng = opts.rng ?? Math.random; this.onEvent = opts.onEvent; this.mode = opts.mode ?? 'classic'; this.seed = opts.seed; this.chaos = opts.chaos ?? null; this.chaosRng = mulberry32(opts.seed ?? 0); }
   private emit(e: GameEvent): void { this.onEvent?.(e); }
   /** Starts a run, optionally from a higher difficulty level (clamped 1..MAX_LEVEL). */
   start(startLevel = 1): void {
@@ -54,10 +70,23 @@ export class TetrisEngine {
   pause(): void { if (this.phase === 'playing') this.phase = 'paused'; }
   resume(): void { if (this.phase === 'paused') this.phase = 'playing'; }
   private refillQueue(): void { while (this.queue.length < 7) this.queue.push(...shuffledBag(this.rng)); }
+  /** RNG con semilla para caos (misma semilla => misma partida); classic usa Math.random. */
+  private readonly chaosRng: () => number;
+  private nextSpecial(): SpecialKind | null {
+    if (this.mode !== 'chaos') return null;
+    if (this.chaos?.nextSpecial) return this.chaos.nextSpecial();
+    if (this.seed !== undefined && this.chaosRng() < 0.07) {
+      const kinds: SpecialKind[] = ['bomb', 'bolt', 'wild', 'drill'];
+      return kinds[Math.floor(this.chaosRng() * kinds.length) ?? 0] ?? 'bomb';
+    }
+    return null;
+  }
   private spawn(): void {
     this.refillQueue();
     const kind = this.queue.shift() as PieceKind;
     this.refillQueue();
+    this.special = this.nextSpecial();
+    this.activeSingle = this.special === 'wild';
     this.active = { kind, rotation: 0, x: Math.floor(COLS / 2) - 1, y: VISIBLE_ROWS - 1 };
     this.fallAcc = 0; this.lockAcc = 0; this.lockResets = 0;
     this.pieceVersion++;
@@ -65,6 +94,7 @@ export class TetrisEngine {
   }
   activeCells(): Vec2[] {
     if (!this.active) return [];
+    if (this.activeSingle) return [{ x: this.active.x, y: this.active.y }];
     return cellsForPiece(this.active.kind, this.active.rotation, this.active.x, this.active.y);
   }
   ghostY(): number {
@@ -204,6 +234,7 @@ export class TetrisEngine {
     if (this.holdKind === null) { this.holdKind = cur; this.spawn(); }
     else {
       const tmp = this.holdKind; this.holdKind = cur;
+      this.activeSingle = false; this.special = null;
       this.active = { kind: tmp, rotation: 0, x: Math.floor(COLS / 2) - 1, y: VISIBLE_ROWS - 1 };
       this.fallAcc = 0; this.lockAcc = 0; this.lockResets = 0;
       this.pieceVersion++;
@@ -215,13 +246,112 @@ export class TetrisEngine {
     this.emit({ type: 'hold' });
   }
   peekNext(count = 5): PieceKind[] { return this.queue.slice(0, count); }
+  result(): { score: number; level: number; lines: number; mode: GameMode; seed?: number } {
+    return { score: this.score, level: this.level, lines: this.lines, mode: this.mode, seed: this.seed };
+  }
+  /** Bomba: borra un area 3x3 alrededor del centro de impacto (clamp al tablero). */
+  private applyBomb(cells: Vec2[]): void {
+    if (cells.length === 0) return;
+    let sx = 0; let sy = 0;
+    for (const c of cells) { sx += c.x; sy += c.y; }
+    const cx = Math.round(sx / cells.length); const cy = Math.round(sy / cells.length);
+    for (let y = cy - 1; y <= cy + 1; y++) {
+      const row = this.grid[y];
+      if (!row) continue;
+      for (let x = cx - 1; x <= cx + 1; x++) {
+        if (x < 0 || x >= COLS) continue;
+        row[x] = 0;
+      }
+    }
+  }
+  /** Rayo: borra la fila donde aterriza (la fila minima de las celdas fijadas). */
+  private applyBolt(cells: Vec2[]): void {
+    let minY = Number.POSITIVE_INFINITY;
+    for (const c of cells) minY = Math.min(minY, c.y);
+    if (!Number.isFinite(minY)) return;
+    const row = this.grid[minY];
+    if (!row) return;
+    for (let x = 0; x < COLS; x++) row[x] = 0;
+  }
+  /** Taladro: intenta bajar la pieza una celda destruyendo 1 bloque; true si perforo. */
+  drillStep(): boolean {
+    if (this.phase !== 'playing' || !this.active || this.special !== 'drill') return false;
+    const below = this.activeSingle
+      ? [{ x: this.active.x, y: this.active.y - 1 }]
+      : cellsForPiece(this.active.kind, this.active.rotation, this.active.x, this.active.y - 1);
+    let blocker: Vec2 | null = null;
+    for (const c of below) {
+      if (c.y < 0 || c.x < 0 || c.x >= COLS) return false;
+      const row = this.grid[c.y];
+      if (row && row[c.x] !== 0) {
+        if (blocker) return false; // solo atraviesa 1 celda por pieza
+        blocker = c;
+      }
+    }
+    if (!blocker) return false;
+    const row = this.grid[blocker.y];
+    if (!row) return false;
+    row[blocker.x] = 0;
+    this.active.y -= 1;
+    this.special = null; // perforacion consumida
+    this.gridVersion++; this.pieceVersion++;
+    this.emit({ type: 'lock', cells: [blocker] });
+    return true;
+  }
+  /** Basura: sube `rows` filas con hueco aleatorio; gameover si desborda la zona oculta. */
+  pushGarbage(count: number, holeAt: (row: number) => number): void {
+    for (let i = 0; i < count; i++) {
+      const hole = holeAt(i);
+      const garbage = new Array(COLS).fill('Z') as Grid[number];
+      garbage[Math.max(0, Math.min(COLS - 1, hole))] = 0;
+      this.grid.shift();
+      this.grid.push(garbage as never);
+    }
+    if (this.active && collides(this.grid, this.activeCells())) {
+      this.phase = 'gameover'; this.emit({ type: 'gameover', scoreGained: this.score });
+    }
+    this.gridVersion++;
+  }
+  /** Temblor: desplaza la fila `row` un paso lateral con wrap. */
+  shiftRow(row: number, dir: 1 | -1): void {
+    const r = this.grid[row];
+    if (!r) return;
+    if (dir === 1) { const last = r.pop() as (typeof r)[number]; r.unshift(last); }
+    else { const first = r.shift() as (typeof r)[number]; r.push(first); }
+    this.gridVersion++;
+  }
+  /** Cascada: compacta cada columna hacia abajo; devuelve si hubo movimiento. */
+  settleColumns(): boolean {
+    let moved = false;
+    for (let x = 0; x < COLS; x++) {
+      let write = 0;
+      for (let y = 0; y < this.grid.length; y++) {
+        const row = this.grid[y];
+        if (!row) continue;
+        const v = row[x];
+        if (v !== 0 && v !== undefined) {
+          if (y !== write) {
+            const target = this.grid[write];
+            if (target) { target[x] = v; row[x] = 0; moved = true; }
+          }
+          write++;
+        }
+      }
+    }
+    if (moved) this.gridVersion++;
+    return moved;
+  }
   private lockPiece(): void {
     if (!this.active) return;
     const cells = this.activeCells();
+    const special = this.special;
+    this.chaos?.beforeLock?.(cells);
     mergePiece(this.grid, cells, this.active.kind);
+    if (special === 'bomb') this.applyBomb(cells);
+    if (special === 'bolt') this.applyBolt(cells);
     this.gridVersion++;
     this.emit({ type: 'lock', cells });
-    const cleared = clearFullRows(this.grid);
+    let cleared: number[] = clearFullRows(this.grid);
     if (cleared.length > 0) {
       const n = Math.min(4, cleared.length);
       const base = LINE_POINTS[n as 1 | 2 | 3 | 4] ?? 0;
@@ -235,6 +365,8 @@ export class TetrisEngine {
       if (newLevel > this.level) { this.level = newLevel; this.levelTime = 0; this.emit({ type: 'levelup', level: newLevel }); }
       if (this.combo > 0) this.emit({ type: 'combo', scoreGained: this.combo });
     } else { this.combo = -1; }
+    this.chaos?.afterLock?.({ cells, cleared });
+    this.special = null; this.activeSingle = false;
     this.canHold = true;
     if (this.phase === 'playing') this.spawn();
   }

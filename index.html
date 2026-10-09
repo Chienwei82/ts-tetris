@@ -29,6 +29,7 @@
         <label>Progreso</label>
         <div id="gauge"><div id="gauge-fill" class="lines"></div></div>
         <p id="gauge-caption">0/10 líneas · 0:00/0:45</p>
+        <span id="mode-chip">Tradicional</span>
         <span id="stage-chip">☀️ Pradera</span>
       </div>
       <div class="stat"><label>Siguiente</label><canvas id="next" width="160" height="190"></canvas></div>
@@ -49,6 +50,7 @@
         <li><span class="key">H</span> ayuda</li>
         <li><span class="key">P</span> pausa · <span class="key">R</span> reinicio</li>
       </ul>
+      <div id="chaos-status" class="hidden"></div>
       <div id="toast" class="hidden"></div>
     </aside>
 
@@ -57,6 +59,10 @@
         <h2 id="overlay-title">TETRIS 3D</h2>
         <p id="overlay-sub">Pulsa <span class="key">Enter</span> o haz clic para jugar</p>
         <p id="overlay-stats"></p>
+        <div id="mode-picker" role="radiogroup" aria-label="Modo de juego">
+          <label><input type="radio" name="game-mode" value="classic" checked /> Tradicional</label>
+          <label><input type="radio" name="game-mode" value="chaos" /> Caos</label>
+        </div>
         <div id="start-options">
           <label for="level-range">Nivel inicial</label>
           <div class="range-row">
@@ -117,9 +123,11 @@
           <li><strong>🌧️ Caída suave <span class="key">↓</span></strong> — baja más rápido: +1 punto por fila.</li>
           <li><strong>🔥 Combos</strong> — limpiar líneas seguidas suma +50 × combo × nivel.</li>
           <li><strong>🔄 Wall-kicks <span class="key">↑</span>/<span class="key">X</span>/<span class="key">Z</span></strong> — al rotar junto a una pared o el suelo, la pieza se aparta sola.</li>
+          <li><strong>🌀 Modo Caos</strong> — mutadores temporales, piezas especiales y eventos avisados. El modo Tradicional no cambia.</li>
           <li><strong>⏱️ Nivel híbrido</strong> — subes cada 10 líneas o 45 s (lo que llegue antes), hasta el nivel 20.</li>
           <li><strong>🎵 Música procedural</strong> — se genera en vivo y se adapta a la acción: tranquila al principio y más enérgica cuando sube la intensidad. Actívala o apágala con <span class="key">M</span>.</li>
           <li><strong>👆 Arrastrar y tocar (móvil)</strong> — arrastra la pieza para moverla (hacia abajo, caída suave) y toca el tablero para rotarla en sentido horario.</li>
+          <li><strong>🌪️ Modo Caos</strong> — elígelo en la pantalla inicial junto al nivel. Cada 6 líneas aparece un mutador avisado 1 s antes (gravedad doble, controles invertidos, siguiente oculto, niebla o piezas invisibles) durante 15-20 s, con cuenta regresiva en pantalla. Hay piezas especiales raras (bomba 3×3, rayo barre-filas, comodín 1×1, taladro que perfora 1 celda), filas basura con hueco, temblores laterales y cascadas con combos. Todo se anuncia antes de ocurrir.</li>
         </ul>
         <p class="help-note">No hay objetos que recoger: estas ayudas están siempre disponibles.</p>
 

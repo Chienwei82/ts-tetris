@@ -13,6 +13,10 @@ export class HUD {
   private stageChipEl: HTMLElement;
   private bannerEl: HTMLElement;
   private bannerTitleEl: HTMLElement;
+  private modeChipEl: HTMLElement | null;
+  private chaosEl: HTMLElement | null;
+  private toastQueue: string[] = [];
+  private toastBusy = false;
   private bannerSubEl: HTMLElement;
   private toastTimer = 0;
   private bannerTimer = 0;
@@ -35,6 +39,8 @@ export class HUD {
     this.startOptionsEl = q('start-options');
     this.gaugeFillEl = q('gauge-fill'); this.gaugeCaptionEl = q('gauge-caption'); this.stageChipEl = q('stage-chip');
     this.bannerEl = q('level-banner'); this.bannerTitleEl = q('level-banner-title'); this.bannerSubEl = q('level-banner-sub');
+    const qc = (id: string): HTMLElement | null => document.getElementById(id);
+    this.modeChipEl = qc('mode-chip'); this.chaosEl = qc('chaos-status');
   }
   setStats(score: number, level: number, lines: number): void {
     if (score !== this.lastScore) {
@@ -85,13 +91,31 @@ export class HUD {
     }, 2500);
   }
   toast(msg: string, ms = 1600): void {
+    this.toastQueue.push(msg);
+    if (!this.toastBusy) this.nextToast(ms);
+  }
+  private nextToast(ms: number): void {
+    const msg = this.toastQueue.shift();
+    if (msg === undefined) { this.toastBusy = false; return; }
+    this.toastBusy = true;
     this.toastEl.textContent = msg;
     this.toastEl.classList.remove('hidden');
     this.toastEl.classList.remove('pop');
     void this.toastEl.offsetWidth;
     this.toastEl.classList.add('pop');
     window.clearTimeout(this.toastTimer);
-    this.toastTimer = window.setTimeout(() => this.toastEl.classList.add('hidden'), ms);
+    this.toastTimer = window.setTimeout(() => {
+      this.toastEl.classList.add('hidden');
+      this.nextToast(ms);
+    }, ms);
+  }
+  setModeChip(mode: string): void {
+    if (this.modeChipEl && this.modeChipEl.textContent !== mode) this.modeChipEl.textContent = mode;
+  }
+  /** Aviso + cuenta regresiva del mutador/evento activo. '' oculta. */
+  setChaosStatus(text: string): void {
+    if (this.chaosEl && this.chaosEl.textContent !== text) this.chaosEl.textContent = text;
+    if (this.chaosEl) this.chaosEl.classList.toggle('hidden', text === '');
   }
   showOverlay(title: string, subHtml: string, statsHtml: string, showStartOptions = false): void {
     this.titleEl.textContent = title;

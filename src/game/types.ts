@@ -26,6 +26,16 @@ export interface ActivePiece {
 
 export type GamePhase = 'ready' | 'playing' | 'paused' | 'gameover';
 
+export type GameMode = 'classic' | 'chaos';
+
+export interface GameResult {
+  score: number;
+  level: number;
+  lines: number;
+  mode: GameMode;
+  seed?: number;
+}
+
 export type GameEventType =
   | 'move'
   | 'rotate'
