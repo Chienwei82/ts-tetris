@@ -1,140 +1,148 @@
 import { describe, expect, it } from 'vitest';
 import { TetrisEngine } from '../src/game/engine.js';
-import { ChaosDirector } from '../src/game/chaos/director.js';
-import type { ChaosEvent } from '../src/game/chaos/types.js';
-import { registerAllChaosModules } from '../src/game/chaos/mutators.js';
-import { clearChaosRegistry } from '../src/game/chaos/registry.js';
+import { createGrid } from '../src/game/board.js';
+import type { GameEvent } from '../src/game/types.js';
 
 function seqRng(): () => number { let i = 0; return () => { i = (i + 1) % 100; return i / 100; }; }
 
+/** Rellena filas completas [from, to] con bloques (columna 9 vacia: sin lineas completas). */
+function fillRows(e: TetrisEngine, from: number, to: number): void {
+  for (let y = from; y <= to; y++) for (let x = 0; x < 9; x++) e.grid[y]![x] = 'I';
+}
+
 describe('classic intacto', () => {
-  it('no crea director ni usa caos por defecto', () => {
+  it('no crea especiales ni usa caos por defecto', () => {
     const e = new TetrisEngine({ rng: seqRng() });
     e.start();
     expect(e.mode).toBe('classic');
-    expect(e.chaos).toBeNull();
+    expect(e.special).toBeNull();
+    expect(e.peekSpecial()).toBeNull();
     expect(e.result().mode).toBe('classic');
   });
 });
 
-describe('chaos director (sin navegador)', () => {
-  it('misma semilla => misma secuencia de mutadores', () => {
-    clearChaosRegistry(); registerAllChaosModules();
-    const run = (seed: number): string[] => {
-      const events: ChaosEvent[] = [];
-      const eng = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed });
-      eng.start();
-      const d = new ChaosDirector({ seed, config: { linesPerMutator: 1 }, onEvent: (e) => events.push(e) });
-      d.attach(eng);
-      for (let i = 0; i < 40; i++) { eng.lines += 1; d.update(0.5); d.update(0.6); }
-      return events.filter((e) => e.kind === 'warn' && e.moduleId.startsWith('mut-')).map((e) => e.moduleId);
-    };
-    expect(run(1234)).toEqual(run(1234));
-    expect(run(1234).length).toBeGreaterThan(0);
-  });
-  it('avisa 1s antes y solo un mutador a la vez', () => {
-    clearChaosRegistry(); registerAllChaosModules();
-    const events: ChaosEvent[] = [];
-    const eng = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 7 });
-    eng.start();
-    const d = new ChaosDirector({ seed: 7, config: { linesPerMutator: 1, mutatorWarnSec: 1, garbageIntervalSec: 9999, tremorIntervalSec: 9999 }, onEvent: (e) => events.push(e) });
-    d.attach(eng);
-    eng.lines += 1;
-    d.update(0.4);
-    expect(events.some((e) => e.kind === 'warn' && e.remainingSec === 1)).toBe(true);
-    d.update(0.7); // warnLeft 1 -> 0.3, aun avisando
-    expect(d.activeName()).toBeNull();
-    d.update(0.4); // warnLeft 0.3 -> -0.1, dispara
-    expect(events.some((e) => e.kind === 'start')).toBe(true);
-    expect(d.activeName()).not.toBeNull();
-  });
-  it('piezas especiales reproducibles por semilla', () => {
-    clearChaosRegistry(); registerAllChaosModules();
+describe('piezas especiales (modo caos)', () => {
+  it('misma semilla => misma secuencia de especiales', () => {
     const run = (seed: number): Array<string | null> => {
-      const eng = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed });
-      eng.start();
-      const d = new ChaosDirector({ seed, onEvent: () => undefined });
-      d.attach(eng);
+      const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed });
+      e.start();
       const out: Array<string | null> = [];
-      for (let i = 0; i < 30; i++) out.push(eng.chaos?.nextSpecial?.() ?? null);
+      for (let i = 0; i < 30; i++) {
+        out.push(e.special);
+        e.grid = createGrid(); // piso artificial para no perder por overflow
+        e.hardDrop();
+      }
       return out;
     };
-    expect(run(555)).toEqual(run(555));
-    expect(run(555).some((s) => s !== null)).toBe(true);
+    expect(run(1234)).toEqual(run(1234));
+    expect(run(1234).some((s) => s !== null)).toBe(true);
+    expect(run(1234)).not.toEqual(run(999));
   });
-  it('expone countdown via tick', () => {
-    clearChaosRegistry(); registerAllChaosModules();
-    const events: ChaosEvent[] = [];
-    const eng = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 9 });
-    eng.start();
-    const d = new ChaosDirector({ seed: 9, config: { linesPerMutator: 1, mutatorMinSec: 15, mutatorMaxSec: 15, garbageIntervalSec: 9999, tremorIntervalSec: 9999 }, onEvent: (e) => events.push(e) });
-    d.attach(eng);
-    eng.lines += 1; d.update(1.2); // crea el aviso (warnLeft=1)
-    d.update(1); // warnLeft -> 0, dispara start
-    expect(events.some((e) => e.kind === 'start')).toBe(true);
-    d.update(1); // modulo activo emite tick con countdown
-    expect(events.some((e) => e.kind === 'tick' && (e.remainingSec ?? 0) > 0)).toBe(true);
-  });
-});
 
-describe('mecanicas caos en el motor', () => {
-  it('bomba borra area 3x3 al fijar', () => {
-    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 1 });
+  it('el preview anuncia el especial de la proxima pieza', () => {
+    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 1234 });
     e.start();
-    e.grid[0]![8] = 'I';
-    e.active = { kind: 'O', rotation: 0, x: 4, y: 4 };
+    let announcedAtLeastOnce = false;
+    for (let i = 0; i < 30; i++) {
+      const announced = e.peekSpecial();
+      e.grid = createGrid();
+      e.hardDrop();
+      if (e.phase !== 'playing') break;
+      expect(e.special).toBe(announced);
+      if (announced !== null) announcedAtLeastOnce = true;
+    }
+    expect(announcedAtLeastOnce).toBe(true);
+  });
+
+  it('bomba: revienta 2 filas al bloquearse y la pieza se consume', () => {
+    const events: GameEvent[] = [];
+    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 3, onEvent: (ev) => events.push(ev) });
+    e.start();
+    fillRows(e, 0, 3); // monton hasta la fila 3
+    e.active = { kind: 'I', rotation: 0, x: 2, y: 12 };
     e.special = 'bomb';
-    e.hardDrop();
-    // La bomba borra el area 3x3 del impacto (incluidas sus propias celdas);
-    // la celda lejana (8,0) sobrevive.
-    expect(e.grid[0]![8]).toBe('I');
-    expect(e.grid[0]![4]).toBe(0);
-    expect(e.grid[1]![5]).toBe(0);
+    e.hardDrop(); // la I aterriza sobre la fila 4
+    const bomb = events.find((ev) => ev.type === 'bomb');
+    expect(bomb?.rows?.slice().sort((a, b) => a - b)).toEqual([3, 4]);
+    for (const y of [3, 4]) expect(e.grid[y]!.every((v) => v === 0)).toBe(true);
+    expect(e.grid[0]![0]).toBe('I');
+    expect(e.grid[2]![0]).toBe('I');
   });
-  it('rayo borra la fila de aterrizaje', () => {
-    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 2 });
+
+  it('rayo: rompe los 4 bloques mas altos bajo la pieza', () => {
+    const events: GameEvent[] = [];
+    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 4, onEvent: (ev) => events.push(ev) });
     e.start();
-    for (let c = 0; c < 10; c++) if (c !== 0 && c !== 1) e.grid[0]![c] = 'I';
-    e.active = { kind: 'O', rotation: 0, x: 0, y: 4 };
+    fillRows(e, 0, 2); // monton hasta la fila 2
+    e.active = { kind: 'O', rotation: 0, x: 5, y: 10 };
     e.special = 'bolt';
-    e.hardDrop();
-    expect(e.grid[0]!.every((v) => v === 0)).toBe(true);
+    e.hardDrop(); // la O aterriza sobre la fila 3
+    const bolt = events.find((ev) => ev.type === 'bolt');
+    const broken = (bolt?.cells ?? []).map((c) => c.x + ',' + c.y).sort();
+    expect(broken).toEqual(['5,1', '5,2', '6,1', '6,2']);
+    // Las columnas de fuera no se tocan y el rayo no deja pieza detras.
+    expect(e.grid[2]![0]).toBe('I');
+    expect(e.grid[0]![0]).toBe('I');
+    expect(e.grid[3]![5]).toBe(0);
+    expect(e.grid[4]![5]).toBe(0);
   });
-  it('comodin monomino: una sola celda sin rotacion', () => {
-    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 3 });
+
+  it('rayo: sin bloques debajo no rompe nada', () => {
+    const events: GameEvent[] = [];
+    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 4, onEvent: (ev) => events.push(ev) });
     e.start();
-    e.active = { kind: 'T', rotation: 0, x: 5, y: 10 };
-    e.special = 'wild';
-    e.activeSingle = true;
-    expect(e.activeCells()).toHaveLength(1);
-    e.rotate(1);
-    expect(e.activeCells()).toHaveLength(1);
+    e.active = { kind: 'O', rotation: 0, x: 5, y: 2 };
+    e.special = 'bolt';
+    e.hardDrop(); // cae al suelo sin nada debajo
+    expect(events.some((ev) => ev.type === 'bolt')).toBe(false);
+    expect(e.grid[0]![0]).toBe(0); // el tablero sigue vacio salvo la propia pieza
   });
-  it('taladro perfora 1 celda y sigue cayendo', () => {
+
+  it('taladro: se hunde 2 filas destruyendo los bloques bajo su base', () => {
+    const events: GameEvent[] = [];
+    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 4, onEvent: (ev) => events.push(ev) });
+    e.start();
+    fillRows(e, 0, 5); // monton hasta la fila 5
+    e.active = { kind: 'O', rotation: 0, x: 5, y: 6 }; // la O descansa sobre la fila 5
+    e.special = 'drill';
+    expect(e.drillSink()).toBe(true);
+    expect(e.active?.y).toBe(4); // se hunde 2 filas (de y=6 a y=4)
+    const drill = events.find((ev) => ev.type === 'drill');
+    const bored = (drill?.cells ?? []).map((c) => c.x + ',' + c.y).sort();
+    expect(bored).toEqual(['5,4', '5,5', '6,4', '6,5']);
+    expect(e.grid[5]![5]).toBe(0);
+    expect(e.grid[4]![5]).toBe(0);
+    expect(e.grid[3]![5]).toBe('I'); // debajo del hueco, el monton sigue
+    expect(e.special).toBe('drill'); // sigue siendo el objeto hasta fijarse
+    expect(e.drillSink()).toBe(false); // una sola vez por pieza
+    e.hardDrop(); // se fija y el powerup se consume...
+    expect(e.grid[5]![5]).toBe(0); // ...sin dejar bloques de pieza convencional
+    expect(e.grid[4]![5]).toBe(0);
+  });
+
+  it('taladro: en el suelo no se hunde', () => {
     const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 4 });
     e.start();
-    e.grid[4]![5] = 'I'; // justo debajo de la celda (5,5) de la pieza
-    e.active = { kind: 'O', rotation: 0, x: 4, y: 5 };
+    e.active = { kind: 'O', rotation: 0, x: 5, y: 0 };
     e.special = 'drill';
-    const before = e.activeCells()[0]!.y;
-    const drilled = e.drillStep();
-    expect(drilled).toBe(true);
-    expect(e.grid[4]![5]).toBe(0);
-    expect(e.special).toBeNull();
-    expect(e.activeCells()[0]!.y).toBeLessThan(before);
+    expect(e.drillSink()).toBe(false);
+    expect(e.active?.y).toBe(0);
   });
-  it('basura sube con hueco y temblor desplaza con wrap', () => {
-    const e = new TetrisEngine({ rng: seqRng() });
+
+  it('el especial viaja con la pieza al holdear', () => {
+    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 5 });
     e.start();
-    e.pushGarbage(1, () => 3);
-    const top = e.grid[e.grid.length - 1]!;
-    expect(top[3]).toBe(0);
-    expect(top.filter((v) => v !== 0).length).toBe(9);
-    e.grid[0] = ['I', 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    e.shiftRow(0, 1);
-    expect(e.grid[0]![1]).toBe('I');
+    e.holdKind = 'I'; e.holdSpecial = 'drill';
+    e.active = { kind: 'T', rotation: 0, x: 5, y: 10 };
+    e.special = 'bomb';
+    e.hold();
+    expect(e.active?.kind).toBe('I');
+    expect(e.special).toBe('drill');
+    expect(e.holdKind).toBe('T');
+    expect(e.holdSpecial).toBe('bomb');
   });
-  it('cascada compacta columnas', () => {
+
+  it('settleColumns compacta columnas (tras bomba/rayo)', () => {
     const e = new TetrisEngine({ rng: seqRng() });
     e.start();
     e.grid[0]![0] = 'I'; e.grid[2]![0] = 'T';

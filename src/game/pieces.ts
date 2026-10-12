@@ -48,12 +48,12 @@ const BASE_CELLS: Record<PieceKind, Vec2[]> = {
 
 /** Rotate a cell 90° clockwise in a y-up board space. */
 export function rotateCWCell(c: Vec2): Vec2 {
-  return { x: -c.y, y: c.x };
+  return { x: c.y, y: -c.x };
 }
 
 /** Rotate a cell 90° counter-clockwise. */
 export function rotateCCWCell(c: Vec2): Vec2 {
-  return { x: c.y, y: -c.x };
+  return { x: -c.y, y: c.x };
 }
 
 /** Cells of a piece kind in a given rotation state (0 = spawn). */

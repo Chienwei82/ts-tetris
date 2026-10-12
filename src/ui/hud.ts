@@ -112,7 +112,7 @@ export class HUD {
   setModeChip(mode: string): void {
     if (this.modeChipEl && this.modeChipEl.textContent !== mode) this.modeChipEl.textContent = mode;
   }
-  /** Aviso + cuenta regresiva del mutador/evento activo. '' oculta. */
+  /** Especial activo de la pieza (chip). '' oculta. */
   setChaosStatus(text: string): void {
     if (this.chaosEl && this.chaosEl.textContent !== text) this.chaosEl.textContent = text;
     if (this.chaosEl) this.chaosEl.classList.toggle('hidden', text === '');
