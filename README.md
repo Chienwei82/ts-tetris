@@ -27,7 +27,7 @@ npm run dev      # local: http://localhost:5173 · LAN: http://<tu-IP>:5173
 ```
 
 ```bash
-npm test         # tests de lógica (vitest 5, 72 tests)
+npm test         # tests de lógica (vitest 5, 108 tests)
 npm run build    # type-check (tsc 7 nativo) + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
@@ -62,10 +62,11 @@ utilidades** (❓ ⏸ ✨ 🎵 ⚙️) pegada al borde derecho:
 | ↺ / ↻ (grandes, sobre ◀/▶) | Rotar antihorario / horario |
 | ◀ / ▶ | Mover pieza (con auto-repetición DAS/ARR) |
 | ⇊ (grande, abajo-derecha) | Caída instantánea |
-| HOLD (sobre ⇊) | Reserva |
+| HOLD (aislada, arriba) | Reserva |
 | ❓ · ⏸ · ✨ · 🎵 · ⚙️ (columna derecha) | Ayuda · Pausa · Efectos · Música · Controles |
 
-La rotación vive encima de ◀/▶ y lejos de ⇊ para no tirar la pieza al rotar.
+La rotación vive encima de ◀/▶ y lejos de ⇊ para no tirar la pieza al rotar;
+la HOLD va aislada arriba (lejos del ⇊) para no soltarla por accidente.
 
 **Arrastrar y tocar la pieza** (siempre disponible junto a los botones):
 
@@ -93,6 +94,16 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   color/leyenda indican la regla que va ganando (líneas en verde, reloj en azul).
 - **Selector de nivel inicial (1–20)** en la pantalla de inicio; el nivel
   elegido también fija el escenario de arranque.
+- **Modo Caos** (se elige en la pantalla de inicio, junto al nivel): el juego
+  clásico con **powerups literales**. Cada cierto tiempo cae un objeto 💣 ⚡ 🔩
+  en vez de una pieza (se anuncia con badge en el preview y con un chip en el
+  HUD) y, al bloquearse, aplica su efecto y desaparece sin dejar bloques:
+  - 💣 **Bomba**: revienta 2 filas (la de aterrizaje y la contigua).
+  - ⚡ **Rayo**: rompe los 4 bloques más altos bajo su base.
+  - 🔩 **Taladro**: se hunde 2 filas destruyendo lo que tiene debajo (una sola
+    vez por pieza; viaja con la reserva).
+  La secuencia es **determinista por semilla** (misma semilla ⇒ mismos
+  powerups) y el modo Tradicional no cambia en nada.
 - **Escenarios y clima**: un tema cada 2 niveles (Pradera, Brisa, Atardecer,
   Lluvia, Tormenta con rayos y trueno, Noche, Nieve, Aurora, Amanecer, Cosmos)
   con transición suave de cielo, niebla, colinas, luces y clima (hojas, lluvia,
@@ -126,10 +137,11 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
 ```
 src/
   game/       Lógica pura sin DOM (testeable con vitest)
-    types.ts      Tipos, constantes (líneas/segundos por nivel, tope), colores, puntos
+    types.ts      Tipos, constantes (líneas/segundos/nivel, tope, powerups caos), colores, puntos
     pieces.ts     Formas, rotación, kicks SRS, 7-bag
     board.ts      Grid, colisiones, fusión, limpieza
-    engine.ts     Estado, gravedad, lock delay, niveles híbridos, gauge, hold
+    rng.ts        mulberry32 + semilla (determinismo del modo caos)
+    engine.ts     Estado, gravedad, lock delay, niveles híbridos, gauge, hold, powerups caos
   render/     Three.js (sin reglas de juego)
     scene.ts        Diorama base: cielo repintable, colinas, nubes, sol/luna, luces, confeti
     themes.ts       Los 10 escenarios: paletas, luces, clima y viento por nivel
@@ -151,7 +163,8 @@ src/
     musicDirector.ts   Fachada: start/stop/setIntensity + toggle on/off
     intensityTracker.ts Señales del juego → intensity suavizada (puro)
   tools/     fuera del bundle: curate-seeds.ts (npm run curate) puntúa semillas;
-             screenshots.mjs (npm run shots) genera las capturas del README
+             screenshots.mjs (npm run shots) genera las capturas del README;
+             touch-layout-check.mjs valida la ergonomía del layout táctil (node)
   main.ts     Bucle, cámara con deriva, gauge/selector, toggle de efectos, eventos→efectos
 ```
 

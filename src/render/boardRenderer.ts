@@ -18,6 +18,27 @@ interface LockedCell {
   x: number;
   y: number;
 }
+/** Especiales: objetos literales (💣/⚡/🔩). Se dibujan como UN sprite grande,
+ *  jamas como bloques de pieza con tintes. */
+const SPECIAL_ICON: Record<string, string> = { bomb: '💣', bolt: '⚡', drill: '🔩' };
+function specialIconTexture(emoji: string): THREE.CanvasTexture {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 256;
+  const ctx = cv.getContext('2d');
+  if (ctx) {
+    // Sombra suave de recorte: el objeto "flota" sobre el tablero de papel.
+    ctx.shadowColor = 'rgba(30,20,12,0.45)';
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 10;
+    ctx.font = '196px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, 128, 128);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 const AXIS_Z = new THREE.Vector3(0, 0, 1);
 const scratchMatrix = new THREE.Matrix4();
 const scratchQuat = new THREE.Quaternion();
@@ -38,6 +59,12 @@ export class BoardRenderer {
   private ghostGroup = new THREE.Group();
   private clearingRows = new Map<number, { t: number; meshes: THREE.Group[] }>();
   private lockAnims: { mesh: THREE.Group; t: number; row: number }[] = [];
+  private fogMesh: THREE.Mesh | null = null;
+  private specialIcon: THREE.Sprite | null = null;
+  /** Fantasma del powerup: el mismo icono, translúcido, marca la zona de aterrizaje. */
+  private ghostSpecial: THREE.Sprite | null = null;
+  private iconTex = new Map<string, THREE.CanvasTexture>();
+  private fogOn = false;
   private activeMeshes = new Map<number, THREE.Group>();
   private activeTarget = new Map<number, THREE.Vector3>();
   private pullFree: THREE.Group[] = [];
@@ -106,7 +133,7 @@ export class BoardRenderer {
   }
   private colorize(g: THREE.Group, kind: PieceKind): void {
     const mesh = g.children[0] as THREE.Mesh;
-    mesh.material = blockMaterial(kind);
+    if (g.userData.kind !== kind) mesh.material = blockMaterial(kind);
     g.userData.kind = kind;
   }
   private buildFrame(): void {
@@ -209,7 +236,22 @@ export class BoardRenderer {
     if (changed) this.rebuildLocked();
   }
 
-  setActive(kind: PieceKind, cells: Vec2[], instant = false): void {
+  setActive(kind: PieceKind, cells: Vec2[], instant = false, special: string | null = null): void {
+    // Powerup: es un objeto literal (💣/⚡/🔩), no una pieza. Sin bloques: solo
+    // el sprite grande sobre su huella (el fantasma marca donde caera).
+    if (special) {
+      for (const [k, m] of this.activeMeshes) {
+        this.activeGroup.remove(m);
+        this.pullFree.push(m);
+        m.visible = false;
+        this.activeMeshes.delete(k);
+        this.activeTarget.delete(k);
+      }
+      this.updateSpecialIcon(special, cells);
+      this.shadowDirty = true;
+      return;
+    }
+    this.updateSpecialIcon(null, cells);
     const wanted = new Map<number, Vec2>();
     for (const c of cells) wanted.set(this.key(c.x, c.y), c);
     // Remove meshes whose cell no longer exists (Map iteration tolerates deletes).
@@ -229,7 +271,8 @@ export class BoardRenderer {
         m = this.makeBlock(kind);
         this.activeGroup.add(m);
         this.activeMeshes.set(k, m);
-      } else if (m.userData.kind !== kind) this.colorize(m, kind);
+      }
+      this.colorize(m, kind);
       const p = cellToWorld(c.x, c.y);
       const target = new THREE.Vector3(p.x, p.y, 0.15);
       this.activeTarget.set(k, target);
@@ -238,7 +281,99 @@ export class BoardRenderer {
     }
     this.shadowDirty = true;
   }
-  setGhost(cells: Vec2[]): void {
+  /** El objeto literal del powerup: sprite grande centrado en su huella. */
+  private updateSpecialIcon(special: string | null, cells: Vec2[]): void {
+    if (!special || cells.length === 0) {
+      if (this.specialIcon) this.specialIcon.visible = false;
+      return;
+    }
+    let tex = this.iconTex.get(special);
+    if (!tex) {
+      tex = specialIconTexture(SPECIAL_ICON[special] ?? '?');
+      this.iconTex.set(special, tex);
+    }
+    if (!this.specialIcon) {
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+      this.specialIcon = new THREE.Sprite(mat);
+      this.specialIcon.renderOrder = 30;
+      this.group.add(this.specialIcon);
+    } else {
+      const mat = this.specialIcon.material as THREE.SpriteMaterial;
+      mat.map = tex;
+      mat.needsUpdate = true;
+    }
+    const f = this.footprint(cells);
+    // El objeto cubre su huella con holgura: se ve como lo que es, no como pieza.
+    this.specialIcon.scale.setScalar(f.span + 0.6);
+    this.specialIcon.position.set(f.x, f.y, 1.6);
+    this.specialIcon.visible = this.activeGroup.visible;
+  }
+  /** Centro (mundo) y tamaño de celda de la huella de un conjunto de celdas. */
+  private footprint(cells: Vec2[]): { x: number; y: number; span: number } {
+    let minX = Infinity; let maxX = -Infinity; let minY = Infinity; let maxY = -Infinity;
+    for (const c of cells) {
+      if (c.x < minX) minX = c.x;
+      if (c.x > maxX) maxX = c.x;
+      if (c.y < minY) minY = c.y;
+      if (c.y > maxY) maxY = c.y;
+    }
+    const q = cellToWorld((minX + maxX) / 2, (minY + maxY) / 2);
+    return { x: q.x, y: q.y, span: Math.max(maxX - minX + 1, maxY - minY + 1) };
+  }
+  /** Fantasma del powerup: el mismo emoji, translúcido, centrado en la huella de
+   *  aterrizaje (guía propia e intuitiva, en vez de las cajas del tetromino). */
+  private updateGhostSpecial(special: string | null, cells: Vec2[]): void {
+    if (!special || cells.length === 0) {
+      if (this.ghostSpecial) this.ghostSpecial.visible = false;
+      return;
+    }
+    let tex = this.iconTex.get(special);
+    if (!tex) {
+      tex = specialIconTexture(SPECIAL_ICON[special] ?? '?');
+      this.iconTex.set(special, tex);
+    }
+    if (!this.ghostSpecial) {
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.42, depthTest: false, depthWrite: false });
+      this.ghostSpecial = new THREE.Sprite(mat);
+      this.ghostSpecial.renderOrder = 8; // sobre el fondo, bajo el icono activo (30)
+      this.group.add(this.ghostSpecial);
+    } else {
+      const mat = this.ghostSpecial.material as THREE.SpriteMaterial;
+      mat.map = tex;
+      mat.needsUpdate = true;
+    }
+    const f = this.footprint(cells);
+    this.ghostSpecial.scale.setScalar(f.span + 0.6);
+    this.ghostSpecial.position.set(f.x, f.y, 0.15);
+    this.ghostSpecial.visible = true;
+  }
+  setFog(on: boolean): void {
+    if (on === this.fogOn) return;
+    this.fogOn = on;
+    if (on && !this.fogMesh) {
+      const geo = new THREE.PlaneGeometry(BOARD_W + 1.4, BOARD_H / 2 + 0.6);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xf7efdb, transparent: true, opacity: 0.45, depthWrite: false });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(0, BOARD_H / 4 + 0.2, 2.6);
+      mesh.renderOrder = 5;
+      this.fogMesh = mesh;
+      this.group.add(mesh);
+    }
+    if (this.fogMesh) this.fogMesh.visible = on;
+    this.shadowDirty = true;
+  }
+  setGhost(cells: Vec2[], special: string | null = null): void {
+    // Powerup: su guía es el icono translúcido sobre la huella, NO las cajas del
+    // tetromino — así el fantasma corresponde al objeto que realmente cae.
+    if (special) {
+      while (this.ghostGroup.children.length > 0) {
+        const m = this.ghostGroup.children.pop();
+        if (m) this.ghostGroup.remove(m);
+      }
+      this.updateGhostSpecial(special, cells);
+      return;
+    }
+    this.updateGhostSpecial(null, cells);
     while (this.ghostGroup.children.length > cells.length) {
       const m = this.ghostGroup.children.pop() as THREE.Group;
       if (m) this.ghostGroup.remove(m);
@@ -360,6 +495,10 @@ export class BoardRenderer {
     this.clearingRows.clear();
     for (const a of this.lockAnims) recycle(a.mesh);
     this.lockAnims.length = 0;
+    this.activeGroup.visible = true;
+    if (this.specialIcon) this.specialIcon.visible = false;
+    if (this.ghostSpecial) this.ghostSpecial.visible = false;
+    this.setFog(false);
     this.activeTarget.clear();
     for (const [, m] of this.activeMeshes) recycle(m);
     this.activeMeshes.clear();

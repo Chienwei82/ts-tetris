@@ -111,6 +111,14 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #stage-chip { display: inline-block; padding: 1px 9px; border: 1.5px solid var(--ink); border-radius: 8px; background: var(--paper-hi); font-size: 11px; font-weight: 700; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.16); transform: rotate(-1deg); }
 
 /* Start-level selector (start overlay only) */
+/* ============ Selector de modo Tradicional / Caos ============ */
+#mode-picker { display: flex; gap: 8px; justify-content: center; margin: 12px 0 4px; }
+#mode-picker label { display: inline-flex; align-items: center; gap: 6px; background: var(--paper-hi); border: 2px solid var(--ink); border-radius: 10px; padding: 6px 12px; font-weight: 600; font-size: 14px; cursor: pointer; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.25); }
+#mode-picker input { accent-color: var(--red); width: 16px; height: 16px; }
+#mode-chip { display: inline-block; background: var(--blue); color: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 1px 10px; font-size: 11px; font-weight: 700; letter-spacing: 1px; margin-right: 6px; text-shadow: none; }
+#stage-chip { display: inline-block; }
+#chaos-status { margin-top: 10px; padding: 6px 10px; background: var(--red); color: #fff; border: 2px solid var(--ink); border-radius: 10px; font-weight: 700; font-size: 14px; text-align: center; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.3); }
+#chaos-status.hidden { display: none; }
 #start-options { margin: 18px auto 0; max-width: 330px; text-align: left; }
 #start-options.hidden { display: none; }
 #start-options label { display: block; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
@@ -187,25 +195,34 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #touch-controls { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
 #touch-controls.hidden { display: none; }
 #touch-controls * { touch-action: none; -webkit-user-select: none; user-select: none; }
-/* Cluster izquierdo: rotación (grande) encima de ◀/▶ — lejos de ⇊ para no tirar piezas. */
+/* Cluster izquierdo: rotación encima de ◀/▶. ◀/▶ grandes (muy usados);
+   la rotación, algo menor, queda arriba sin crecer. */
 #tc-pad {
   position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(22px + env(safe-area-inset-bottom, 0px));
-  display: flex; flex-direction: column; gap: 12px; pointer-events: none;
+  display: flex; flex-direction: column; gap: 14px; pointer-events: none;
 }
-#tc-rotate { display: flex; gap: 12px; pointer-events: none; }
-#tc-move { display: flex; gap: 12px; pointer-events: none; }
-/* Cluster derecho: HOLD sobre la caída instantánea (la acción más usada, grande). */
+#tc-rotate { display: flex; gap: 14px; pointer-events: none; }
+#tc-move { display: flex; gap: 14px; pointer-events: none; }
+/* Cluster derecho: HOLD (destructiva, poco usada) aislada ARRIBA con gran
+   separación; ⇊ —la acción más usada— GRANDE abajo, en la esquina (reposo del
+   pulgar). Así un barrido hacia ⇊ no roza HOLD. */
 #tc-buttons {
   position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(22px + env(safe-area-inset-bottom, 0px));
-  display: flex; flex-direction: column; align-items: flex-end; gap: 12px; pointer-events: none;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 34px; pointer-events: none;
 }
 .tc-btn {
   pointer-events: auto; width: 72px; height: 72px; padding: 0; border-radius: 18px;
   background: rgba(253, 249, 238, 0.55); color: var(--ink); font-size: 28px;
   border: 2.5px solid var(--ink); box-shadow: 3px 4px 0 rgba(var(--shadow), 0.25);
 }
-#tc-rotate .tc-btn { width: 80px; height: 80px; font-size: 34px; }
-.tc-btn.tc-small { width: 52px; height: 52px; font-size: 15px; border-radius: 13px; }
+/* ◀ ▶ mover: frecuente → target grande. */
+#tc-move .tc-btn { width: 84px; height: 84px; font-size: 32px; }
+/* ↺ ↻ rotar: frecuencia media → por encima de mover, sin crecer. */
+#tc-rotate .tc-btn { width: 68px; height: 68px; font-size: 28px; }
+/* ⇊ hard drop: acción más usada → la más grande, en la esquina. */
+#tc-drop { width: 96px; height: 96px; font-size: 42px; border-radius: 26px; }
+/* HOLD: poco usada y destructiva → pequeña y aislada. */
+.tc-btn.tc-small { width: 46px; height: 46px; font-size: 13px; border-radius: 12px; }
 .tc-btn.active, .tc-btn:active { transform: translate(3px, 4px); box-shadow: 0 0 0 rgba(var(--shadow), 0.25); background: var(--yellow); }
 
 /* ============ Pantalla de selección de modo (fallback) ============ */
@@ -264,10 +281,13 @@ body.touch #bottom-bar .bb-label { display: none; }
 
 /* ============ Pantallas bajas (móvil horizontal): botones compactos, sin solapes ============ */
 @media (max-height: 480px) {
-  .tc-btn { width: 60px; height: 60px; font-size: 22px; border-radius: 15px; }
-  #tc-rotate .tc-btn { width: 68px; height: 68px; font-size: 26px; }
-  .tc-btn.tc-small { width: 44px; height: 44px; font-size: 13px; border-radius: 11px; }
-  #tc-pad, #tc-buttons { gap: 10px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .tc-btn { width: 58px; height: 58px; font-size: 22px; border-radius: 15px; }
+  #tc-move .tc-btn { width: 68px; height: 68px; font-size: 26px; }
+  #tc-rotate .tc-btn { width: 58px; height: 58px; font-size: 24px; }
+  #tc-drop { width: 76px; height: 76px; font-size: 34px; border-radius: 20px; }
+  .tc-btn.tc-small { width: 42px; height: 42px; font-size: 12px; border-radius: 11px; }
+  #tc-pad, #tc-buttons { gap: 12px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  #tc-buttons { gap: 26px; }
   body.touch #bottom-bar { gap: 4px; }
   body.touch #bottom-bar button { min-height: 32px; font-size: 13px; padding: 4px 7px; }
 }

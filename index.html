@@ -29,6 +29,7 @@
         <label>Progreso</label>
         <div id="gauge"><div id="gauge-fill" class="lines"></div></div>
         <p id="gauge-caption">0/10 líneas · 0:00/0:45</p>
+        <span id="mode-chip">Tradicional</span>
         <span id="stage-chip">☀️ Pradera</span>
       </div>
       <div class="stat"><label>Siguiente</label><canvas id="next" width="160" height="190"></canvas></div>
@@ -49,6 +50,7 @@
         <li><span class="key">H</span> ayuda</li>
         <li><span class="key">P</span> pausa · <span class="key">R</span> reinicio</li>
       </ul>
+      <div id="chaos-status" class="hidden"></div>
       <div id="toast" class="hidden"></div>
     </aside>
 
@@ -57,6 +59,10 @@
         <h2 id="overlay-title">TETRIS 3D</h2>
         <p id="overlay-sub">Pulsa <span class="key">Enter</span> o haz clic para jugar</p>
         <p id="overlay-stats"></p>
+        <div id="mode-picker" role="radiogroup" aria-label="Modo de juego">
+          <label><input type="radio" name="game-mode" value="classic" checked /> Tradicional</label>
+          <label><input type="radio" name="game-mode" value="chaos" /> Caos</label>
+        </div>
         <div id="start-options">
           <label for="level-range">Nivel inicial</label>
           <div class="range-row">
@@ -120,6 +126,7 @@
           <li><strong>⏱️ Nivel híbrido</strong> — subes cada 10 líneas o 45 s (lo que llegue antes), hasta el nivel 20.</li>
           <li><strong>🎵 Música procedural</strong> — se genera en vivo y se adapta a la acción: tranquila al principio y más enérgica cuando sube la intensidad. Actívala o apágala con <span class="key">M</span>.</li>
           <li><strong>👆 Arrastrar y tocar (móvil)</strong> — arrastra la pieza para moverla (hacia abajo, caída suave) y toca el tablero para rotarla en sentido horario.</li>
+          <li><strong>🌪️ Modo Caos</strong> — elígelo en la pantalla inicial junto al nivel. Es el juego clásico pero cada cierto tiempo cae un <strong>powerup literal</strong> en vez de una pieza (se anuncia con badge en el preview y un aviso al aparecer): 💣 <strong>Bomba</strong>, ⚡ <strong>Rayo</strong> o 🔩 <strong>Taladro</strong>. Al bloquearse aplican su efecto y desaparecen (nunca dejan bloques): la bomba revienta 2 filas, el rayo rompe los 4 bloques más altos bajo su base y el taladro se hunde 2 filas destruyendo lo que tiene debajo. Nada más cambia.</li>
         </ul>
         <p class="help-note">No hay objetos que recoger: estas ayudas están siempre disponibles.</p>
 
@@ -144,7 +151,7 @@
     </div>
 
     <!-- Controles táctiles (solo modo móvil/tableta):
-         izquierda: rotación (grande) sobre ◀/▶ · derecha: HOLD + caída instantánea -->
+         izquierda: ↺↻ sobre ◀▶ grandes · derecha: HOLD aislada arriba + ⇊ grande en la esquina -->
     <div id="touch-controls" class="hidden" aria-hidden="true">
       <div id="tc-pad">
         <div id="tc-rotate">

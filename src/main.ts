@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { TetrisEngine } from './game/engine.js';
 import { stackHeight } from './game/board.js';
 import { LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL, VISIBLE_ROWS } from './game/types.js';
-import type { GameEvent, LevelProgress, PieceKind } from './game/types.js';
+import type { GameEvent, GameMode, LevelProgress, PieceKind } from './game/types.js';
 import { BoardRenderer } from './render/boardRenderer.js';
 import { cellToWorld, MAX_FPS, pxPerCell } from './render/constants.js';
 import { CameraShake, ClearFlash } from './render/effects.js';
@@ -28,7 +28,8 @@ import { InputManager } from './ui/inputManager.js';
 import { ModeSelect } from './ui/modeSelect.js';
 import { HUD } from './ui/hud.js';
 import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
-import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, saveEffectsEnabled, saveMusicEnabled, saveMusicGenre } from './ui/settings.js';
+import { loadEffectsEnabled, loadGameMode, loadMusicEnabled, loadMusicGenre, saveEffectsEnabled, saveGameMode, saveMusicEnabled, saveMusicGenre } from './ui/settings.js';
+import { randomSeed } from './game/rng.js';
 import { MusicMenu } from './ui/musicMenu.js';
 import { initAnalytics } from './analytics.js';
 function el<T extends HTMLElement>(id: string): T {
@@ -46,6 +47,8 @@ const levelRangeOut = el<HTMLOutputElement>('level-range-out');
 const btnEffects = el<HTMLButtonElement>('btn-effects');
 const btnMusic = el<HTMLButtonElement>('btn-music');
 const hud = new HUD();
+let gameMode: GameMode = loadGameMode();
+let chaosSeed = randomSeed();
 const sound = new SoundFX();
 /* Música procedural: el juego solo aporta intensidad; el audio se gestiona solo. */
 const initialGenre = normalizeGenre(loadMusicGenre());
@@ -158,6 +161,49 @@ function handleEvent(e: GameEvent): void {
     case 'move': sound.play('move'); break;
     case 'rotate': sound.play('rotate'); break;
     case 'hold': sound.play('hold'); break;
+    case 'bomb': {
+      sound.play('explosion');
+      shake.add(0.9);
+      intensity.event('harddrop');
+      const cells = e.cells ?? [];
+      if (cells.length > 0) {
+        const lo = Math.min(...cells.map((c) => c.y));
+        const hi = Math.max(...cells.map((c) => c.y));
+        flash.flash(lo, hi - lo + 1);
+      }
+      for (const c of cells) {
+        const q = cellToWorld(c.x, c.y);
+        board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0xffb03a, 9, 3.6, 3.8);
+        board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0xe04e39, 5, 2.8, 3.0);
+      }
+      hud.toast('💣 BOOM — 2 filas reventadas', 1700);
+      break;
+    }
+    case 'bolt': {
+      sound.play('thunder');
+      shake.add(0.6);
+      const cells = e.cells ?? [];
+      if (cells.length > 0) {
+        const ys = cells.map((c) => c.y);
+        flash.flash(Math.min(...ys), Math.max(...ys) - Math.min(...ys) + 1);
+        for (const c of cells) {
+          const q = cellToWorld(c.x, c.y);
+          board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0xffd23f, 8, 3.0, 3.2);
+        }
+      }
+      hud.toast('⚡ Rayo — ' + cells.length + ' bloques rotos', 1700);
+      break;
+    }
+    case 'drill': {
+      sound.play('lock');
+      shake.add(0.35);
+      for (const c of e.cells ?? []) {
+        const q = cellToWorld(c.x, c.y);
+        board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0x9aa7ff, 10, 3.2, 3.2);
+      }
+      hud.toast('🔩 Taladro — se hunde 2 filas', 1500);
+      break;
+    }
     case 'harddrop':
       sound.play('harddrop');
       intensity.event('harddrop');
@@ -217,40 +263,63 @@ function handleEvent(e: GameEvent): void {
       break;
   }
 }
-const engine = new TetrisEngine({ onEvent: handleEvent });
+function currentMode(): GameMode {
+  const sel = document.querySelector<HTMLInputElement>('input[name="game-mode"]:checked');
+  return sel && sel.value === 'chaos' ? 'chaos' : 'classic';
+}
+function syncModePicker(): void {
+  const radios = document.querySelectorAll<HTMLInputElement>('input[name="game-mode"]');
+  radios.forEach((r) => { r.checked = (r.value === gameMode); });
+}
+let engine = new TetrisEngine({
+  mode: gameMode,
+  seed: chaosSeed, onEvent: handleEvent });
 /* Previews solo cambian al spawnear/holdear: los canvas 2D no se repintan si no cambian. */
 let lastNextKey = '';
 let lastHoldKey = '';
 function refreshPreviews(): void {
   const next = engine.peekNext(3);
-  const nk = next.join('');
+  const upcoming = engine.peekSpecial();
+  const nk = 'N:' + next.join('') + ':' + String(upcoming);
   if (nk !== lastNextKey) {
     lastNextKey = nk;
-    drawNext(nextCanvas, next);
+    drawNext(nextCanvas, next, upcoming);
   }
-  const hk = String(engine.holdKind) + ':' + engine.canHold;
+  const hk = String(engine.holdKind) + ':' + engine.canHold + ':' + String(engine.holdSpecial);
   if (hk !== lastHoldKey) {
     lastHoldKey = hk;
-    drawHold(holdCanvas, engine.holdKind, engine.canHold);
+    drawHold(holdCanvas, engine.holdKind, engine.canHold, engine.holdSpecial);
   }
 }
 function showStart(): void {
+  syncModePicker();
+  hud.setModeChip(gameMode === 'chaos' ? 'Caos' : 'Tradicional');
+  hud.setChaosStatus('');
   hud.showOverlay('TETRIS 3D', 'Pulsa <span class="key">Enter</span> o haz clic en Jugar', '', true);
 }
 function showGameOver(): void {
   const theme = stage.theme();
+  gameMode = engine.mode; // Reiniciar conserva el modo; el selector sigue editable
+  syncModePicker();
   hud.showOverlay(
     'FIN DEL JUEGO',
     'Pulsa <span class="key">Enter</span> o <span class="key">R</span> para reintentar',
-    '<strong>' + engine.score.toLocaleString('es') + '</strong> pts · Nivel ' + engine.level +
+    '<strong>' + engine.score.toLocaleString('es') + '</strong> pts · Nivel ' + engine.level + ' · Modo ' + (engine.mode === 'chaos' ? 'Caos' : 'Tradicional') +
       ' (' + theme.icon + ' ' + theme.name + ') · ' + engine.lines + ' líneas'
   );
 }
 function startGame(): void {
+  gameMode = currentMode();
+  saveGameMode(gameMode);
+  chaosSeed = randomSeed();
+  lastSpecialV = -1;
+  hud.setModeChip(gameMode === 'chaos' ? 'Caos' : 'Tradicional');
+  hud.setChaosStatus('');
   const lv = startLevel();
+  engine = new TetrisEngine({ mode: gameMode, seed: chaosSeed, onEvent: handleEvent });
   engine.start(lv);
   board.reset();
-  board.setActive(engine.active?.kind ?? 'T', engine.activeCells(), true);
+  board.setActive(engine.active?.kind ?? 'T', engine.activeCells(), true, engine.special);
   stage.setLevel(lv, true);
   // Reinicio/nueva partida: la música vuelve a la calma con una canción nueva
   // elegida entre las semillas curadas (la semilla se loguea para reproducirla).
@@ -301,8 +370,8 @@ function toggleHelp(): void {
   syncMusicPause();
 }
 const input = new InputManager({
-  onLeft: () => { engine.move(-1); },
-  onRight: () => { engine.move(1); },
+    onLeft: () => { engine.move(-1); },
+    onRight: () => { engine.move(1); },
   onDown: () => { engine.moveDown(); },
   onRotateCW: () => { engine.rotate(1); },
   onRotateCCW: () => { engine.rotate(-1); },
@@ -388,6 +457,7 @@ let musicAcc = 0;
 /* Dirty-flag: la vista solo sincroniza tablero/pieza cuando el motor cambió. */
 let lastGridV = -1;
 let lastPieceV = -1;
+let lastSpecialV = -1;
 const musicSig: IntensitySignals = { stackHeight: 0, level: 0, levelProgress: 0, combo: 0 };
 /* Encuadre del área de juego: solo se recalcula al cambiar de formato o modo. */
 let frameKey = '';
@@ -399,9 +469,10 @@ function currentFrame(): Frame {
   // Bandas de UI (fracción del alto) que se solapan con la columna del tablero:
   // tira HUD arriba; en vertical táctil también los botones de abajo.
   const top = (compact ? 60 : 0) / h;
-  // Vertical táctil: el cluster izquierdo (rotación sobre ◀/▶) ocupa ~186 px
-  // abajo y el derecho (HOLD + ⇊) ~158: banda inferior para que no tape celdas.
-  const bottom = (touch && compact && camera.aspect < 1 ? 190 : 0) / h;
+  // Vertical táctil: el cluster izquierdo (rotación sobre ◀/▶ grandes) ocupa
+  // ~166 px abajo y el derecho (HOLD aislada + ⇊ grande en la esquina) ~198:
+  // banda inferior para que no tape celdas.
+  const bottom = (touch && compact && camera.aspect < 1 ? 200 : 0) / h;
   const key = camera.aspect + ':' + top + ':' + bottom;
   if (key !== frameKey) {
     frameKey = key;
@@ -432,8 +503,17 @@ function animate(now: number): void {
     if (engine.pieceVersion !== lastPieceV) {
       lastPieceV = engine.pieceVersion;
       if (engine.active) {
-        board.setActive(engine.active.kind, engine.activeCells());
-        board.setGhost(engine.ghostCells());
+        const sp = engine.special;
+        board.setActive(engine.active.kind, engine.activeCells(), false, sp);
+        const label = sp === 'bomb' ? '💣 Bomba · revienta 2 filas'
+          : sp === 'bolt' ? '⚡ Rayo · rompe 4 bloques'
+          : sp === 'drill' ? '🔩 Taladro · se hunde 2 filas' : '';
+        if (sp && engine.pieceVersion !== lastSpecialV) {
+          lastSpecialV = engine.pieceVersion;
+          hud.toast('Pieza especial: ' + label, 1600);
+        }
+        hud.setChaosStatus(label);
+        board.setGhost(engine.ghostCells(), sp);
       }
     }
     // Único punto donde el juego alimenta la música: intensidad suavizada por frame.

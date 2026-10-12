@@ -26,6 +26,16 @@ export interface ActivePiece {
 
 export type GamePhase = 'ready' | 'playing' | 'paused' | 'gameover';
 
+export type GameMode = 'classic' | 'chaos';
+
+export interface GameResult {
+  score: number;
+  level: number;
+  lines: number;
+  mode: GameMode;
+  seed?: number;
+}
+
 export type GameEventType =
   | 'move'
   | 'rotate'
@@ -35,7 +45,10 @@ export type GameEventType =
   | 'levelup'
   | 'gameover'
   | 'hold'
-  | 'combo';
+  | 'combo'
+  | 'bomb'
+  | 'bolt'
+  | 'drill';
 
 export interface GameEvent {
   type: GameEventType;
@@ -66,6 +79,16 @@ export const LINES_PER_LEVEL = 10;
 export const SECONDS_PER_LEVEL = 45;
 /** Level cap: gravity, gauge and stage themes stop progressing here. */
 export const MAX_LEVEL = 20;
+
+/* --- Modo caos: piezas especiales (unico mecanico del modo) --- */
+/** Probabilidad de que la proxima pieza nazca especial. */
+export const SPECIAL_PROBABILITY = 0.07;
+/** Bomba: filas que revienta al bloquearse (la de aterrizaje y la contigua). */
+export const BOMB_ROWS = 2;
+/** Rayo: bloques que rompe bajo la pieza (los mas altos de su base). */
+export const BOLT_BREAKS = 4;
+/** Taladro: filas que se hunde destruyendo los bloques bajo su base. */
+export const DRILL_DEPTH = 2;
 
 export interface LevelProgress {
   /** 0..1 progress toward the next level (largest of lines/time). */
