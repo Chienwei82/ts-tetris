@@ -5,6 +5,7 @@ import { THEMES, themeIndexForLevel } from './themes.js';
 import type { StageTheme } from './themes.js';
 import { WeatherSystem } from './weather.js';
 import { Characters } from './characters.js';
+import { WindSystem } from './fx/windSystem.js';
 
 export interface StageOptions { onThunder?: () => void }
 
@@ -14,6 +15,12 @@ export interface Stage {
   /** Off = classic static background: no theme motion, weather or characters. */
   setEffectsEnabled(on: boolean, immediate?: boolean): void;
   effectsEnabled(): boolean;
+  /** Lluvia de una tormenta del Caos: capa de lluvia y ambiente más oscuro. */
+  setRain(on: boolean): void;
+  /** Viento de una tormenta del Caos; `null` lo detiene. */
+  setWind(dir: -1 | 1 | null): void;
+  /** Ráfaga puntual de viento (acelera partículas un instante). */
+  gust(dir: -1 | 1): void;
   /** Theme currently being displayed (target of the running transition). */
   theme(): StageTheme;
   update(dt: number): void;
@@ -27,6 +34,7 @@ const KEY_GRADE = 1.28;
 export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   const weather = new WeatherSystem(parts.scene);
   const characters = new Characters(parts.scene);
+  const windFx = new WindSystem(parts.scene);
 
   // Additive sky flash used by storm lightning.
   const flashMat = new THREE.MeshBasicMaterial({
@@ -52,6 +60,12 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   let thunderIn = -1;
   let nextStrike = 5 + Math.random() * 6;
   let skyTick = false;
+  /* Tormentas del Caos: intención (reglas) separada del fundido visual. */
+  let rainWanted = false;
+  let windWanted: -1 | 1 | null = null;
+  let rainK = 0;
+  const RAIN_FOG = new THREE.Color(0x46566a);
+  const fogBase = new THREE.Color();
 
   const scratch = new THREE.Color();
   const tmpColor = new THREE.Color();
@@ -79,6 +93,8 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
     mixHex(a.fog.color, b.fog.color, t, parts.fog.color);
     parts.fog.near = a.fog.near + (b.fog.near - a.fog.near) * t;
     parts.fog.far = a.fog.far + (b.fog.far - a.fog.far) * t;
+    // Guardamos la niebla del tema: la lluvia la oscurece encima sin pisarla.
+    fogBase.copy(parts.fog.color);
     for (let i = 0; i < parts.hills.length; i++) {
       const mesh = parts.hills[i];
       if (!mesh) continue;
@@ -163,8 +179,8 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   /** Keeps light intensities in sync with the current base values and any flash. */
   function updateLightFlash(): void {
     const f = enabled ? flashK : 0;
-    parts.key.intensity = baseKey * (1 + 1.8 * f);
-    parts.hemi.intensity = baseHemi * (1 + 0.7 * f);
+    parts.key.intensity = baseKey * (1 + 1.8 * f) * (1 - 0.42 * rainK);
+    parts.hemi.intensity = baseHemi * (1 + 0.7 * f) * (1 - 0.3 * rainK);
   }
 
   startTransition(themeIndexForLevel(level), true);
@@ -181,21 +197,49 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
         // Classic frozen background: day palette, extras hidden and paused.
         startTransition(0, true);
         weather.setEnabled(false, true);
+        weather.setOverlay(null, true);
         characters.setEnabled(false);
+        characters.setGust(null);
+        characters.setShelter(false);
+        windFx.setEnabled(false);
+        rainK = 0;
         flashK = 0;
         flashMat.opacity = 0;
         flash.visible = false;
       } else {
         weather.setEnabled(true, true);
+        weather.setOverlay(rainWanted ? 'storm' : null, true);
         characters.setEnabled(true);
+        characters.setShelter(rainWanted);
+        characters.setGust(windWanted);
+        if (windWanted) windFx.setDirection(windWanted);
+        else windFx.setEnabled(false);
         startTransition(themeIndexForLevel(level), immediate);
       }
       syncVisibility();
     },
     effectsEnabled(): boolean { return enabled; },
+    setRain(on: boolean): void {
+      rainWanted = on;
+      if (enabled) weather.setOverlay(on ? 'storm' : null);
+    },
+    setWind(dir: -1 | 1 | null): void {
+      windWanted = dir;
+      if (!enabled) return;
+      if (dir === null) windFx.setEnabled(false);
+      else windFx.setDirection(dir);
+      characters.setGust(dir);
+    },
+    gust(dir: -1 | 1): void {
+      if (enabled) windFx.gust(dir);
+    },
     theme(): StageTheme { return themeAt(toIdx); },
     update(dt: number): void {
       time += dt;
+      // La lluvia oscurece la niebla del tema con un fundido corto.
+      const rainTarget = enabled && rainWanted ? 1 : 0;
+      rainK += (rainTarget - rainK) * Math.min(1, dt * 2.6);
+      if (Math.abs(rainK - rainTarget) < 0.002) rainK = rainTarget;
       if (enabled) {
         if (transitioning) {
           k = Math.min(1, k + dt / TRANSITION_SECONDS);
@@ -221,6 +265,9 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
         characters.update(dt);
         lightning(dt);
       }
+      if (rainK > 0.001) parts.fog.color.copy(fogBase).lerp(RAIN_FOG, rainK * 0.55);
+      else parts.fog.color.copy(fogBase);
+      windFx.update(dt);
       updateLightFlash();
     }
   };

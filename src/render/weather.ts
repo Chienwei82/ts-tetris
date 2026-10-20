@@ -382,6 +382,8 @@ export class WeatherSystem {
   private readonly aurora = new AuroraBands();
   private readonly shooting = new ShootingStars();
   private kind: WeatherKind = 'clear';
+  /** Capa extra de clima (tormentas del Caos) sin perder el clima del tema. */
+  private overlay: WeatherKind | null = null;
   private enabled = true;
   constructor(scene: THREE.Scene) {
     const rainTex = rainTexture();
@@ -426,10 +428,24 @@ export class WeatherSystem {
   get weather(): WeatherKind { return this.kind; }
   setWeather(kind: WeatherKind, immediate = false): void {
     this.kind = kind;
-    const active = new Set(this.byKind[kind]);
+    this.applyKinds(immediate);
+  }
+  /** Añade/retira una capa de clima temporal (la lluvia de una tormenta del Caos). */
+  setOverlay(kind: WeatherKind | null, immediate = false): void {
+    if (this.overlay === kind) return;
+    this.overlay = kind;
+    this.applyKinds(immediate);
+  }
+  /** Une el clima del escenario y la capa temporal en un solo set de campos. */
+  private applyKinds(immediate: boolean): void {
+    const active = new Set<FallField>();
+    for (const f of this.byKind[this.kind]) active.add(f);
+    if (this.overlay) for (const f of this.byKind[this.overlay]) active.add(f);
     for (const f of this.allFields) f.setTarget(active.has(f), immediate);
-    this.aurora.setTarget(kind === 'aurora', immediate);
-    this.shooting.setActive(kind === 'cosmos' && this.enabled);
+    const aurora = this.kind === 'aurora' || this.overlay === 'aurora';
+    const cosmos = this.kind === 'cosmos' || this.overlay === 'cosmos';
+    this.aurora.setTarget(aurora, immediate);
+    this.shooting.setActive(cosmos && this.enabled);
   }
   setEnabled(on: boolean, immediate = false): void {
     this.enabled = on;
@@ -438,7 +454,7 @@ export class WeatherSystem {
       this.aurora.setTarget(false, true);
       this.shooting.setActive(false);
     } else {
-      this.setWeather(this.kind, immediate);
+      this.applyKinds(immediate);
     }
   }
   update(dt: number, wind: number): void {
