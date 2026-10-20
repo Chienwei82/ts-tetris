@@ -31,6 +31,7 @@
         <p id="gauge-caption">0/10 líneas · 0:00/0:45</p>
         <span id="mode-chip">Tradicional</span>
         <span id="stage-chip">☀️ Pradera</span>
+        <span id="debris-chip" class="hidden">🧱 Escombros</span>
       </div>
       <div class="stat"><label>Siguiente</label><canvas id="next" width="160" height="190"></canvas></div>
       <div class="stat"><label>Reserva <span class="key">C</span></label><canvas id="hold" width="160" height="80"></canvas></div>
@@ -68,6 +69,19 @@
           <div class="range-row">
             <input id="level-range" type="range" min="1" max="20" step="1" value="1" />
             <output id="level-range-out">1 · ☀️ Pradera</output>
+          </div>
+          <label class="check-row" for="debris-classic">
+            <input type="checkbox" id="debris-classic" />
+            <span>🧱 Escombros también en Tradicional</span>
+          </label>
+          <p class="option-hint">En Caos están activos por defecto. La calidad se puede ajustar abajo.</p>
+          <div class="quality-row">
+            <label for="fx-quality">Calidad de efectos</label>
+            <select id="fx-quality">
+              <option value="low">Baja</option>
+              <option value="medium">Media</option>
+              <option value="high">Alta</option>
+            </select>
           </div>
         </div>
         <div class="btn-row">

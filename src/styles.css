@@ -117,6 +117,8 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #mode-picker input { accent-color: var(--red); width: 16px; height: 16px; }
 #mode-chip { display: inline-block; background: var(--blue); color: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 1px 10px; font-size: 11px; font-weight: 700; letter-spacing: 1px; margin-right: 6px; text-shadow: none; }
 #stage-chip { display: inline-block; }
+#debris-chip { display: inline-block; margin-left: 4px; padding: 1px 8px; background: #c9a36a; color: var(--ink); border: 1.5px solid var(--ink); border-radius: 8px; font-size: 11px; font-weight: 700; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.2); transform: rotate(1deg); }
+#debris-chip.hidden { display: none; }
 #chaos-status { margin-top: 10px; padding: 6px 10px; background: var(--red); color: #fff; border: 2px solid var(--ink); border-radius: 10px; font-weight: 700; font-size: 14px; text-align: center; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.3); }
 #chaos-status.hidden { display: none; }
 #start-options { margin: 18px auto 0; max-width: 330px; text-align: left; }
@@ -133,6 +135,12 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #level-range::-moz-range-track { height: 10px; border: 2px solid var(--ink); border-radius: 7px; background: var(--paper); }
 #level-range::-moz-range-thumb { width: 18px; height: 18px; border: 2px solid var(--ink); border-radius: 50%; background: var(--red); box-shadow: 1px 2px 0 rgba(var(--shadow), 0.3); }
 #level-range-out { font-weight: 700; font-size: 14px; color: var(--ink); white-space: nowrap; }
+#start-options .check-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--ink); font-weight: 600; cursor: pointer; }
+#start-options .check-row input { accent-color: var(--red); width: 16px; height: 16px; }
+#start-options .option-hint { margin: 0 0 12px; font-size: 11px; line-height: 1.35; color: var(--muted); font-weight: 500; }
+#start-options .quality-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+#start-options .quality-row label { margin-bottom: 0; }
+#fx-quality { font: inherit; font-size: 13px; font-weight: 700; color: var(--ink); background: var(--paper-hi); border: 2px solid var(--ink); border-radius: 9px; padding: 3px 8px; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.22); cursor: pointer; }
 
 /* Level-up banner */
 #level-banner {

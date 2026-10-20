@@ -14,6 +14,7 @@ export class HUD {
   private bannerEl: HTMLElement;
   private bannerTitleEl: HTMLElement;
   private modeChipEl: HTMLElement | null;
+  private debrisChipEl: HTMLElement | null;
   private chaosEl: HTMLElement | null;
   private toastQueue: string[] = [];
   private toastBusy = false;
@@ -41,6 +42,7 @@ export class HUD {
     this.bannerEl = q('level-banner'); this.bannerTitleEl = q('level-banner-title'); this.bannerSubEl = q('level-banner-sub');
     const qc = (id: string): HTMLElement | null => document.getElementById(id);
     this.modeChipEl = qc('mode-chip'); this.chaosEl = qc('chaos-status');
+    this.debrisChipEl = qc('debris-chip');
   }
   setStats(score: number, level: number, lines: number): void {
     if (score !== this.lastScore) {
@@ -111,6 +113,10 @@ export class HUD {
   }
   setModeChip(mode: string): void {
     if (this.modeChipEl && this.modeChipEl.textContent !== mode) this.modeChipEl.textContent = mode;
+  }
+  /** Chip que indica que los escombros están activos (útil en Tradicional). */
+  setDebrisChip(on: boolean): void {
+    if (this.debrisChipEl) this.debrisChipEl.classList.toggle('hidden', !on);
   }
   /** Especial activo de la pieza (chip). '' oculta. */
   setChaosStatus(text: string): void {

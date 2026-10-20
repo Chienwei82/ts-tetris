@@ -7,6 +7,10 @@ import type { GameEvent, GameMode, LevelProgress, PieceKind } from './game/types
 import { BoardRenderer } from './render/boardRenderer.js';
 import { cellToWorld, MAX_FPS, pxPerCell } from './render/constants.js';
 import { CameraShake, ClearFlash } from './render/effects.js';
+import { debrisActive } from './render/fx/debrisMode.js';
+import { DebrisSystem } from './render/fx/debrisSystem.js';
+import { isFxQuality } from './render/fx/fxQuality.js';
+import type { FxQuality } from './render/fx/fxQuality.js';
 import { frameFor } from './render/framing.js';
 import type { Frame } from './render/framing.js';
 import { refreshPointScales } from './render/particles.js';
@@ -28,7 +32,7 @@ import { InputManager } from './ui/inputManager.js';
 import { ModeSelect } from './ui/modeSelect.js';
 import { HUD } from './ui/hud.js';
 import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
-import { loadEffectsEnabled, loadGameMode, loadMusicEnabled, loadMusicGenre, saveEffectsEnabled, saveGameMode, saveMusicEnabled, saveMusicGenre } from './ui/settings.js';
+import { loadEffectsEnabled, loadGameMode, loadMusicEnabled, loadMusicGenre, loadDebrisClassic, loadFxQuality, prefersReducedMotion, saveEffectsEnabled, saveGameMode, saveMusicEnabled, saveMusicGenre, saveDebrisClassic, saveFxQuality } from './ui/settings.js';
 import { randomSeed } from './game/rng.js';
 import { MusicMenu } from './ui/musicMenu.js';
 import { initAnalytics } from './analytics.js';
@@ -45,6 +49,8 @@ const holdCanvas = el<HTMLCanvasElement>('hold');
 const levelRange = el<HTMLInputElement>('level-range');
 const levelRangeOut = el<HTMLOutputElement>('level-range-out');
 const btnEffects = el<HTMLButtonElement>('btn-effects');
+const debrisClassicCheck = el<HTMLInputElement>('debris-classic');
+const fxQualitySelect = el<HTMLSelectElement>('fx-quality');
 const btnMusic = el<HTMLButtonElement>('btn-music');
 const hud = new HUD();
 let gameMode: GameMode = loadGameMode();
@@ -64,6 +70,12 @@ new ViewportManager(renderer, camera, canvas, { onChange: refreshPointScales });
 const board = new BoardRenderer(scene);
 const flash = new ClearFlash(scene, 10);
 const shake = new CameraShake();
+/* Calidad de efectos: preferencia guardada o preset según dispositivo. */
+const fallbackQuality: FxQuality = device.kind === 'desktop' ? 'high' : device.kind === 'tablet' ? 'medium' : 'low';
+let fxQuality: FxQuality = loadFxQuality(fallbackQuality);
+const debris = new DebrisSystem(scene, { quality: fxQuality });
+let debrisInClassic = loadDebrisClassic();
+let debrisOn = false;
 const stage = createStage(parts, { onThunder: () => sound.play('thunder') });
 let lastThemeIdx = 0;
 function fmtClock(seconds: number): string {
@@ -98,12 +110,29 @@ levelRange.addEventListener('input', refreshLevelOut);
 /* Background-effects toggle: off = classic static diorama (saves every per-frame
    extra) and a solid board backdrop (no blending/sorting). */
 let effectsOn = true;
+/**
+ * Activación de escombros: Caos por defecto, Tradicional con opt-in, y nunca
+ * con efectos apagados o movimiento reducido. Es la única puerta de entrada.
+ */
+function applyDebrisSettings(): void {
+  const inRun = engine.phase === 'playing' || engine.phase === 'paused' || engine.phase === 'gameover';
+  const active = debrisActive({
+    mode: inRun ? gameMode : currentMode(),
+    classicOptIn: debrisInClassic,
+    effectsOn,
+    reducedMotion: prefersReducedMotion()
+  });
+  debrisOn = active;
+  debris.setEnabled(active);
+  hud.setDebrisChip(active);
+}
 function applyEffects(on: boolean, immediate = false, persist = true): void {
   effectsOn = on;
   stage.setEffectsEnabled(on, immediate);
   // Con efectos el panel del tablero es translúcido (se ve el diorama detrás de
   // las piezas); sin ellos vuelve a ser sólido para ahorrar blending.
   board.setBackdropTranslucent(on);
+  applyDebrisSettings();
   const label = on ? '✨ Efectos: ON' : '✨ Efectos: OFF';
   const labelEl = btnEffects.querySelector('.bb-label');
   if (labelEl) labelEl.textContent = label.replace('✨', '');
@@ -228,7 +257,10 @@ function handleEvent(e: GameEvent): void {
       if (rows.length > 0) {
         const lo = Math.min(...rows); const hi = Math.max(...rows);
         flash.flash(lo, hi - lo + 1);
-        board.playClear(rows);
+        // Con escombros activos, ellos sustituyen los bloques voladores y la
+        // ráfaga de scraps: una sola lectura del estado del tablero.
+        const cleared = board.playClear(rows, { launch: !debrisOn, particles: !debrisOn });
+        if (debrisOn) debris.spawnCells(cleared);
       }
       break;
     }
@@ -319,6 +351,8 @@ function startGame(): void {
   engine = new TetrisEngine({ mode: gameMode, seed: chaosSeed, onEvent: handleEvent });
   engine.start(lv);
   board.reset();
+  debris.clear();
+  applyDebrisSettings();
   board.setActive(engine.active?.kind ?? 'T', engine.activeCells(), true, engine.special);
   stage.setLevel(lv, true);
   // Reinicio/nueva partida: la música vuelve a la calma con una canción nueva
@@ -442,6 +476,24 @@ refreshGauge();
 const firstTheme = THEMES[0];
 if (firstTheme) hud.setStageChip(firstTheme.icon + ' ' + firstTheme.name);
 refreshPreviews();
+/* Escombros: opt-in en Tradicional + calidad persistida. */
+debrisClassicCheck.checked = debrisInClassic;
+fxQualitySelect.value = fxQuality;
+debrisClassicCheck.addEventListener('change', () => {
+  debrisInClassic = debrisClassicCheck.checked;
+  saveDebrisClassic(debrisInClassic);
+  applyDebrisSettings();
+});
+fxQualitySelect.addEventListener('change', () => {
+  const value = fxQualitySelect.value;
+  if (!isFxQuality(value)) return;
+  fxQuality = value;
+  saveFxQuality(value);
+  debris.setQuality(value);
+});
+for (const radio of document.querySelectorAll<HTMLInputElement>('input[name="game-mode"]')) {
+  radio.addEventListener('change', () => { if (engine.phase === 'ready') applyDebrisSettings(); });
+}
 applyEffects(loadEffectsEnabled(), true, false);
 applyMusic(loadMusicEnabled(), false);
 applyGenre(initialGenre, false);
@@ -529,6 +581,9 @@ function animate(now: number): void {
   }
   // Sombras bajo demanda: solo se re-renderiza el shadow map si hubo movimiento.
   if (board.update(rawDt)) renderer.shadowMap.needsUpdate = true;
+  // Los escombros se congelan con la pausa/ayuda, igual que el resto de efectos.
+  debris.setPaused(engine.phase === 'paused' || helpOpen);
+  debris.update(rawDt);
   stage.update(rawDt);
   flash.update(rawDt);
   const s = shake.update(rawDt);

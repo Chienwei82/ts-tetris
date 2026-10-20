@@ -27,7 +27,7 @@ npm run dev      # local: http://localhost:5173 · LAN: http://<tu-IP>:5173
 ```
 
 ```bash
-npm test         # tests de lógica (vitest 5, 108 tests)
+npm test         # tests de lógica (vitest 5, 120 tests)
 npm run build    # type-check (tsc 7 nativo) + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
@@ -115,6 +115,12 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   sombras se recortan contra él); sin ellos vuelve a ser sólido para ahorrar
   render. La preferencia se guarda en `localStorage` y arranca apagada si el
   sistema pide movimiento reducido.
+- **Escombros cosméticos** (Caos por defecto; en Tradicional se activan con la
+  casilla de la pantalla de inicio): cada celda eliminada se convierte en un
+  cubito con gravedad, rebote y giro propios que se desvanece en 1–2 s. El
+  sistema tiene pool fijo, recicla los cuerpos más antiguos al superar el
+  límite, usa un RNG de efectos independiente del motor y respeta la calidad
+  baja/media/alta y `prefers-reduced-motion`. No altera el tablero ni las reglas.
 - **Música procedural adaptativa** (botón o tecla M): generada en vivo con la
   Web Audio API, sin ficheros. Escala dórica de La; cada semilla fija una
   canción con variación (3 progresiones × 6 grooves × 4 rotaciones = 72
@@ -151,6 +157,13 @@ src/
     boardRenderer.ts Cubos con pool, fantasma, marco de cartón, washi tape y panel traslúcido
     particles.ts    Confeti de papel (ráfagas + ambiente) con shader propio y alpha global
     effects.ts      Vibración de cámara, destello de línea
+    fx/             Efectos cosméticos reutilizables
+      debrisConfig.ts   Valores ajustables: física, duraciones, capacidad y presets de calidad
+      debrisSimulation.ts Física pura de escombros: gravedad, rebote, giro, fade y pool FIFO
+      debrisSystem.ts   InstancedMesh con color/alfa por instancia; API spawnBurst/spawnCells
+      debrisMode.ts     Activación Caos/Tradicional/efectos/movimiento reducido (pura)
+      fxRandom.ts       RNG exclusivo de efectos, independiente de la semilla del juego
+      fxQuality.ts      Tipo y validación de la calidad de efectos
     materials.ts    Texturas procedurales (papel, cartón, cuadrícula, cinta) + toon + tinta
   ui/         Entrada con DAS/ARR, gestos de arrastre de la pieza, HUD, previews 2D, preferencias
   platform/   Detección de dispositivo (escritorio/móvil/tableta) y ViewportManager
