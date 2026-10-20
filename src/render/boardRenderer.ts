@@ -18,6 +18,18 @@ interface LockedCell {
   x: number;
   y: number;
 }
+/** Celda que desaparece al limpiar una fila, ya en coordenadas de mundo. */
+export interface ClearedCell {
+  kind: PieceKind;
+  x: number;
+  y: number;
+}
+export interface ClearOptions {
+  /** Animar los bloques volando (por defecto true). */
+  launch?: boolean;
+  /** Ráfaga de partículas por bloque (por defecto true). */
+  particles?: boolean;
+}
 /** Especiales: objetos literales (💣/⚡/🔩). Se dibujan como UN sprite grande,
  *  jamas como bloques de pieza con tintes. */
 const SPECIAL_ICON: Record<string, string> = { bomb: '💣', bolt: '⚡', drill: '🔩' };
@@ -404,7 +416,16 @@ export class BoardRenderer {
     }
     this.shadowDirty = true;
   }
-  playClear(rows: number[]): void {
+  /**
+   * Limpia las filas y devuelve las celdas que desaparecieron (mundo + tipo),
+   * para que el render pueda lanzar escombros sin conocer el estado interno.
+   * Con `launch: false` no crea bloques voladores y con `particles: false`
+   * omite la ráfaga de scraps: los escombros sustituyen ambos efectos.
+   */
+  playClear(rows: number[], opts: ClearOptions = {}): ClearedCell[] {
+    const launch = opts.launch ?? true;
+    const spawnParticles = opts.particles ?? true;
+    const cleared: ClearedCell[] = [];
     for (const r of rows) {
       const meshes: THREE.Group[] = [];
       // Materialize the row's instances as regular blocks so they can fly away.
@@ -412,11 +433,14 @@ export class BoardRenderer {
         const k = this.key(c, r);
         const cell = this.lockedState.get(k);
         if (!cell) continue;
-        const g = this.makeBlock(cell.kind);
-        g.position.set(cell.x, cell.y, 0);
-        g.rotation.z = cell.tilt;
-        this.group.add(g);
-        meshes.push(g);
+        cleared.push({ kind: cell.kind, x: cell.x, y: cell.y });
+        if (launch) {
+          const g = this.makeBlock(cell.kind);
+          g.position.set(cell.x, cell.y, 0);
+          g.rotation.z = cell.tilt;
+          this.group.add(g);
+          meshes.push(g);
+        }
         this.lockedState.delete(k);
       }
       // The piece that just locked is still animating in `lockAnims`: let those
@@ -424,23 +448,35 @@ export class BoardRenderer {
       for (let i = this.lockAnims.length - 1; i >= 0; i--) {
         const a = this.lockAnims[i];
         if (!a || a.row !== r) continue;
-        meshes.push(a.mesh);
+        const kind = (a.mesh.userData.kind as PieceKind | undefined) ?? 'I';
+        cleared.push({ kind, x: a.mesh.position.x, y: a.mesh.position.y });
+        if (launch) {
+          meshes.push(a.mesh);
+        } else {
+          this.group.remove(a.mesh);
+          this.pullFree.push(a.mesh);
+          a.mesh.visible = false;
+        }
         this.lockAnims.splice(i, 1);
       }
       // A second clear on the same row index while the first animates would
       // overwrite the entry and orphan its meshes: recycle them first.
       const prev = this.clearingRows.get(r);
       if (prev) for (const m of prev.meshes) { this.group.remove(m); this.pullFree.push(m); m.visible = false; }
-      this.clearingRows.set(r, { t: 0, meshes });
+      if (launch) this.clearingRows.set(r, { t: 0, meshes });
+      else this.clearingRows.delete(r);
       // One scrap burst per block, tinted with the block's own color: the engine
       // grid has already collapsed when this runs, so it cannot be trusted.
-      for (const m of meshes) {
-        const kind = m.userData.kind as PieceKind | undefined;
-        const hex = kind ? PIECE_COLORS[kind] : 0xffffff;
-        this.particles.burst(new THREE.Vector3(m.position.x, m.position.y, 0.6), hex, 7, 3.2, 3.4);
+      if (spawnParticles) {
+        for (const m of meshes) {
+          const kind = m.userData.kind as PieceKind | undefined;
+          const hex = kind ? PIECE_COLORS[kind] : 0xffffff;
+          this.particles.burst(new THREE.Vector3(m.position.x, m.position.y, 0.6), hex, 7, 3.2, 3.4);
+        }
       }
     }
     this.rebuildLocked();
+    return cleared;
   }
   /** Advances animations; returns true when shadow-casting geometry moved. */
   update(dt: number): boolean {

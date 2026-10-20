@@ -1,6 +1,11 @@
+import { isFxQuality } from '../render/fx/fxQuality.js';
+import type { FxQuality } from '../render/fx/fxQuality.js';
+
 const STORAGE_KEY = 'tetris-3d:fx';
 const MODE_KEY = 'tetris-3d:controls';
 const MUSIC_KEY = 'tetris-3d:music';
+const DEBRIS_CLASSIC_KEY = 'tetris-3d:debris-classic';
+const FX_QUALITY_KEY = 'tetris-3d:fx-quality';
 
 /** Modo de control elegido por el usuario: teclado/ratón o táctil. */
 export type ControlMode = 'desktop' | 'touch';
@@ -77,4 +82,24 @@ export function loadGameMode(): GameMode {
 }
 export function saveGameMode(mode: GameMode): void {
   try { window.localStorage.setItem(GAME_MODE_KEY, mode); } catch { /* ignore */ }
+}
+
+/** Escombros también en Tradicional (por defecto solo en Caos). */
+export function loadDebrisClassic(): boolean {
+  try { return window.localStorage.getItem(DEBRIS_CLASSIC_KEY) === '1'; } catch { return false; }
+}
+export function saveDebrisClassic(on: boolean): void {
+  try { window.localStorage.setItem(DEBRIS_CLASSIC_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+}
+
+/** Calidad de efectos guardada; usa la del dispositivo como fallback. */
+export function loadFxQuality(fallback: FxQuality): FxQuality {
+  try {
+    const value = window.localStorage.getItem(FX_QUALITY_KEY);
+    if (isFxQuality(value)) return value;
+  } catch { /* storage unavailable */ }
+  return fallback;
+}
+export function saveFxQuality(quality: FxQuality): void {
+  try { window.localStorage.setItem(FX_QUALITY_KEY, quality); } catch { /* ignore */ }
 }
