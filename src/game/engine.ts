@@ -1,12 +1,24 @@
 import { clearFullRows, collides, createGrid, mergePiece } from './board.js';
 import { mulberry32 } from './rng.js';
 import { cellsForPiece, getKicks, shuffledBag } from './pieces.js';
+import { MutatorDirector } from './mutators/director.js';
+import type { MutatorConfig } from './mutators/config.js';
+import type { MutatorEvent, MutatorHost, WindDir } from './mutators/types.js';
 import { BOLT_BREAKS, COLS, DRILL_DEPTH, LINES_PER_LEVEL, LINE_POINTS, MAX_LEVEL, SECONDS_PER_LEVEL, SPECIAL_PROBABILITY, TOTAL_ROWS, VISIBLE_ROWS } from './types.js';
 import type { ActivePiece, GameEvent, GameMode, GamePhase, Grid, LevelProgress, PieceKind, RotationState, Vec2 } from './types.js';
 
 export type SpecialKind = 'bomb' | 'bolt' | 'drill';
 
-export interface EngineOptions { rng?: () => number; onEvent?: (e: GameEvent) => void; mode?: GameMode; seed?: number; }
+export interface EngineOptions {
+  rng?: () => number;
+  onEvent?: (e: GameEvent) => void;
+  mode?: GameMode;
+  seed?: number;
+  /** Eventos del ciclo de tormentas (solo modo Caos). */
+  onMutatorEvent?: (e: MutatorEvent) => void;
+  /** Ajustes de tormentas; los tests aíslan un mutador con `pool`. */
+  mutatorConfig?: Partial<MutatorConfig>;
+}
 const LOCK_DELAY = 0.5;
 const MAX_LOCK_RESETS = 15;
 
@@ -23,7 +35,7 @@ export function gravityInterval(level: number): number {
   return Math.min(1, Math.max(0.03, t));
 }
 
-export class TetrisEngine {
+export class TetrisEngine implements MutatorHost {
   grid: Grid = createGrid();
   active: ActivePiece | null = null;
   queue: PieceKind[] = [];
@@ -38,6 +50,10 @@ export class TetrisEngine {
   readonly mode: GameMode;
   readonly seed?: number;
   special: SpecialKind | null = null;
+  /** Lluvia activa: cada movimiento lateral desliza una celda extra. */
+  slippery = false;
+  /** Ciclo de tormentas del modo Caos (inactivo en Tradicional). */
+  readonly mutators: MutatorDirector;
   /** Especial ya decidido para la proxima pieza: el preview lo anuncia. */
   private pendingSpecial: SpecialKind | null = null;
   /** El taladro se hunde una sola vez por pieza (viaja con ella en el HOLD). */
@@ -50,7 +66,20 @@ export class TetrisEngine {
   private fallAcc = 0; private lockAcc = 0; private lockResets = 0;
   private readonly rng: () => number;
   private readonly onEvent?: (e: GameEvent) => void;
-  constructor(opts: EngineOptions = {}) { this.rng = opts.rng ?? Math.random; this.onEvent = opts.onEvent; this.mode = opts.mode ?? 'classic'; this.seed = opts.seed; this.chaosRng = mulberry32(opts.seed ?? 0); }
+  constructor(opts: EngineOptions = {}) {
+    this.rng = opts.rng ?? Math.random;
+    this.onEvent = opts.onEvent;
+    this.mode = opts.mode ?? 'classic';
+    this.seed = opts.seed;
+    this.chaosRng = mulberry32(opts.seed ?? 0);
+    this.mutators = new MutatorDirector({
+      seed: opts.seed ?? 0,
+      enabled: this.mode === 'chaos',
+      host: this,
+      config: opts.mutatorConfig,
+      onEvent: opts.onMutatorEvent
+    });
+  }
   private emit(e: GameEvent): void { this.onEvent?.(e); }
   /** Starts a run, optionally from a higher difficulty level (clamped 1..MAX_LEVEL). */
   start(startLevel = 1): void {
@@ -60,8 +89,10 @@ export class TetrisEngine {
     this.score = 0; this.lines = 0; this.level = firstLevel; this.combo = -1;
     this.levelTime = 0;
     this.fallAcc = 0; this.lockAcc = 0; this.lockResets = 0; this.softDrop = false;
+    this.slippery = false;
     this.gridVersion++;
     this.pendingSpecial = this.rollSpecial();
+    this.mutators.reset();
     this.refillQueue(); this.phase = 'playing'; this.spawn();
   }
   pause(): void { if (this.phase === 'playing') this.phase = 'paused'; }
@@ -118,6 +149,9 @@ export class TetrisEngine {
   }
   update(dt: number): void {
     if (this.phase !== 'playing' || !this.active) return;
+    // Tormentas del Caos: avisos, viento y lluvia avanzan con el reloj del juego.
+    this.mutators.update(dt);
+    if (this.phase !== 'playing' || !this.active) return;
     // Time pressure: a level also falls behind the player breaks at SECONDS_PER_LEVEL.
     this.levelTime += dt;
     if (this.level < MAX_LEVEL && this.levelTime >= SECONDS_PER_LEVEL) this.levelUp();
@@ -167,14 +201,33 @@ export class TetrisEngine {
   }
   move(dx: -1 | 1): boolean {
     if (this.phase !== 'playing' || !this.active) return false;
-    const next = this.cellsAt(this.active.x + dx, this.active.y);
-    if (collides(this.grid, next)) return false;
-    this.active.x += dx;
+    if (!this.shiftLateral(dx)) return false;
+    // Lluvia: si la celda extra está libre, la pieza se desliza una más. Es
+    // parte de la misma acción (un solo reset de lock delay, un solo evento).
+    if (this.slippery) this.shiftLateral(dx);
     this.pieceVersion++;
     this.emit({ type: 'move' });
     this.resetLockDelay();
     return true;
   }
+  /** Desplaza la pieza una celda si cabe. No emite eventos ni reinicia el lock. */
+  private shiftLateral(dx: -1 | 1): boolean {
+    if (!this.active) return false;
+    const next = this.cellsAt(this.active.x + dx, this.active.y);
+    if (collides(this.grid, next)) return false;
+    this.active.x += dx;
+    return true;
+  }
+  /** Empuje del viento: una celda, sin el deslizamiento extra de la lluvia. */
+  pushWind(dir: WindDir): boolean {
+    if (this.phase !== 'playing' || !this.active) return false;
+    if (!this.shiftLateral(dir)) return false;
+    this.pieceVersion++;
+    this.resetLockDelay();
+    return true;
+  }
+  /** La lluvia activa/desactiva el suelo resbaladizo (lo llama el director). */
+  setSlippery(on: boolean): void { this.slippery = on; }
   moveDown(): boolean {
     if (this.phase !== 'playing' || !this.active) return false;
     const ok = this.stepDown(1);

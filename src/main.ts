@@ -9,6 +9,8 @@ import { cellToWorld, MAX_FPS, pxPerCell } from './render/constants.js';
 import { CameraShake, ClearFlash } from './render/effects.js';
 import { debrisActive } from './render/fx/debrisMode.js';
 import { DebrisSystem } from './render/fx/debrisSystem.js';
+import { createFxRandom } from './render/fx/fxRandom.js';
+import type { MutatorEvent, MutatorId } from './game/mutators/types.js';
 import { isFxQuality } from './render/fx/fxQuality.js';
 import type { FxQuality } from './render/fx/fxQuality.js';
 import { frameFor } from './render/framing.js';
@@ -77,6 +79,14 @@ const debris = new DebrisSystem(scene, { quality: fxQuality });
 let debrisInClassic = loadDebrisClassic();
 let debrisOn = false;
 const stage = createStage(parts, { onThunder: () => sound.play('thunder') });
+/* Tormentas del Caos: estado de presentación; las reglas viven en el motor. */
+const stormShade = el<HTMLDivElement>('storm-shade');
+const windArrow = el<HTMLDivElement>('wind-arrow');
+const windGlyph = el<HTMLSpanElement>('wind-arrow-glyph');
+const stormFxRandom = createFxRandom();
+const MUTATOR_LABEL: Record<MutatorId, string> = { wind: '🌬️ Viento', rain: '🌧️ Lluvia' };
+let activeMutator: MutatorId | null = null;
+let windArrowLeft = 0;
 let lastThemeIdx = 0;
 function fmtClock(seconds: number): string {
   const t = Math.max(0, Math.floor(seconds));
@@ -129,6 +139,9 @@ function applyDebrisSettings(): void {
 function applyEffects(on: boolean, immediate = false, persist = true): void {
   effectsOn = on;
   stage.setEffectsEnabled(on, immediate);
+  // La tormenta oscurece la escena solo con efectos; al apagarlos vuelve el diorama clásico.
+  if (!on) stormShade.classList.remove('on');
+  else if (activeMutator === 'rain') stormShade.classList.add('on');
   // Con efectos el panel del tablero es translúcido (se ve el diorama detrás de
   // las piezas); sin ellos vuelve a ser sólido para ahorrar blending.
   board.setBackdropTranslucent(on);
@@ -142,6 +155,83 @@ function applyEffects(on: boolean, immediate = false, persist = true): void {
   if (persist) saveEffectsEnabled(on);
 }
 btnEffects.addEventListener('click', () => { btnEffects.blur(); sound.unlock(); applyEffects(!effectsOn); });
+
+/* --- Tormentas del Caos: presentación de avisos y ambiente --- */
+function showWindArrow(dir: -1 | 1, seconds: number): void {
+  windGlyph.textContent = dir < 0 ? '←' : '→';
+  windArrow.classList.toggle('left', dir < 0);
+  windArrow.classList.toggle('right', dir > 0);
+  windArrow.classList.add('on');
+  windArrow.setAttribute('aria-label', dir < 0 ? 'Viento hacia la izquierda' : 'Viento hacia la derecha');
+  // La flecha queda visible al menos el aviso completo (>= 1 s) y el empuje.
+  windArrowLeft = Math.max(1, seconds) + 0.35;
+}
+function hideWindArrow(): void {
+  windArrowLeft = 0;
+  windArrow.classList.remove('on');
+}
+function resetStormVisuals(): void {
+  activeMutator = null;
+  hud.setMutatorChip('');
+  hideWindArrow();
+  stage.setRain(false);
+  stage.setWind(null);
+  stormShade.classList.remove('on');
+}
+function handleMutatorEvent(e: MutatorEvent): void {
+  switch (e.kind) {
+    case 'warn':
+      hud.setMutatorChip('⏳ ' + MUTATOR_LABEL[e.mutator] + '…');
+      hud.toast('⛈️ ' + MUTATOR_LABEL[e.mutator] + ' en ' + Math.max(1, Math.ceil(e.seconds)) + ' s', 1600);
+      break;
+    case 'start':
+      activeMutator = e.mutator;
+      hud.setMutatorChip(MUTATOR_LABEL[e.mutator]);
+      if (e.mutator === 'rain') {
+        stage.setWind(null);
+        hideWindArrow();
+        stage.setRain(true);
+        if (effectsOn) stormShade.classList.add('on');
+        hud.toast('🌧️ Lluvia — el suelo resbala', 2200);
+      } else {
+        stage.setRain(false);
+        stormShade.classList.remove('on');
+        hud.toast('🌬️ Viento — empuja la pieza', 2000);
+      }
+      break;
+    case 'wind-warn':
+      stage.setWind(e.dir);
+      showWindArrow(e.dir, e.seconds);
+      break;
+    case 'wind-gust': {
+      stage.gust(e.dir);
+      sound.play('wind');
+      shake.add(0.16);
+      // Papel arrastrado junto a la pieza: solo RNG cosmético.
+      const cells = engine.activeCells();
+      const base = cells[Math.floor(stormFxRandom.range(0, cells.length))];
+      if (base) {
+        const p = cellToWorld(base.x, base.y);
+        const count = 3 + Math.floor(stormFxRandom.range(0, 4));
+        board.particles.burst(new THREE.Vector3(p.x - e.dir * 1.2, p.y + 0.4, 0.6), 0xf4f7fb, count, 2.4, 1.4);
+      }
+      break;
+    }
+    case 'end':
+      activeMutator = null;
+      hud.setMutatorChip('');
+      if (e.mutator === 'rain') {
+        stage.setRain(false);
+        stormShade.classList.remove('on');
+        hud.toast('⛅ La lluvia amaina', 1500);
+      } else {
+        stage.setWind(null);
+        hideWindArrow();
+        hud.toast('⛅ El viento calma', 1500);
+      }
+      break;
+  }
+}
 /* Menu de musica: toggle on/off + selector de genero (popover accesible). */
 let musicOn = true;
 let musicGenre: GenreId = initialGenre;
@@ -305,7 +395,7 @@ function syncModePicker(): void {
 }
 let engine = new TetrisEngine({
   mode: gameMode,
-  seed: chaosSeed, onEvent: handleEvent });
+  seed: chaosSeed, onEvent: handleEvent, onMutatorEvent: handleMutatorEvent });
 /* Previews solo cambian al spawnear/holdear: los canvas 2D no se repintan si no cambian. */
 let lastNextKey = '';
 let lastHoldKey = '';
@@ -327,9 +417,11 @@ function showStart(): void {
   syncModePicker();
   hud.setModeChip(gameMode === 'chaos' ? 'Caos' : 'Tradicional');
   hud.setChaosStatus('');
+  hud.setMutatorChip('');
   hud.showOverlay('TETRIS 3D', 'Pulsa <span class="key">Enter</span> o haz clic en Jugar', '', true);
 }
 function showGameOver(): void {
+  resetStormVisuals();
   const theme = stage.theme();
   gameMode = engine.mode; // Reiniciar conserva el modo; el selector sigue editable
   syncModePicker();
@@ -348,10 +440,11 @@ function startGame(): void {
   hud.setModeChip(gameMode === 'chaos' ? 'Caos' : 'Tradicional');
   hud.setChaosStatus('');
   const lv = startLevel();
-  engine = new TetrisEngine({ mode: gameMode, seed: chaosSeed, onEvent: handleEvent });
+  engine = new TetrisEngine({ mode: gameMode, seed: chaosSeed, onEvent: handleEvent, onMutatorEvent: handleMutatorEvent });
   engine.start(lv);
   board.reset();
   debris.clear();
+  resetStormVisuals();
   applyDebrisSettings();
   board.setActive(engine.active?.kind ?? 'T', engine.activeCells(), true, engine.special);
   stage.setLevel(lv, true);
@@ -543,6 +636,11 @@ function animate(now: number): void {
   if (document.hidden) return;
   const t = timer.getElapsed();
   input.update(rawDt);
+  // Flecha de viento: se apaga sola; en pausa/ayuda se congela con el juego.
+  if (windArrowLeft > 0 && engine.phase === 'playing' && !helpOpen) {
+    windArrowLeft = Math.max(0, windArrowLeft - rawDt);
+    if (windArrowLeft === 0) hideWindArrow();
+  }
   if (engine.phase === 'playing') {
     engine.update(rawDt);
     // Sync diferido: el grid cambia solo al fijar piezas; mientras dura una

@@ -13,6 +13,12 @@
   <body>
     <canvas id="scene"></canvas>
     <div id="vignette"></div>
+    <!-- Oscurecimiento y aviso de las tormentas del modo Caos -->
+    <div id="storm-shade" aria-hidden="true"></div>
+    <div id="wind-arrow" role="status" aria-live="polite">
+      <span id="wind-arrow-glyph" class="wa-glyph">←</span>
+      <span class="wa-label">Viento · empuja 1 celda</span>
+    </div>
 
     <header id="brand">
       <h1>TETRIS<span>3D</span></h1>
@@ -32,6 +38,7 @@
         <span id="mode-chip">Tradicional</span>
         <span id="stage-chip">☀️ Pradera</span>
         <span id="debris-chip" class="hidden">🧱 Escombros</span>
+        <span id="mutator-chip" class="hidden"></span>
       </div>
       <div class="stat"><label>Siguiente</label><canvas id="next" width="160" height="190"></canvas></div>
       <div class="stat"><label>Reserva <span class="key">C</span></label><canvas id="hold" width="160" height="80"></canvas></div>
@@ -74,7 +81,7 @@
             <input type="checkbox" id="debris-classic" />
             <span>🧱 Escombros también en Tradicional</span>
           </label>
-          <p class="option-hint">En Caos están activos por defecto. La calidad se puede ajustar abajo.</p>
+          <p class="option-hint">En Caos están activos por defecto y además caen tormentas (viento y lluvia). La calidad se puede ajustar abajo.</p>
           <div class="quality-row">
             <label for="fx-quality">Calidad de efectos</label>
             <select id="fx-quality">
@@ -140,7 +147,7 @@
           <li><strong>⏱️ Nivel híbrido</strong> — subes cada 10 líneas o 45 s (lo que llegue antes), hasta el nivel 20.</li>
           <li><strong>🎵 Música procedural</strong> — se genera en vivo y se adapta a la acción: tranquila al principio y más enérgica cuando sube la intensidad. Actívala o apágala con <span class="key">M</span>.</li>
           <li><strong>👆 Arrastrar y tocar (móvil)</strong> — arrastra la pieza para moverla (hacia abajo, caída suave) y toca el tablero para rotarla en sentido horario.</li>
-          <li><strong>🌪️ Modo Caos</strong> — elígelo en la pantalla inicial junto al nivel. Es el juego clásico pero cada cierto tiempo cae un <strong>powerup literal</strong> en vez de una pieza (se anuncia con badge en el preview y un aviso al aparecer): 💣 <strong>Bomba</strong>, ⚡ <strong>Rayo</strong> o 🔩 <strong>Taladro</strong>. Al bloquearse aplican su efecto y desaparecen (nunca dejan bloques): la bomba revienta 2 filas, el rayo rompe los 4 bloques más altos bajo su base y el taladro se hunde 2 filas destruyendo lo que tiene debajo. Nada más cambia.</li>
+          <li><strong>🌪️ Modo Caos</strong> — elígelo en la pantalla inicial junto al nivel. Es el juego clásico con dos ingredientes: <strong>powerups literales</strong> y <strong>tormentas</strong>. Cada cierto tiempo cae un objeto 💣 ⚡ 🔩 en vez de una pieza (se anuncia con badge en el preview): la bomba revienta 2 filas, el rayo rompe los 4 bloques más altos bajo su base y el taladro se hunde 2 filas. Al bloquearse aplican su efecto y desaparecen sin dejar bloques. Además, cada cierto tiempo llega una tormenta avisada con un cartel: 🌬️ <strong>Viento</strong> empuja la pieza activa 1 celda hacia un lado (una flecha marca la dirección al menos 1 s antes; el fondo se inclina y vuelan papeles) y 🌧️ <strong>Lluvia</strong> deja el suelo resbaladizo (cada movimiento lateral desliza 1 celda extra si cabe; el ambiente se oscurece y los personajes se cubren).</li>
         </ul>
         <p class="help-note">No hay objetos que recoger: estas ayudas están siempre disponibles.</p>
 

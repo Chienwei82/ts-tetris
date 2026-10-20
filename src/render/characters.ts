@@ -123,6 +123,25 @@ function buildUfo(): { group: THREE.Group; light: THREE.Mesh } {
   return { group: g, light };
 }
 
+/** Paraguas de papel: cono de tela + punta y mástil de tinta. */
+function buildUmbrella(color: number): THREE.Group {
+  const g = new THREE.Group();
+  const canopy = new THREE.Mesh(new THREE.ConeGeometry(0.52, 0.3, 12), toonMat(color));
+  canopy.position.y = 0.15;
+  const hull = new THREE.Mesh(new THREE.ConeGeometry(0.52, 0.3, 12), outlineMaterial());
+  hull.scale.setScalar(1.06);
+  hull.position.y = 0.15;
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: INK }));
+  tip.position.y = 0.34;
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.022, 0.8, 6),
+    new THREE.MeshBasicMaterial({ color: INK })
+  );
+  pole.position.y = -0.25;
+  g.add(canopy, hull, tip, pole);
+  return g;
+}
+
 /** Theme indices where each character shows up (see THEMES order). */
 const BALLOON_THEMES = [0, 1, 2, 5, 8];
 const BIRD_THEMES = [0, 1, 8];
@@ -137,11 +156,16 @@ export class Characters {
   private readonly birds: { group: THREE.Group; wings: THREE.Mesh[]; offset: number; baseY: number; speed: number }[] = [];
   private readonly bunny: THREE.Group;
   private readonly penguin: THREE.Group;
+  private readonly bunnyUmbrella: THREE.Group;
+  private readonly penguinUmbrella: THREE.Group;
   private readonly ufo: THREE.Group;
   private readonly ufoLight: THREE.Mesh;
   private enabled = true;
   private themeIdx = 0;
   private time = 0;
+  private gustDir: -1 | 0 | 1 = 0;
+  private lean = 0;
+  private shelter = false;
   private readonly balloonPhase = Math.random() * 12;
   constructor(scene: THREE.Scene) {
     this.balloon = buildBalloon();
@@ -157,6 +181,14 @@ export class Characters {
     this.bunny.position.set(-6, -10.55, -18);
     this.penguin = buildPenguin();
     this.penguin.position.set(6, -10.55, -18);
+    this.bunnyUmbrella = buildUmbrella(0x4d9de0);
+    this.bunnyUmbrella.position.set(0.05, 1.72, 0);
+    this.bunnyUmbrella.visible = false;
+    this.bunny.add(this.bunnyUmbrella);
+    this.penguinUmbrella = buildUmbrella(0xe4573f);
+    this.penguinUmbrella.position.set(0.05, 1.55, 0);
+    this.penguinUmbrella.visible = false;
+    this.penguin.add(this.penguinUmbrella);
     const ufo = buildUfo();
     this.ufo = ufo.group;
     this.ufoLight = ufo.light;
@@ -178,16 +210,31 @@ export class Characters {
     this.bunny.visible = BUNNY_THEMES.includes(i);
     this.penguin.visible = PENGUIN_THEMES.includes(i);
     this.ufo.visible = UFO_THEMES.includes(i);
+    this.bunnyUmbrella.visible = this.shelter && this.bunny.visible;
+    this.penguinUmbrella.visible = this.shelter && this.penguin.visible;
+  }
+  /** Viento del Caos: inclina a los personajes en la dirección del empuje. */
+  setGust(dir: -1 | 1 | null): void {
+    this.gustDir = dir ?? 0;
+  }
+  /** Lluvia del Caos: los personajes se cubren con un paraguas. */
+  setShelter(on: boolean): void {
+    this.shelter = on;
+    this.bunnyUmbrella.visible = on && this.bunny.visible;
+    this.penguinUmbrella.visible = on && this.penguin.visible;
   }
   update(dt: number): void {
     if (!this.enabled) return;
     this.time += dt;
     const t = this.time;
+    // Inclinación suavizada por el viento (positiva/negativa según dirección).
+    const leanTarget = -this.gustDir * 0.09;
+    this.lean += (leanTarget - this.lean) * Math.min(1, dt * 3.5);
     if (this.balloon.visible) {
       const span = 76;
       this.balloon.position.x = ((t * 1.1 + this.balloonPhase) % span) - span / 2;
       this.balloon.position.y = 8 + Math.sin(t * 0.5) * 0.6;
-      this.balloon.rotation.z = Math.sin(t * 0.3) * 0.05;
+      this.balloon.rotation.z = Math.sin(t * 0.3) * 0.05 + this.lean * 0.6;
     }
     for (let i = 0; i < this.birds.length; i++) {
       const b = this.birds[i];
@@ -195,6 +242,7 @@ export class Characters {
       const span = 92;
       b.group.position.x = ((t * b.speed + b.offset) % span) - span / 2;
       b.group.position.y = b.baseY + Math.sin(t * 0.7 + i * 2.1) * 0.8;
+      b.group.rotation.z = this.lean * 0.35;
       const flap = 0.35 + Math.sin(t * 9 + i * 1.7) * 0.5;
       const l = b.wings[0];
       const r = b.wings[1];
@@ -208,11 +256,12 @@ export class Characters {
       this.bunny.position.y = -10.55 + hop * 0.55;
       this.bunny.scale.y = 0.92 + 0.08 * hop;
       this.bunny.rotation.y = Math.cos(walk) >= 0 ? 0 : Math.PI;
+      this.bunny.rotation.z = this.lean;
     }
     if (this.penguin.visible) {
       this.penguin.position.x = 6 + Math.sin(t * 0.8) * 3.2;
       this.penguin.position.y = -10.55 + Math.abs(Math.sin(t * 3.2)) * 0.12;
-      this.penguin.rotation.z = -Math.cos(t * 0.8) * 0.16;
+      this.penguin.rotation.z = -Math.cos(t * 0.8) * 0.16 + this.lean;
       this.penguin.rotation.y = Math.cos(t * 0.8) >= 0 ? 0 : Math.PI;
     }
     if (this.ufo.visible) {

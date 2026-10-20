@@ -1,4 +1,4 @@
-export type SoundName = 'move' | 'rotate' | 'lock' | 'clear' | 'tetris' | 'levelup' | 'harddrop' | 'hold' | 'gameover' | 'pause' | 'thunder' | 'explosion';
+export type SoundName = 'move' | 'rotate' | 'lock' | 'clear' | 'tetris' | 'levelup' | 'harddrop' | 'hold' | 'gameover' | 'pause' | 'thunder' | 'explosion' | 'wind';
 export class SoundFX {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -59,6 +59,8 @@ export class SoundFX {
       case 'thunder': this.tone(92, 0.5, 'sawtooth', 0.5, 0, -55); this.tone(58, 0.75, 'triangle', 0.8, 0.06, -18); break;
       // Explosion de la bomba: golpe grave + chasquido de escombros.
       case 'explosion': this.tone(90, 0.35, 'sawtooth', 1.0, 0, -55); this.tone(52, 0.5, 'triangle', 1.0, 0.02, -20); this.tone(220, 0.18, 'square', 0.55, 0, -170); break;
+      // Rafaga de viento: silbido que cae de tono (sin ruido, solo osciladores).
+      case 'wind': this.tone(720, 0.34, 'sine', 0.32, 0, -540); this.tone(1180, 0.22, 'triangle', 0.16, 0.03, -820); break;
       case 'gameover': { const seq = [400, 350, 300, 220, 150]; seq.forEach((f, i) => this.tone(f, 0.22, 'sawtooth', 0.45, i * 0.14, -30)); break; }
     }
   }

@@ -27,7 +27,7 @@ npm run dev      # local: http://localhost:5173 · LAN: http://<tu-IP>:5173
 ```
 
 ```bash
-npm test         # tests de lógica (vitest 5, 120 tests)
+npm test         # tests de lógica (vitest 5, 132 tests)
 npm run build    # type-check (tsc 7 nativo) + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
@@ -104,6 +104,22 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
     vez por pieza; viaja con la reserva).
   La secuencia es **determinista por semilla** (misma semilla ⇒ mismos
   powerups) y el modo Tradicional no cambia en nada.
+- **Tormentas del Caos** (solo en Caos): a los 18 s llega la primera, avisada
+  1,6 s antes; luego hay 12 s de calma. Solo hay una a la vez y se alternan
+  viento y lluvia.
+  - 🌬️ **Viento**: sopla cada 6 s durante 18 s. Una flecha marca la dirección
+    **1,2 s antes** de cada empuje; la pieza activa se mueve 1 celda si cabe
+    (contra la pared el golpe se pierde). Los personajes se inclinan y vuelan
+    papeles de fondo.
+  - 🌧️ **Lluvia**: durante 18 s el suelo resbala. Cada movimiento lateral del
+    jugador (pulsación, repetición DAS o arrastre táctil) desplaza 1 celda y,
+    si la siguiente está libre, **desliza 1 más** en la misma dirección. Cuenta
+    como una sola acción (un reset de lock delay y un sonido); el viento no
+    provoca deslizamiento. El ambiente se oscurece y los personajes se cubren
+    con paraguas.
+  Qué tormenta toca y hacia dónde sopla sale del **RNG con semilla del motor**
+  (reproducible); las partículas y el resto de la puesta en escena usan el RNG
+  cosmético.
 - **Escenarios y clima**: un tema cada 2 niveles (Pradera, Brisa, Atardecer,
   Lluvia, Tormenta con rayos y trueno, Noche, Nieve, Aurora, Amanecer, Cosmos)
   con transición suave de cielo, niebla, colinas, luces y clima (hojas, lluvia,
@@ -147,13 +163,17 @@ src/
     pieces.ts     Formas, rotación, kicks SRS, 7-bag
     board.ts      Grid, colisiones, fusión, limpieza
     rng.ts        mulberry32 + semilla (determinismo del modo caos)
-    engine.ts     Estado, gravedad, lock delay, niveles híbridos, gauge, hold, powerups caos
+    engine.ts     Estado, gravedad, lock delay, niveles híbridos, gauge, hold, powerups y tormentas caos
+    mutators/     Tormentas del Caos (lógica pura, testeable)
+      config.ts     Cadencia, avisos, duración y pool de mutadores
+      director.ts   Ciclo aviso→activo→fin + subciclo de viento (RNG con semilla)
+      types.ts      MutatorId, eventos y host que implementa el motor
   render/     Three.js (sin reglas de juego)
     scene.ts        Diorama base: cielo repintable, colinas, nubes, sol/luna, luces, confeti
     themes.ts       Los 10 escenarios: paletas, luces, clima y viento por nivel
-    stage.ts        Controlador: transiciones de tema, rayos, toggle de efectos
+    stage.ts        Controlador: transiciones de tema, rayos, toggle de efectos y tormentas del Caos
     weather.ts      Clima procedural (lluvia, tormenta, nieve, hojas, estrellas, aurora, fugaces)
-    characters.ts   Personajes de papel (globo, pájaros, conejo, pingüino, OVNI)
+    characters.ts   Personajes de papel (globo, pájaros, conejo, pingüino, OVNI) que se inclinan y cubren
     boardRenderer.ts Cubos con pool, fantasma, marco de cartón, washi tape y panel traslúcido
     particles.ts    Confeti de papel (ráfagas + ambiente) con shader propio y alpha global
     effects.ts      Vibración de cámara, destello de línea
@@ -162,6 +182,7 @@ src/
       debrisSimulation.ts Física pura de escombros: gravedad, rebote, giro, fade y pool FIFO
       debrisSystem.ts   InstancedMesh con color/alfa por instancia; API spawnBurst/spawnCells
       debrisMode.ts     Activación Caos/Tradicional/efectos/movimiento reducido (pura)
+      windSystem.ts     Partículas de viento con RNG cosmético y fundido propio
       fxRandom.ts       RNG exclusivo de efectos, independiente de la semilla del juego
       fxQuality.ts      Tipo y validación de la calidad de efectos
     materials.ts    Texturas procedurales (papel, cartón, cuadrícula, cinta) + toon + tinta
