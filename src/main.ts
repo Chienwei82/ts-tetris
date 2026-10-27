@@ -2,7 +2,7 @@ import './styles.css';
 import * as THREE from 'three';
 import { TetrisEngine } from './game/engine.js';
 import { stackHeight } from './game/board.js';
-import { LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL, VISIBLE_ROWS } from './game/types.js';
+import { LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL, TOTAL_ROWS, VISIBLE_ROWS } from './game/types.js';
 import type { GameEvent, GameMode, LevelProgress, PieceKind } from './game/types.js';
 import { BoardRenderer } from './render/boardRenderer.js';
 import { cellToWorld, MAX_FPS, pxPerCell } from './render/constants.js';
@@ -34,7 +34,7 @@ import { InputManager } from './ui/inputManager.js';
 import { ModeSelect } from './ui/modeSelect.js';
 import { HUD } from './ui/hud.js';
 import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
-import { loadEffectsEnabled, loadGameMode, loadMusicEnabled, loadMusicGenre, loadDebrisClassic, loadFxQuality, prefersReducedMotion, saveEffectsEnabled, saveGameMode, saveMusicEnabled, saveMusicGenre, saveDebrisClassic, saveFxQuality } from './ui/settings.js';
+import { loadEffectsEnabled, loadGameMode, loadMusicEnabled, loadMusicGenre, loadDebrisClassic, loadFxQuality, loadChaosLightning, loadChaosHail, prefersReducedMotion, saveEffectsEnabled, saveGameMode, saveMusicEnabled, saveMusicGenre, saveDebrisClassic, saveFxQuality, saveChaosLightning, saveChaosHail } from './ui/settings.js';
 import { randomSeed } from './game/rng.js';
 import { MusicMenu } from './ui/musicMenu.js';
 import { initAnalytics } from './analytics.js';
@@ -52,6 +52,8 @@ const levelRange = el<HTMLInputElement>('level-range');
 const levelRangeOut = el<HTMLOutputElement>('level-range-out');
 const btnEffects = el<HTMLButtonElement>('btn-effects');
 const debrisClassicCheck = el<HTMLInputElement>('debris-classic');
+const chaosLightningCheck = el<HTMLInputElement>('chaos-lightning');
+const chaosHailCheck = el<HTMLInputElement>('chaos-hail');
 const fxQualitySelect = el<HTMLSelectElement>('fx-quality');
 const btnMusic = el<HTMLButtonElement>('btn-music');
 const hud = new HUD();
@@ -77,6 +79,8 @@ const fallbackQuality: FxQuality = device.kind === 'desktop' ? 'high' : device.k
 let fxQuality: FxQuality = loadFxQuality(fallbackQuality);
 const debris = new DebrisSystem(scene, { quality: fxQuality });
 let debrisInClassic = loadDebrisClassic();
+let chaosLightningOn = loadChaosLightning();
+let chaosHailOn = loadChaosHail();
 let debrisOn = false;
 const stage = createStage(parts, { onThunder: () => sound.play('thunder') });
 /* Tormentas del Caos: estado de presentación; las reglas viven en el motor. */
@@ -84,7 +88,7 @@ const stormShade = el<HTMLDivElement>('storm-shade');
 const windArrow = el<HTMLDivElement>('wind-arrow');
 const windGlyph = el<HTMLSpanElement>('wind-arrow-glyph');
 const stormFxRandom = createFxRandom();
-const MUTATOR_LABEL: Record<MutatorId, string> = { wind: '🌬️ Viento', rain: '🌧️ Lluvia' };
+const MUTATOR_LABEL: Record<MutatorId, string> = { wind: '🌬️ Viento', rain: '🌧️ Lluvia', lightning: '⚡ Relámpago', hail: '🌨️ Granizo' };
 let activeMutator: MutatorId | null = null;
 let windArrowLeft = 0;
 let lastThemeIdx = 0;
@@ -193,6 +197,19 @@ function handleMutatorEvent(e: MutatorEvent): void {
         stage.setRain(true);
         if (effectsOn) stormShade.classList.add('on');
         hud.toast('🌧️ Lluvia — el suelo resbala', 2200);
+      } else if (e.mutator === 'lightning') {
+        stage.setRain(false);
+        stormShade.classList.remove('on');
+        stage.setWind(null);
+        hideWindArrow();
+        if (effectsOn) stormShade.classList.add('on');
+        hud.toast('⚡ Relámpago — rompe bloques', 2200);
+      } else if (e.mutator === 'hail') {
+        stage.setRain(true);
+        if (effectsOn) stormShade.classList.add('on');
+        stage.setWind(null);
+        hideWindArrow();
+        hud.toast('🌨️ Granizo — bloquea columnas', 2200);
       } else {
         stage.setRain(false);
         stormShade.classList.remove('on');
@@ -217,13 +234,38 @@ function handleMutatorEvent(e: MutatorEvent): void {
       }
       break;
     }
+    case 'lightning': {
+      sound.play('lock');
+      shake.add(0.3);
+      if (effectsOn) {
+        for (const cell of e.cells) {
+          const p = cellToWorld(cell.x, cell.y);
+          board.particles.burst(new THREE.Vector3(p.x, p.y, 0.4), 0xfff2a6, 6, 2.8, 1.6);
+        }
+      }
+      hud.toast('⚡ ¡Rayo!', 900);
+      break;
+    }
+    case 'hail': {
+      sound.play('lock');
+      if (effectsOn) {
+        for (const col of e.columns) {
+          const p = cellToWorld(col, TOTAL_ROWS - 1);
+          board.particles.burst(new THREE.Vector3(p.x, p.y + 2, 0.4), 0xcfe6ff, 4, 2.2, 1.4);
+        }
+      }
+      break;
+    }
     case 'end':
       activeMutator = null;
       hud.setMutatorChip('');
-      if (e.mutator === 'rain') {
+      if (e.mutator === 'rain' || e.mutator === 'hail') {
         stage.setRain(false);
         stormShade.classList.remove('on');
-        hud.toast('⛅ La lluvia amaina', 1500);
+        hud.toast('⛅ ' + (e.mutator === 'hail' ? 'El granizo se derrite' : 'La lluvia amaina'), 1500);
+      } else if (e.mutator === 'lightning') {
+        stormShade.classList.remove('on');
+        hud.toast('⛅ El relámpago cesa', 1500);
       } else {
         stage.setWind(null);
         hideWindArrow();
@@ -393,8 +435,15 @@ function syncModePicker(): void {
   const radios = document.querySelectorAll<HTMLInputElement>('input[name="game-mode"]');
   radios.forEach((r) => { r.checked = (r.value === gameMode); });
 }
+function mutatorPool(): MutatorId[] {
+  const pool: MutatorId[] = ['wind', 'rain'];
+  if (chaosLightningOn) pool.push('lightning');
+  if (chaosHailOn) pool.push('hail');
+  return pool;
+}
 let engine = new TetrisEngine({
   mode: gameMode,
+  mutatorConfig: { pool: mutatorPool() },
   seed: chaosSeed, onEvent: handleEvent, onMutatorEvent: handleMutatorEvent });
 /* Previews solo cambian al spawnear/holdear: los canvas 2D no se repintan si no cambian. */
 let lastNextKey = '';
@@ -440,7 +489,7 @@ function startGame(): void {
   hud.setModeChip(gameMode === 'chaos' ? 'Caos' : 'Tradicional');
   hud.setChaosStatus('');
   const lv = startLevel();
-  engine = new TetrisEngine({ mode: gameMode, seed: chaosSeed, onEvent: handleEvent, onMutatorEvent: handleMutatorEvent });
+  engine = new TetrisEngine({ mode: gameMode, mutatorConfig: { pool: mutatorPool() }, seed: chaosSeed, onEvent: handleEvent, onMutatorEvent: handleMutatorEvent });
   engine.start(lv);
   board.reset();
   debris.clear();
@@ -571,11 +620,21 @@ if (firstTheme) hud.setStageChip(firstTheme.icon + ' ' + firstTheme.name);
 refreshPreviews();
 /* Escombros: opt-in en Tradicional + calidad persistida. */
 debrisClassicCheck.checked = debrisInClassic;
+chaosLightningCheck.checked = chaosLightningOn;
+chaosHailCheck.checked = chaosHailOn;
 fxQualitySelect.value = fxQuality;
 debrisClassicCheck.addEventListener('change', () => {
   debrisInClassic = debrisClassicCheck.checked;
   saveDebrisClassic(debrisInClassic);
   applyDebrisSettings();
+});
+chaosLightningCheck.addEventListener('change', () => {
+  chaosLightningOn = chaosLightningCheck.checked;
+  saveChaosLightning(chaosLightningOn);
+});
+chaosHailCheck.addEventListener('change', () => {
+  chaosHailOn = chaosHailCheck.checked;
+  saveChaosHail(chaosHailOn);
 });
 fxQualitySelect.addEventListener('change', () => {
   const value = fxQualitySelect.value;

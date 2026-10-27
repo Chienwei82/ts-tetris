@@ -9,12 +9,20 @@ class RecordingHost implements MutatorHost {
   pushes: WindDir[] = [];
   slippery = false;
   allow = true;
+  lightningStrikes: { x: number; y: number }[][] = [];
+  hailDrops: number[][] = [];
+  melts = 0;
   pushWind(dir: WindDir): boolean {
     if (!this.allow) return false;
     this.pushes.push(dir);
     return true;
   }
   setSlippery(on: boolean): void { this.slippery = on; }
+  lightningStrike(cells: { x: number; y: number }[]): void { this.lightningStrikes.push(cells); }
+  dropHail(columns: number[]): void { this.hailDrops.push(columns); }
+  meltHail(): void { this.melts++; }
+  occupiedColumns(): number[] { return [0, 1, 2]; }
+  topCell(_col: number): number { return 0; }
 }
 
 describe('MutatorDirector (lógica pura)', () => {
@@ -223,5 +231,45 @@ describe('motor: viento', () => {
     };
     expect(run(1234)).toBe(run(1234));
     expect(run(1234)).not.toBe(run(999));
+  });
+});
+describe('MutatorDirector lightning/hail', () => {
+  it('lightning: avisa, empieza y dispara rayo determinista', () => {
+    const host = new RecordingHost();
+    const events: MutatorEvent[] = [];
+    const d = new MutatorDirector({
+      seed: 1,
+      enabled: true,
+      host,
+      config: { pool: ['lightning'], firstDelaySec: 0, warnSec: 0.1, activeSec: 5, cooldownSec: 0.1, lightningFirstStrikeSec: 0.5, lightningIntervalSec: 5, lightningBreaks: 2 },
+      onEvent: (e) => events.push(e)
+    });
+    d.update(0.1);
+    d.update(0.1);
+    expect(events.some((e) => e.kind === 'start' && e.mutator === 'lightning')).toBe(true);
+    d.update(0.5);
+    expect(host.lightningStrikes.length).toBe(1);
+    expect(host.lightningStrikes[0]).toHaveLength(2);
+    expect(events.some((e) => e.kind === 'lightning')).toBe(true);
+  });
+
+  it('hail: deja granizo y lo derrite tras meltSec', () => {
+    const host = new RecordingHost();
+    const events: MutatorEvent[] = [];
+    const d = new MutatorDirector({
+      seed: 2,
+      enabled: true,
+      host,
+      config: { pool: ['hail'], firstDelaySec: 0, warnSec: 0.1, activeSec: 5, cooldownSec: 0.1, hailFirstFallSec: 0.5, hailIntervalSec: 5, hailMeltSec: 0.3 },
+      onEvent: (e) => events.push(e)
+    });
+    d.update(0.1);
+    d.update(0.1);
+    expect(events.some((e) => e.kind === 'start' && e.mutator === 'hail')).toBe(true);
+    d.update(0.5);
+    expect(host.hailDrops.length).toBe(1);
+    expect(events.some((e) => e.kind === 'hail')).toBe(true);
+    d.update(0.3);
+    expect(host.melts).toBe(1);
   });
 });

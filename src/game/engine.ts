@@ -59,6 +59,8 @@ export class TetrisEngine implements MutatorHost {
   /** El taladro se hunde una sola vez por pieza (viaja con ella en el HOLD). */
   private drillUsed = false;
   private holdDrillUsed = false;
+  /** Columns that currently host hail (garbage) tiles. Read by the renderer for tinting. */
+  hailColumns: number[] = [];
   /** Bump counter: changes whenever the grid changes (merge/clear/reset). Lets the view sync lazily. */
   gridVersion = 0;
   /** Bump counter: changes whenever the active piece moves, rotates or is replaced. */
@@ -450,4 +452,66 @@ export class TetrisEngine implements MutatorHost {
     this.canHold = true;
     if (this.phase === 'playing') this.spawn();
   }
+
+  /** Relámpago: corta las celdas objetivo, compacta columnas y notifica. */
+  lightningStrike(cells: Vec2[]): void {
+    for (const c of cells) {
+      const row = this.grid[c.y];
+      if (row) row[c.x] = 0;
+    }
+    this.settleColumns();
+    this.gridVersion++;
+    this.emit({ type: 'lightning', cells });
+  }
+
+  /** Columnas que tienen al menos un bloque (incluido granizo). */
+  occupiedColumns(): number[] {
+    const out: number[] = [];
+    for (let x = 0; x < COLS; x++) {
+      let occ = false;
+      for (let y = 0; y < TOTAL_ROWS; y++) {
+        const v = this.grid[y]?.[x];
+        if (v !== 0 && v !== undefined) { occ = true; break; }
+      }
+      if (occ) out.push(x);
+    }
+    return out;
+  }
+
+  /** Fila más alta ocupada en la columna (o -1 si vacía). */
+  topCell(col: number): number {
+    for (let y = TOTAL_ROWS - 1; y >= 0; y--) {
+      const v = this.grid[y]?.[col];
+      if (v !== 0 && v !== undefined) return y;
+    }
+    return -1;
+  }
+
+  /** Gránido: deja celdas basura ('G') en las columnas objetivo (sobre el montículo). */
+  dropHail(columns: number[]): void {
+    for (const x of columns) {
+      let top = -1;
+      for (let y = 0; y < TOTAL_ROWS; y++) if (this.grid[y]?.[x] !== 0 && this.grid[y]?.[x] !== undefined) top = y;
+      const land = top + 1;
+      if (land >= 0 && land < TOTAL_ROWS) {
+        const row = this.grid[land];
+        if (row) row[x] = 'G';
+      }
+      if (!this.hailColumns.includes(x)) this.hailColumns.push(x);
+    }
+    this.gridVersion++;
+    this.emit({ type: 'hail', columns });
+  }
+
+  /** Elimina todas las celdas de granizo ('G') del tablero. */
+  meltHail(): void {
+    for (let y = 0; y < TOTAL_ROWS; y++) {
+      const row = this.grid[y];
+      if (!row) continue;
+      for (let x = 0; x < COLS; x++) if (row[x] === 'G') row[x] = 0;
+    }
+    this.hailColumns = [];
+    this.gridVersion++;
+  }
+
 }

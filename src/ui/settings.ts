@@ -6,6 +6,8 @@ const MODE_KEY = 'tetris-3d:controls';
 const MUSIC_KEY = 'tetris-3d:music';
 const DEBRIS_CLASSIC_KEY = 'tetris-3d:debris-classic';
 const FX_QUALITY_KEY = 'tetris-3d:fx-quality';
+const CHAOS_LIGHTNING_KEY = 'tetris-3d:chaos-lightning';
+const CHAOS_HAIL_KEY = 'tetris-3d:chaos-hail';
 
 /** Modo de control elegido por el usuario: teclado/ratón o táctil. */
 export type ControlMode = 'desktop' | 'touch';
@@ -99,6 +101,23 @@ export function loadFxQuality(fallback: FxQuality): FxQuality {
     if (isFxQuality(value)) return value;
   } catch { /* storage unavailable */ }
   return fallback;
+}
+
+/** Relámpagos del Caos (por defecto activos). */
+export function loadChaosLightning(): boolean {
+  try { const v = window.localStorage.getItem(CHAOS_LIGHTNING_KEY); if (v === '0') return false; if (v === '1') return true; } catch { /* ignore */ }
+  return true;
+}
+export function saveChaosLightning(on: boolean): void {
+  try { window.localStorage.setItem(CHAOS_LIGHTNING_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+}
+/** Granizo del Caos (por defecto activo). */
+export function loadChaosHail(): boolean {
+  try { const v = window.localStorage.getItem(CHAOS_HAIL_KEY); if (v === '0') return false; if (v === '1') return true; } catch { /* ignore */ }
+  return true;
+}
+export function saveChaosHail(on: boolean): void {
+  try { window.localStorage.setItem(CHAOS_HAIL_KEY, on ? '1' : '0'); } catch { /* ignore */ }
 }
 export function saveFxQuality(quality: FxQuality): void {
   try { window.localStorage.setItem(FX_QUALITY_KEY, quality); } catch { /* ignore */ }

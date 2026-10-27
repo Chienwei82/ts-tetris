@@ -1,7 +1,8 @@
+import { COLS } from '../types.js';
 import { mulberry32 } from '../rng.js';
 import { DEFAULT_MUTATOR_CONFIG } from './config.js';
 import type { MutatorConfig } from './config.js';
-import type { MutatorEvent, MutatorHost, MutatorId, WindDir } from './types.js';
+import type { MutatorEvent, MutatorHost, MutatorId, Vec2, WindDir } from './types.js';
 
 type Phase = 'idle' | 'warn' | 'active';
 
@@ -41,6 +42,10 @@ export class MutatorDirector {
   private windDir: WindDir = 1;
   private gustTimer = 0;
   private gustWarned = false;
+  private strikeTimer = 0;
+  private fallTimer = 0;
+  private meltTimer = 0;
+  private hasHail = false;
 
   constructor(opts: MutatorDirectorOptions) {
     this.seed = opts.seed >>> 0;
@@ -64,6 +69,10 @@ export class MutatorDirector {
     this.timer = this.config.firstDelaySec;
     this.gustTimer = 0;
     this.gustWarned = false;
+    this.strikeTimer = 0;
+    this.fallTimer = 0;
+    this.meltTimer = 0;
+    this.hasHail = false;
   }
 
   /** Tormenta activa, o `null` si no hay ninguna. */
@@ -83,6 +92,15 @@ export class MutatorDirector {
   /** Avanza el ciclo. El motor solo lo llama mientras la partida está en curso. */
   update(dt: number): void {
     if (!this.enabled || dt <= 0) return;
+
+    // Derretir granizo temporal cuando corresponda.
+    if (this.hasHail) {
+      this.meltTimer -= dt;
+      if (this.meltTimer <= 0) {
+        this.host.meltHail();
+        this.hasHail = false;
+      }
+    }
 
     if (this.phase === 'idle') {
       this.timer -= dt;
@@ -109,12 +127,19 @@ export class MutatorDirector {
       this.timer = this.config.activeSec;
       this.emit({ kind: 'start', mutator, seconds: this.config.activeSec });
       if (mutator === 'rain') this.host.setSlippery(true);
-      else this.beginWind();
+      else if (mutator === 'wind') this.beginWind();
+      else if (mutator === 'lightning') {
+        this.strikeTimer = Math.min(this.config.activeSec, Math.max(0.1, this.config.lightningFirstStrikeSec));
+      } else if (mutator === 'hail') {
+        this.fallTimer = Math.min(this.config.activeSec, Math.max(0.1, this.config.hailFirstFallSec));
+      }
       return;
     }
 
     this.timer -= dt;
     if (this.current === 'wind') this.updateWind(dt);
+    else if (this.current === 'lightning') this.updateLightning(dt);
+    else if (this.current === 'hail') this.updateHail(dt);
     if (this.timer <= 0) this.finishActive();
   }
 
@@ -166,6 +191,60 @@ export class MutatorDirector {
     }
   }
 
+  private updateLightning(dt: number): void {
+    this.strikeTimer -= dt;
+    if (this.strikeTimer > 0) return;
+    const cells = this.pickLightningCells();
+    if (cells.length > 0) {
+      this.host.lightningStrike(cells);
+      this.emit({ kind: 'lightning', cells });
+    }
+    this.strikeTimer = this.config.lightningIntervalSec;
+  }
+
+  private updateHail(dt: number): void {
+    this.fallTimer -= dt;
+    if (this.fallTimer > 0) return;
+    const columns = this.pickHailColumns();
+    if (columns.length > 0) {
+      this.host.dropHail(columns);
+      this.emit({ kind: 'hail', columns });
+      this.hasHail = true;
+      this.meltTimer = this.config.hailMeltSec;
+    }
+    this.fallTimer = this.config.hailIntervalSec;
+  }
+
+  private pickLightningCells(): Vec2[] {
+    const breaks = this.config.lightningBreaks;
+    const cols = this.host.occupiedColumns();
+    if (cols.length === 0) return [];
+    const count = Math.min(breaks, cols.length);
+    const pool = [...cols];
+    const chosenCols: number[] = [];
+    for (let i = 0; i < count && pool.length > 0; i++) {
+      const idx = Math.min(pool.length - 1, Math.floor(this.rng() * pool.length));
+      chosenCols.push(pool.splice(idx, 1)[0]!);
+    }
+    const cells: Vec2[] = [];
+    for (const c of chosenCols) {
+      const y = this.host.topCell(c);
+      if (y >= 0) cells.push({ x: c, y });
+    }
+    return cells;
+  }
+
+  private pickHailColumns(): number[] {
+    const count = this.config.hailMaxPerWave;
+    const pool = Array.from({ length: COLS }, (_, i) => i);
+    const out: number[] = [];
+    for (let i = 0; i < count && pool.length > 0; i++) {
+      const idx = Math.min(pool.length - 1, Math.floor(this.rng() * pool.length));
+      out.push(pool.splice(idx, 1)[0]!);
+    }
+    return out;
+  }
+
   private finishActive(): void {
     const mutator = this.current;
     if (mutator) {
@@ -178,5 +257,7 @@ export class MutatorDirector {
     this.timer = this.config.cooldownSec;
     this.gustTimer = 0;
     this.gustWarned = false;
+    this.strikeTimer = 0;
+    this.fallTimer = 0;
   }
 }

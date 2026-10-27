@@ -13,7 +13,7 @@ export const VISIBLE_ROWS = 20;
 export const HIDDEN_ROWS = 2;
 export const TOTAL_ROWS = VISIBLE_ROWS + HIDDEN_ROWS;
 
-export type CellValue = PieceKind | 0;
+export type CellValue = PieceKind | 'G' | 0;
 export type Grid = CellValue[][]; // grid[row][col], row 0 = bottom
 
 export interface ActivePiece {
@@ -48,13 +48,29 @@ export type GameEventType =
   | 'combo'
   | 'bomb'
   | 'bolt'
-  | 'drill';
+  | 'drill'
+  | 'lightning'
+  | 'hail';
+
+export interface GameEventLightning {
+  type: 'lightning';
+  /** Celdas destruidas por el relámpago. */
+  cells: Vec2[];
+}
+export interface GameEventHail {
+  type: 'hail';
+  /** Columnas objetivo del granizo. */
+  columns: number[];
+}
+
+export type GameEventMutator = GameEventLightning | GameEventHail;
 
 export interface GameEvent {
   type: GameEventType;
   lines?: number;
   cells?: Vec2[];
   rows?: number[];
+  columns?: number[];
   scoreGained?: number;
   level?: number;
 }
@@ -89,6 +105,10 @@ export const BOMB_ROWS = 2;
 export const BOLT_BREAKS = 4;
 /** Taladro: filas que se hunde destruyendo los bloques bajo su base. */
 export const DRILL_DEPTH = 2;
+/** Gránido: columnas de basura simultáneas por descarga. */
+export const HAIL_COLUMNS = 2;
+/** Altura máxima de montículo antes de que el gránido colapse (límites de la cuadrícula). */
+export const PILE_LIMIT = 18;
 
 export interface LevelProgress {
   /** 0..1 progress toward the next level (largest of lines/time). */
