@@ -185,9 +185,9 @@ describe('dirty-flag versions (gridVersion / pieceVersion)', () => {
     const e = new TetrisEngine({ mode: 'chaos', seed: 42 });
     e.start();
     // Llenar la columna 3 con bloques desde el suelo hasta arriba
-    for (let y = 0; y < 10; y++) e.grid[y][3] = 'I';
+    for (let y = 0; y < 10; y++) e.grid[y]![3] = 'I';
     // Columna 8 con bloques (fuera del cono de la columna 3, incluso en la base más ancha)
-    for (let y = 0; y < 5; y++) e.grid[y][8] = 'L';
+    for (let y = 0; y < 5; y++) e.grid[y]![8] = 'L';
     e.drillStrike(3);
     // La columna 3 debe tener 'R' en las celdas perforadas (cono desde tope hasta fondo)
     const col3 = e.grid.map((row) => row[3]);
