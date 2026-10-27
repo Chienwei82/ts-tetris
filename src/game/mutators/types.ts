@@ -1,5 +1,9 @@
+import type { Vec2 } from '../types.js';
+
+export type { Vec2 } from '../types.js';
+
 /** Mutadores disponibles en el modo Caos (tormentas). */
-export type MutatorId = 'wind' | 'rain';
+export type MutatorId = 'wind' | 'rain' | 'lightning' | 'hail' | 'drill';
 
 /** Dirección de un empuje de viento: izquierda o derecha. */
 export type WindDir = -1 | 1;
@@ -13,6 +17,18 @@ export interface MutatorHost {
   pushWind(dir: WindDir): boolean;
   /** Activa o desactiva el suelo resbaladizo de la lluvia. */
   setSlippery(on: boolean): void;
+  /** Relámpago: corta la columna central de las celdas objetivo y deja caer el resto. */
+  lightningStrike(cells: Vec2[]): void;
+  /** Gránido: deja celdas basura en las columnas objetivo. */
+  dropHail(columns: number[]): void;
+  /** Elimina las celdas de granizo temporales del tablero. */
+  meltHail(): void;
+  /** Taladro: perfora un cono en la columna hasta el fondo, dejando roca roja 'R'. */
+  drillStrike(column: number): void;
+  /** Columnas del tablero con al menos un bloque (para elegir objetivos del relámpago). */
+  occupiedColumns(): number[];
+  /** Fila más alta ocupada en la columna (o -1). */
+  topCell(col: number): number;
 }
 
 /**
@@ -24,4 +40,8 @@ export type MutatorEvent =
   | { kind: 'start'; mutator: MutatorId; seconds: number }
   | { kind: 'end'; mutator: MutatorId }
   | { kind: 'wind-warn'; dir: WindDir; seconds: number }
-  | { kind: 'wind-gust'; dir: WindDir; moved: boolean };
+  | { kind: 'wind-gust'; dir: WindDir; moved: boolean }
+  | { kind: 'lightning'; cells: Vec2[] }
+  | { kind: 'hail'; columns: number[] }
+  | { kind: 'drill'; column: number; cells: Vec2[] }
+  | { kind: 'drill-warn'; column: number; seconds: number };

@@ -1,4 +1,4 @@
-export type SoundName = 'move' | 'rotate' | 'lock' | 'clear' | 'tetris' | 'levelup' | 'harddrop' | 'hold' | 'gameover' | 'pause' | 'thunder' | 'explosion' | 'wind';
+export type SoundName = 'move' | 'rotate' | 'lock' | 'clear' | 'tetris' | 'levelup' | 'harddrop' | 'hold' | 'gameover' | 'pause' | 'thunder' | 'explosion' | 'wind' | 'drill';
 export class SoundFX {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -62,6 +62,8 @@ export class SoundFX {
       // Rafaga de viento: silbido que cae de tono (sin ruido, solo osciladores).
       case 'wind': this.tone(720, 0.34, 'sine', 0.32, 0, -540); this.tone(1180, 0.22, 'triangle', 0.16, 0.03, -820); break;
       case 'gameover': { const seq = [400, 350, 300, 220, 150]; seq.forEach((f, i) => this.tone(f, 0.22, 'sawtooth', 0.45, i * 0.14, -30)); break; }
+      // Taladro: perforador metálico que baja en tono.
+      case 'drill': this.tone(440, 0.15, 'square', 0.4); this.tone(330, 0.15, 'square', 0.4, 0.08); this.tone(220, 0.2, 'sawtooth', 0.5, 0.16, -100); break;
     }
   }
 }

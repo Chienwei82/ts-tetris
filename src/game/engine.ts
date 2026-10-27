@@ -4,7 +4,7 @@ import { cellsForPiece, getKicks, shuffledBag } from './pieces.js';
 import { MutatorDirector } from './mutators/director.js';
 import type { MutatorConfig } from './mutators/config.js';
 import type { MutatorEvent, MutatorHost, WindDir } from './mutators/types.js';
-import { BOLT_BREAKS, COLS, DRILL_DEPTH, LINES_PER_LEVEL, LINE_POINTS, MAX_LEVEL, SECONDS_PER_LEVEL, SPECIAL_PROBABILITY, TOTAL_ROWS, VISIBLE_ROWS } from './types.js';
+import { BOLT_BREAKS, COLS, DRILL_CONE_WIDTH, DRILL_DEPTH, LINES_PER_LEVEL, LINE_POINTS, MAX_LEVEL, SECONDS_PER_LEVEL, SPECIAL_PROBABILITY, TOTAL_ROWS, VISIBLE_ROWS } from './types.js';
 import type { ActivePiece, GameEvent, GameMode, GamePhase, Grid, LevelProgress, PieceKind, RotationState, Vec2 } from './types.js';
 
 export type SpecialKind = 'bomb' | 'bolt' | 'drill';
@@ -59,6 +59,10 @@ export class TetrisEngine implements MutatorHost {
   /** El taladro se hunde una sola vez por pieza (viaja con ella en el HOLD). */
   private drillUsed = false;
   private holdDrillUsed = false;
+  /** Columns that currently host hail (garbage) tiles. Read by the renderer for tinting. */
+  hailColumns: number[] = [];
+  /** Columns currently hosting drill-red tiles. Read by the renderer for tinting. */
+  drillColumns: number[] = [];
   /** Bump counter: changes whenever the grid changes (merge/clear/reset). Lets the view sync lazily. */
   gridVersion = 0;
   /** Bump counter: changes whenever the active piece moves, rotates or is replaced. */
@@ -450,4 +454,100 @@ export class TetrisEngine implements MutatorHost {
     this.canHold = true;
     if (this.phase === 'playing') this.spawn();
   }
+
+  /** Relámpago: corta las celdas objetivo, compacta columnas y notifica. */
+  lightningStrike(cells: Vec2[]): void {
+    for (const c of cells) {
+      const row = this.grid[c.y];
+      if (row) row[c.x] = 0;
+    }
+    this.settleColumns();
+    this.gridVersion++;
+    this.emit({ type: 'lightning', cells });
+  }
+
+  /** Columnas que tienen al menos un bloque (incluido granizo). */
+  occupiedColumns(): number[] {
+    const out: number[] = [];
+    for (let x = 0; x < COLS; x++) {
+      let occ = false;
+      for (let y = 0; y < TOTAL_ROWS; y++) {
+        const v = this.grid[y]?.[x];
+        if (v !== 0 && v !== undefined) { occ = true; break; }
+      }
+      if (occ) out.push(x);
+    }
+    return out;
+  }
+
+  /** Fila más alta ocupada en la columna (o -1 si vacía). */
+  topCell(col: number): number {
+    for (let y = TOTAL_ROWS - 1; y >= 0; y--) {
+      const v = this.grid[y]?.[col];
+      if (v !== 0 && v !== undefined) return y;
+    }
+    return -1;
+  }
+
+  /** Gránido: deja celdas basura ('G') en las columnas objetivo (sobre el montículo). */
+  dropHail(columns: number[]): void {
+    for (const x of columns) {
+      let top = -1;
+      for (let y = 0; y < TOTAL_ROWS; y++) if (this.grid[y]?.[x] !== 0 && this.grid[y]?.[x] !== undefined) top = y;
+      const land = top + 1;
+      if (land >= 0 && land < TOTAL_ROWS) {
+        const row = this.grid[land];
+        if (row) row[x] = 'G';
+      }
+      if (!this.hailColumns.includes(x)) this.hailColumns.push(x);
+    }
+    this.gridVersion++;
+    this.emit({ type: 'hail', columns });
+  }
+
+  /** Elimina todas las celdas de granizo ('G') del tablero. */
+  meltHail(): void {
+    for (let y = 0; y < TOTAL_ROWS; y++) {
+      const row = this.grid[y];
+      if (!row) continue;
+      for (let x = 0; x < COLS; x++) if (row[x] === 'G') row[x] = 0;
+    }
+    this.hailColumns = [];
+    this.gridVersion++;
+  }
+
+  /** Taladro: perfora un cono desde el tope de la columna hasta el fondo,
+   *  dejando roca roja ('R') en las celdas perforadas. Solo modo Caos. */
+  drillStrike(column: number): void {
+    let top = -1;
+    for (let y = TOTAL_ROWS - 1; y >= 0; y--) {
+      const v = this.grid[y]?.[column];
+      if (v !== 0 && v !== undefined) { top = y; break; }
+    }
+    if (top < 0) return;
+
+    const cells: Vec2[] = [];
+    const coneWidth = DRILL_CONE_WIDTH;
+
+    for (let y = top; y >= 0; y--) {
+      // Cono: se abre ligeramente al descender (1 celda en la punta, más en la base).
+      const progress = top === 0 ? 1 : (top - y) / top;
+      const w = Math.floor(coneWidth * (1 + progress));
+      const row = this.grid[y];
+      if (!row) continue;
+      const xMin = Math.max(0, column - w);
+      const xMax = Math.min(COLS - 1, column + w);
+      for (let x = xMin; x <= xMax; x++) {
+        if (row[x] !== 0 && row[x] !== undefined) {
+          row[x] = 'R';
+          cells.push({ x, y });
+        }
+      }
+    }
+
+    if (!this.drillColumns.includes(column)) this.drillColumns.push(column);
+    this.gridVersion++;
+    this.emit({ type: 'drill-strike', column, cells });
+  }
+
 }

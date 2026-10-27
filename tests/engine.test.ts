@@ -180,4 +180,24 @@ describe('dirty-flag versions (gridVersion / pieceVersion)', () => {
     expect(e.gridVersion).toBe(g0);
     expect(e.pieceVersion).toBeGreaterThan(p0);
   });
+
+  it('drill: perfora cono hasta el fondo dejando roca roja R (solo caos)', () => {
+    const e = new TetrisEngine({ mode: 'chaos', seed: 42 });
+    e.start();
+    // Llenar la columna 3 con bloques desde el suelo hasta arriba
+    for (let y = 0; y < 10; y++) e.grid[y]![3] = 'I';
+    // Columna 8 con bloques (fuera del cono de la columna 3, incluso en la base más ancha)
+    for (let y = 0; y < 5; y++) e.grid[y]![8] = 'L';
+    e.drillStrike(3);
+    // La columna 3 debe tener 'R' en las celdas perforadas (cono desde tope hasta fondo)
+    const col3 = e.grid.map((row) => row[3]);
+    expect(col3.filter((v) => v === 'R').length).toBeGreaterThan(0);
+    // No debe haber 'I' restante en la columna 3 (todos convertidos a R)
+    expect(col3.filter((v) => v === 'I')).toHaveLength(0);
+    // La columna 8 debe estar intacta (fuera del cono de la columna 3)
+    const col8 = e.grid.map((row) => row[8]);
+    expect(col8.filter((v) => v === 'L')).toHaveLength(5);
+    // drillColumns debe incluir la columna 3
+    expect(e.drillColumns).toContain(3);
+  });
 });
