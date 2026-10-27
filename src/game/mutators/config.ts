@@ -37,10 +37,18 @@ export interface MutatorConfig {
   hailMeltSec: number;
   /** Granizo: columnas afectadas por descarga. */
   hailMaxPerWave: number;
+  /** Taladro: segundos entre descargas. */
+  drillIntervalSec: number;
+  /** Taladro: antelación de la primera descarga desde el inicio de la tormenta. */
+  drillFirstStrikeSec: number;
+  /** Taladro: aviso previo antes de la perforación. */
+  drillWarnSec: number;
+  /** Taladro: ancho del cono (celdas a cada lado del eje). */
+  drillConeWidth: number;
 }
 
 export const DEFAULT_MUTATOR_CONFIG: MutatorConfig = {
-  pool: ['wind', 'rain', 'lightning', 'hail'],
+  pool: ['wind', 'rain', 'lightning', 'hail', 'drill'],
   firstDelaySec: 18,
   warnSec: 1.6,
   activeSec: 18,
@@ -55,5 +63,9 @@ export const DEFAULT_MUTATOR_CONFIG: MutatorConfig = {
   hailIntervalSec: 2.2,
   hailFirstFallSec: 3,
   hailMeltSec: 7,
-  hailMaxPerWave: 2
+  hailMaxPerWave: 2,
+  drillIntervalSec: 4.0,
+  drillFirstStrikeSec: 3,
+  drillWarnSec: 1.2,
+  drillConeWidth: 1
 };

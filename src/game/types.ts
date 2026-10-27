@@ -13,7 +13,7 @@ export const VISIBLE_ROWS = 20;
 export const HIDDEN_ROWS = 2;
 export const TOTAL_ROWS = VISIBLE_ROWS + HIDDEN_ROWS;
 
-export type CellValue = PieceKind | 'G' | 0;
+export type CellValue = PieceKind | 'G' | 'R' | 0;
 export type Grid = CellValue[][]; // grid[row][col], row 0 = bottom
 
 export interface ActivePiece {
@@ -50,7 +50,8 @@ export type GameEventType =
   | 'bolt'
   | 'drill'
   | 'lightning'
-  | 'hail';
+  | 'hail'
+  | 'drill-strike';
 
 export interface GameEventLightning {
   type: 'lightning';
@@ -62,8 +63,15 @@ export interface GameEventHail {
   /** Columnas objetivo del granizo. */
   columns: number[];
 }
+export interface GameEventDrill {
+  type: 'drill';
+  /** Columna perforada. */
+  column: number;
+  /** Celdas convertidas en roca roja. */
+  cells: Vec2[];
+}
 
-export type GameEventMutator = GameEventLightning | GameEventHail;
+export type GameEventMutator = GameEventLightning | GameEventHail | GameEventDrill;
 
 export interface GameEvent {
   type: GameEventType;
@@ -71,6 +79,7 @@ export interface GameEvent {
   cells?: Vec2[];
   rows?: number[];
   columns?: number[];
+  column?: number;
   scoreGained?: number;
   level?: number;
 }
@@ -109,6 +118,14 @@ export const DRILL_DEPTH = 2;
 export const HAIL_COLUMNS = 2;
 /** Altura máxima de montículo antes de que el gránido colapse (límites de la cuadrícula). */
 export const PILE_LIMIT = 18;
+
+/* --- Taladro/rayo (solo modo Caos) --- */
+/** Color de la roca roja dejada por el taladro. */
+export const DRILL_COLOR = 0xe4573f; // rojo igual que Z, pero como celda 'R' diferenciada
+/** Ancho máximo del cono de perforación (celdas a cada lado del eje). */
+export const DRILL_CONE_WIDTH = 1;
+/** Número de columnas objetivo por descarga de taladro. */
+export const DRILL_COLUMNS = 1;
 
 export interface LevelProgress {
   /** 0..1 progress toward the next level (largest of lines/time). */

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ALL_KINDS, COLS, PIECE_COLORS, VISIBLE_ROWS } from '../game/types.js';
+import { ALL_KINDS, COLS, DRILL_COLOR, PIECE_COLORS, VISIBLE_ROWS } from '../game/types.js';
 import type { Grid, PieceKind, Vec2 } from '../game/types.js';
 import { BOARD_D, BOARD_H, BOARD_W, cellToWorld } from './constants.js';
 import { INK, blockMaterial, cardboardMaterial, graphPaperMaterial, outlineMaterial, tapeMaterial } from './materials.js';
@@ -69,6 +69,9 @@ export class BoardRenderer {
   /** Temporary hail cells. */
   private hailState = new Set<number>();
   private hailIMesh = new THREE.InstancedMesh(this.geo, new THREE.MeshToonMaterial({ color: 0x9ec8ff, emissive: 0x9ec8ff, emissiveIntensity: 0.18 }), MAX_LOCKED);
+  /** Drill-red cells left by the taladro. */
+  private drillState = new Set<number>();
+  private drillIMesh = new THREE.InstancedMesh(this.geo, new THREE.MeshToonMaterial({ color: DRILL_COLOR, emissive: DRILL_COLOR, emissiveIntensity: 0.25 }), MAX_LOCKED);
   private seenScratch = new Set<number>();
   private activeGroup = new THREE.Group();
   private ghostGroup = new THREE.Group();
@@ -93,6 +96,11 @@ export class BoardRenderer {
     this.hailIMesh.receiveShadow = true;
     this.hailIMesh.frustumCulled = false;
     this.group.add(this.hailIMesh);
+    this.drillIMesh.count = 0;
+    this.drillIMesh.castShadow = true;
+    this.drillIMesh.receiveShadow = true;
+    this.drillIMesh.frustumCulled = false;
+    this.group.add(this.drillIMesh);
     this.group.add(this.activeGroup, this.ghostGroup);
     this.group.add(this.particles.points);
     scene.add(this.group);
@@ -154,6 +162,19 @@ export class BoardRenderer {
     }
     this.hailIMesh.instanceMatrix.needsUpdate = true;
     this.shadowDirty = true;
+  }
+
+  private rebuildDrill(): void {
+    this.drillIMesh.count = 0;
+    for (const k of this.drillState) {
+      const col = k % COLS;
+      const row = Math.floor(k / COLS);
+      const p = cellToWorld(col, row);
+      scratchMatrix.makeTranslation(p.x, p.y, 0.46);
+      this.drillIMesh.setMatrixAt(this.drillIMesh.count, scratchMatrix);
+      this.drillIMesh.count++;
+    }
+    this.drillIMesh.instanceMatrix.needsUpdate = true;
   }
   private makeBlock(kind: PieceKind): THREE.Group {
     let g = this.pullFree.pop();
@@ -249,17 +270,23 @@ export class BoardRenderer {
     const seenHail = new Set<number>();
     let changed = false;
     let hailChanged = false;
+    const seenDrill = new Set<number>();
+    let drillChanged = false;
     for (let r = 0; r < VISIBLE_ROWS; r++) {
       const row = grid[r];
       if (!row) continue;
       for (let c = 0; c < row.length; c++) {
-        const v = row[c] as PieceKind | 'G' | 0;
-        if (v === 0 || v === undefined) continue;
+        const v = row[c] as PieceKind | 'G' | 'R' | 0;
         const k = this.key(c, r);
-        if (v === 'G') {
-          seenHail.add(k);
-          if (!this.hailState.has(k)) { this.hailState.add(k); hailChanged = true; }
-          // store position? rebuild uses key decode; store in a map for tilt? simple no tilt
+        if (v === 0 || v === undefined || v === 'G' || v === 'R') {
+          if (v === 'G') {
+            seenHail.add(k);
+            if (!this.hailState.has(k)) { this.hailState.add(k); hailChanged = true; }
+          }
+          if (v === 'R') {
+            seenDrill.add(k);
+            if (!this.drillState.has(k)) { this.drillState.add(k); drillChanged = true; }
+          }
           continue;
         }
         seen.add(k);
@@ -282,6 +309,7 @@ export class BoardRenderer {
     }
     if (changed) this.rebuildLocked();
     if (hailChanged) this.rebuildHail();
+    if (drillChanged) this.rebuildDrill();
   }
 
   setActive(kind: PieceKind, cells: Vec2[], instant = false, special: string | null = null): void {
@@ -563,6 +591,8 @@ export class BoardRenderer {
     this.rebuildLocked();
     this.hailState.clear();
     this.rebuildHail();
+    this.drillState.clear();
+    this.rebuildDrill();
     // Meshes mid clear/lock animation are no longer in `lockedState`: without
     // this they would stay in the scene forever after a restart.
     for (const [, c] of this.clearingRows) for (const m of c.meshes) recycle(m);

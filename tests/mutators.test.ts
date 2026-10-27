@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TetrisEngine } from '../src/game/engine.js';
 import { MutatorDirector } from '../src/game/mutators/director.js';
+import { COLS } from '../src/game/types.js';
 import type { MutatorEvent, MutatorHost, WindDir } from '../src/game/mutators/types.js';
 
 function seqRng(): () => number { let i = 0; return () => { i = (i + 1) % 100; return i / 100; }; }
@@ -12,6 +13,7 @@ class RecordingHost implements MutatorHost {
   lightningStrikes: { x: number; y: number }[][] = [];
   hailDrops: number[][] = [];
   melts = 0;
+  drillStrikes: number[] = [];
   pushWind(dir: WindDir): boolean {
     if (!this.allow) return false;
     this.pushes.push(dir);
@@ -21,6 +23,7 @@ class RecordingHost implements MutatorHost {
   lightningStrike(cells: { x: number; y: number }[]): void { this.lightningStrikes.push(cells); }
   dropHail(columns: number[]): void { this.hailDrops.push(columns); }
   meltHail(): void { this.melts++; }
+  drillStrike(column: number): void { this.drillStrikes.push(column); }
   occupiedColumns(): number[] { return [0, 1, 2]; }
   topCell(_col: number): number { return 0; }
 }
@@ -56,10 +59,10 @@ describe('MutatorDirector (lógica pura)', () => {
       const out: string[] = [];
       const director = new MutatorDirector({
         seed, enabled: true, host: new RecordingHost(),
-        config: { firstDelaySec: 0.5, warnSec: 0.3, activeSec: 2, cooldownSec: 0.4, windIntervalSec: 1, windFirstGustSec: 1 },
+        config: { pool: ['wind', 'rain', 'lightning', 'hail', 'drill'], firstDelaySec: 0.5, warnSec: 0.3, activeSec: 2, cooldownSec: 0.4, windIntervalSec: 1, windFirstGustSec: 1 },
         onEvent: (e) => out.push(e.kind + ':' + ('mutator' in e ? e.mutator : '') + ':' + ('dir' in e ? e.dir : ''))
       });
-      for (let i = 0; i < 300; i++) director.update(0.05);
+      for (let i = 0; i < 600; i++) director.update(0.05);
       return out;
     };
     const a = run(1234);
@@ -271,5 +274,41 @@ describe('MutatorDirector lightning/hail', () => {
     expect(events.some((e) => e.kind === 'hail')).toBe(true);
     d.update(0.3);
     expect(host.melts).toBe(1);
+  });
+
+  it('drill: avisa y perfora columna aleatoria', () => {
+    const host = new RecordingHost();
+    const events: MutatorEvent[] = [];
+    const d = new MutatorDirector({
+      seed: 7,
+      enabled: true,
+      host,
+      config: {
+        pool: ['drill'],
+        firstDelaySec: 0,
+        warnSec: 0.1,
+        activeSec: 10,
+        cooldownSec: 0.1,
+        drillFirstStrikeSec: 0.2,
+        drillWarnSec: 0.1,
+        drillIntervalSec: 5,
+        drillConeWidth: 1
+      },
+      onEvent: (e) => events.push(e)
+    });
+    // Avanza hasta que entre en active y empiece el ciclo de drill
+    d.update(0.1); // warn
+    d.update(0.1); // start active
+    expect(events.some((e) => e.kind === 'start' && e.mutator === 'drill')).toBe(true);
+    // Avance para llegar al primer strike (drillFirstStrikeSec = 0.2)
+    d.update(0.3);
+    // Debe haber un drill-warn y luego un drill
+    expect(events.some((e) => e.kind === 'drill-warn')).toBe(true);
+    expect(events.some((e) => e.kind === 'drill')).toBe(true);
+    // El host debe haber recibido drillStrike
+    expect(host.drillStrikes.length).toBeGreaterThan(0);
+    // La columna debe estar en rango válido
+    expect(host.drillStrikes[0]).toBeGreaterThanOrEqual(0);
+    expect(host.drillStrikes[0]).toBeLessThan(COLS);
   });
 });

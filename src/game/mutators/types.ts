@@ -3,7 +3,7 @@ import type { Vec2 } from '../types.js';
 export type { Vec2 } from '../types.js';
 
 /** Mutadores disponibles en el modo Caos (tormentas). */
-export type MutatorId = 'wind' | 'rain' | 'lightning' | 'hail';
+export type MutatorId = 'wind' | 'rain' | 'lightning' | 'hail' | 'drill';
 
 /** Dirección de un empuje de viento: izquierda o derecha. */
 export type WindDir = -1 | 1;
@@ -23,6 +23,8 @@ export interface MutatorHost {
   dropHail(columns: number[]): void;
   /** Elimina las celdas de granizo temporales del tablero. */
   meltHail(): void;
+  /** Taladro: perfora un cono en la columna hasta el fondo, dejando roca roja 'R'. */
+  drillStrike(column: number): void;
   /** Columnas del tablero con al menos un bloque (para elegir objetivos del relámpago). */
   occupiedColumns(): number[];
   /** Fila más alta ocupada en la columna (o -1). */
@@ -40,4 +42,6 @@ export type MutatorEvent =
   | { kind: 'wind-warn'; dir: WindDir; seconds: number }
   | { kind: 'wind-gust'; dir: WindDir; moved: boolean }
   | { kind: 'lightning'; cells: Vec2[] }
-  | { kind: 'hail'; columns: number[] };
+  | { kind: 'hail'; columns: number[] }
+  | { kind: 'drill'; column: number; cells: Vec2[] }
+  | { kind: 'drill-warn'; column: number; seconds: number };

@@ -4,7 +4,7 @@ import { cellsForPiece, getKicks, shuffledBag } from './pieces.js';
 import { MutatorDirector } from './mutators/director.js';
 import type { MutatorConfig } from './mutators/config.js';
 import type { MutatorEvent, MutatorHost, WindDir } from './mutators/types.js';
-import { BOLT_BREAKS, COLS, DRILL_DEPTH, LINES_PER_LEVEL, LINE_POINTS, MAX_LEVEL, SECONDS_PER_LEVEL, SPECIAL_PROBABILITY, TOTAL_ROWS, VISIBLE_ROWS } from './types.js';
+import { BOLT_BREAKS, COLS, DRILL_CONE_WIDTH, DRILL_DEPTH, LINES_PER_LEVEL, LINE_POINTS, MAX_LEVEL, SECONDS_PER_LEVEL, SPECIAL_PROBABILITY, TOTAL_ROWS, VISIBLE_ROWS } from './types.js';
 import type { ActivePiece, GameEvent, GameMode, GamePhase, Grid, LevelProgress, PieceKind, RotationState, Vec2 } from './types.js';
 
 export type SpecialKind = 'bomb' | 'bolt' | 'drill';
@@ -61,6 +61,8 @@ export class TetrisEngine implements MutatorHost {
   private holdDrillUsed = false;
   /** Columns that currently host hail (garbage) tiles. Read by the renderer for tinting. */
   hailColumns: number[] = [];
+  /** Columns currently hosting drill-red tiles. Read by the renderer for tinting. */
+  drillColumns: number[] = [];
   /** Bump counter: changes whenever the grid changes (merge/clear/reset). Lets the view sync lazily. */
   gridVersion = 0;
   /** Bump counter: changes whenever the active piece moves, rotates or is replaced. */
@@ -512,6 +514,40 @@ export class TetrisEngine implements MutatorHost {
     }
     this.hailColumns = [];
     this.gridVersion++;
+  }
+
+  /** Taladro: perfora un cono desde el tope de la columna hasta el fondo,
+   *  dejando roca roja ('R') en las celdas perforadas. Solo modo Caos. */
+  drillStrike(column: number): void {
+    let top = -1;
+    for (let y = TOTAL_ROWS - 1; y >= 0; y--) {
+      const v = this.grid[y]?.[column];
+      if (v !== 0 && v !== undefined) { top = y; break; }
+    }
+    if (top < 0) return;
+
+    const cells: Vec2[] = [];
+    const coneWidth = DRILL_CONE_WIDTH;
+
+    for (let y = top; y >= 0; y--) {
+      // Cono: se abre ligeramente al descender (1 celda en la punta, más en la base).
+      const progress = top === 0 ? 1 : (top - y) / top;
+      const w = Math.floor(coneWidth * (1 + progress));
+      const row = this.grid[y];
+      if (!row) continue;
+      const xMin = Math.max(0, column - w);
+      const xMax = Math.min(COLS - 1, column + w);
+      for (let x = xMin; x <= xMax; x++) {
+        if (row[x] !== 0 && row[x] !== undefined) {
+          row[x] = 'R';
+          cells.push({ x, y });
+        }
+      }
+    }
+
+    if (!this.drillColumns.includes(column)) this.drillColumns.push(column);
+    this.gridVersion++;
+    this.emit({ type: 'drill-strike', column, cells });
   }
 
 }

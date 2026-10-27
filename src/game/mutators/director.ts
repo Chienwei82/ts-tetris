@@ -46,6 +46,9 @@ export class MutatorDirector {
   private fallTimer = 0;
   private meltTimer = 0;
   private hasHail = false;
+  private drillTimer = 0;
+  private drillWarned = false;
+  private drillColumn = -1;
 
   constructor(opts: MutatorDirectorOptions) {
     this.seed = opts.seed >>> 0;
@@ -73,6 +76,9 @@ export class MutatorDirector {
     this.fallTimer = 0;
     this.meltTimer = 0;
     this.hasHail = false;
+    this.drillTimer = 0;
+    this.drillWarned = false;
+    this.drillColumn = -1;
   }
 
   /** Tormenta activa, o `null` si no hay ninguna. */
@@ -132,6 +138,10 @@ export class MutatorDirector {
         this.strikeTimer = Math.min(this.config.activeSec, Math.max(0.1, this.config.lightningFirstStrikeSec));
       } else if (mutator === 'hail') {
         this.fallTimer = Math.min(this.config.activeSec, Math.max(0.1, this.config.hailFirstFallSec));
+      } else if (mutator === 'drill') {
+        this.drillTimer = Math.min(this.config.activeSec, Math.max(0.1, this.config.drillFirstStrikeSec));
+        this.drillWarned = false;
+        this.drillColumn = -1;
       }
       return;
     }
@@ -140,6 +150,7 @@ export class MutatorDirector {
     if (this.current === 'wind') this.updateWind(dt);
     else if (this.current === 'lightning') this.updateLightning(dt);
     else if (this.current === 'hail') this.updateHail(dt);
+    else if (this.current === 'drill') this.updateDrill(dt);
     if (this.timer <= 0) this.finishActive();
   }
 
@@ -243,6 +254,35 @@ export class MutatorDirector {
       out.push(pool.splice(idx, 1)[0]!);
     }
     return out;
+  }
+
+
+  private updateDrill(dt: number): void {
+    this.drillTimer -= dt;
+    if (!this.drillWarned && this.drillTimer <= this.config.drillWarnSec) {
+      this.drillWarned = true;
+      this.drillColumn = this.pickDrillColumn();
+      if (this.drillColumn >= 0) {
+        this.emit({ kind: 'drill-warn', column: this.drillColumn, seconds: this.config.drillWarnSec });
+      }
+    }
+    if (this.drillTimer > 0) return;
+    if (this.drillColumn < 0) {
+      this.drillColumn = this.pickDrillColumn();
+    }
+    if (this.drillColumn >= 0) {
+      this.host.drillStrike(this.drillColumn);
+      this.emit({ kind: 'drill', column: this.drillColumn, cells: [] });
+      this.drillColumn = -1;
+    }
+    this.drillTimer = this.config.drillIntervalSec;
+  }
+
+  private pickDrillColumn(): number {
+    const cols = this.host.occupiedColumns();
+    if (cols.length === 0) return -1;
+    const idx = Math.min(cols.length - 1, Math.floor(this.rng() * cols.length));
+    return cols[idx]!;
   }
 
   private finishActive(): void {

@@ -88,7 +88,7 @@ const stormShade = el<HTMLDivElement>('storm-shade');
 const windArrow = el<HTMLDivElement>('wind-arrow');
 const windGlyph = el<HTMLSpanElement>('wind-arrow-glyph');
 const stormFxRandom = createFxRandom();
-const MUTATOR_LABEL: Record<MutatorId, string> = { wind: '🌬️ Viento', rain: '🌧️ Lluvia', lightning: '⚡ Relámpago', hail: '🌨️ Granizo' };
+const MUTATOR_LABEL: Record<MutatorId, string> = { wind: '🌬️ Viento', rain: '🌧️ Lluvia', lightning: '⚡ Relámpago', hail: '🌨️ Granizo', drill: '🔩 Taladro' };
 let activeMutator: MutatorId | null = null;
 let windArrowLeft = 0;
 let lastThemeIdx = 0;
@@ -216,6 +216,17 @@ function handleMutatorEvent(e: MutatorEvent): void {
         hud.toast('🌬️ Viento — empuja la pieza', 2000);
       }
       break;
+    case 'drill-warn': {
+      hud.setMutatorChip('⏳ ' + MUTATOR_LABEL.drill + '…');
+      hud.toast('🔩 Taladro en columna ' + (e.column + 1) + ' — se avecina', 1600);
+      break;
+    }
+    case 'drill': {
+      sound.play('drill');
+      shake.add(0.5);
+      hud.toast('🔩 Taladro — columna ' + (e.column + 1) + ' perforada hasta el fondo', 2000);
+      break;
+    }
     case 'wind-warn':
       stage.setWind(e.dir);
       showWindArrow(e.dir, e.seconds);
@@ -363,6 +374,24 @@ function handleEvent(e: GameEvent): void {
         board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0x9aa7ff, 10, 3.2, 3.2);
       }
       hud.toast('🔩 Taladro — se hunde 2 filas', 1500);
+      break;
+    }
+    case 'drill-strike': {
+      sound.play('drill');
+      shake.add(0.7);
+      const column = e.column ?? 0;
+      const cells = e.cells ?? [];
+      // Flash vertical en la columna perforada
+      if (cells.length > 0) {
+        const ys = cells.map((c) => c.y);
+        flash.flash(Math.min(...ys), Math.max(...ys) - Math.min(...ys) + 1);
+      }
+      // Partículas rojas en cada celda convertida a roca
+      for (const c of cells) {
+        const q = cellToWorld(c.x, c.y);
+        board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0xe4573f, 10, 3.4, 3.6);
+      }
+      hud.toast('🔥 Roca roja — columna ' + (column + 1) + ' en desventaja', 1800);
       break;
     }
     case 'harddrop':
