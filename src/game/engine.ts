@@ -1,4 +1,4 @@
-import { clearFullRows, collides, createGrid, mergePiece } from './board.js';
+import { clearFullRows, collides, createGrid, mergePiece, stackHeight } from './board.js';
 import { mulberry32 } from './rng.js';
 import { cellsForPiece, getKicks, shuffledBag } from './pieces.js';
 import { MutatorDirector } from './mutators/director.js';
@@ -67,6 +67,14 @@ export class TetrisEngine implements MutatorHost {
   gridVersion = 0;
   /** Bump counter: changes whenever the active piece moves, rotates or is replaced. */
   pieceVersion = 0;
+  /** Altura de pila cacheada (se recalcula solo cuando el grid cambia). Usada por la música. */
+  private _stackHeight = -1;
+  /** Devuelve la fila más alta ocupada del grid (o -1 si está vacío). Cacheada por `gridVersion`. */
+  get stackHeight(): number { return this._stackHeight; }
+  /** Recalcula y cachea la altura de pila. Llama siempre que el grid muta. */
+  private refreshStackHeight(): void {
+    this._stackHeight = stackHeight(this.grid);
+  }
   private fallAcc = 0; private lockAcc = 0; private lockResets = 0;
   private readonly rng: () => number;
   private readonly onEvent?: (e: GameEvent) => void;
@@ -94,6 +102,7 @@ export class TetrisEngine implements MutatorHost {
     this.levelTime = 0;
     this.fallAcc = 0; this.lockAcc = 0; this.lockResets = 0; this.softDrop = false;
     this.slippery = false;
+    this.refreshStackHeight();
     this.gridVersion++;
     this.pendingSpecial = this.rollSpecial();
     this.mutators.reset();
@@ -341,6 +350,7 @@ export class TetrisEngine implements MutatorHost {
     }
     if (blast.length === 0) return;
     this.settleColumns();
+    this.refreshStackHeight();
     this.gridVersion++;
     this.emit({ type: 'bomb', rows: [rowA, rowB], cells: blast });
   }
@@ -367,6 +377,7 @@ export class TetrisEngine implements MutatorHost {
       if (row) row[c.x] = 0;
     }
     this.settleColumns();
+    this.refreshStackHeight();
     this.gridVersion++;
     this.emit({ type: 'bolt', rows: [...new Set(broken.map((c) => c.y))], cells: broken });
   }
@@ -396,6 +407,7 @@ export class TetrisEngine implements MutatorHost {
     if (sink <= 0) return false;
     this.active.y -= sink;
     this.drillUsed = true;
+    this.refreshStackHeight();
     this.gridVersion++; this.pieceVersion++;
     this.emit({ type: 'drill', cells: bored });
     return true;
@@ -418,7 +430,7 @@ export class TetrisEngine implements MutatorHost {
         }
       }
     }
-    if (moved) this.gridVersion++;
+    if (moved) { this.refreshStackHeight(); this.gridVersion++; }
     return moved;
   }
   private lockPiece(): void {
@@ -433,6 +445,7 @@ export class TetrisEngine implements MutatorHost {
       else if (special === 'bolt') this.applyBolt(cells);
     } else {
       mergePiece(this.grid, cells, this.active.kind);
+      this.refreshStackHeight();
       this.gridVersion++;
       this.emit({ type: 'lock', cells });
       const cleared: number[] = clearFullRows(this.grid);
@@ -462,6 +475,7 @@ export class TetrisEngine implements MutatorHost {
       if (row) row[c.x] = 0;
     }
     this.settleColumns();
+    this.refreshStackHeight();
     this.gridVersion++;
     this.emit({ type: 'lightning', cells });
   }
@@ -501,6 +515,7 @@ export class TetrisEngine implements MutatorHost {
       }
       if (!this.hailColumns.includes(x)) this.hailColumns.push(x);
     }
+    this.refreshStackHeight();
     this.gridVersion++;
     this.emit({ type: 'hail', columns });
   }
@@ -513,6 +528,7 @@ export class TetrisEngine implements MutatorHost {
       for (let x = 0; x < COLS; x++) if (row[x] === 'G') row[x] = 0;
     }
     this.hailColumns = [];
+    this.refreshStackHeight();
     this.gridVersion++;
   }
 
@@ -546,6 +562,7 @@ export class TetrisEngine implements MutatorHost {
     }
 
     if (!this.drillColumns.includes(column)) this.drillColumns.push(column);
+    this.refreshStackHeight();
     this.gridVersion++;
     this.emit({ type: 'drill-strike', column, cells });
   }

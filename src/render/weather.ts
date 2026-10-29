@@ -202,6 +202,11 @@ class FallField {
     }
   }
   update(dt: number, wind: number): void {
+    // Nada que animar y ya desvanecido: salida temprana, sin tocar buffers.
+    if (this.fade === 0 && this.fade === this.target &&
+        !this.opts.fall && this.opts.wander === 0 && this.opts.twinkle === 0) {
+      return;
+    }
     if (this.fade !== this.target) {
       const step = dt / FADE_SECONDS;
       this.fade = this.target > this.fade ? Math.min(this.target, this.fade + step) : Math.max(this.target, this.fade - step);
@@ -216,6 +221,7 @@ class FallField {
     const speed = this.speed;
     const phase = this.phase;
     const t = this.time;
+    let posDirty = false;
     if (this.opts.fall) {
       const sway = dt * this.opts.swayAmp * (0.4 + wind * 0.6);
       const freq = this.opts.swayFreq;
@@ -229,8 +235,8 @@ class FallField {
         }
         a[ix] = x;
         a[ix + 1] = y;
+        posDirty = true;
       }
-      this.attr.needsUpdate = true;
     } else if (this.opts.wander > 0) {
       const wander = this.opts.wander;
       for (let i = 0; i < n; i++) {
@@ -243,16 +249,22 @@ class FallField {
         if (y > b.y1) y = b.y0;
         a[ix] = x;
         a[ix + 1] = y;
+        posDirty = true;
       }
-      this.attr.needsUpdate = true;
     }
+    if (posDirty) this.attr.needsUpdate = true;
     if (this.opts.twinkle > 0) {
       const alp = this.alphaAttr.array as Float32Array;
       const tw = this.opts.twinkle;
+      let alphaDirty = false;
       for (let i = 0; i < n; i++) {
-        alp[i] = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(t * tw + (phase[i] ?? 0) * 3));
+        const newAlpha = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(t * tw + (phase[i] ?? 0) * 3));
+        if (alp[i] !== newAlpha) {
+          alp[i] = newAlpha;
+          alphaDirty = true;
+        }
       }
-      this.alphaAttr.needsUpdate = true;
+      if (alphaDirty) this.alphaAttr.needsUpdate = true;
     }
   }
 }
