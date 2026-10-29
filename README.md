@@ -27,7 +27,7 @@ npm run dev      # local: http://localhost:5173 · LAN: http://<tu-IP>:5173
 ```
 
 ```bash
-npm test         # tests de lógica (vitest 5, 132 tests)
+npm test         # tests de lógica (vitest 5, 136 tests)
 npm run build    # type-check (tsc 7 nativo) + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
@@ -199,7 +199,7 @@ src/
   tools/     fuera del bundle: curate-seeds.ts (npm run curate) puntúa semillas;
              screenshots.mjs (npm run shots) genera las capturas del README;
              touch-layout-check.mjs valida la ergonomía del layout táctil (node)
-  main.ts     Bucle, cámara con deriva, gauge/selector, toggle de efectos, eventos→efectos
+  app.ts      GameApp: estado, bucle de render (con render condicional por frame sucio),\n              tormentas del Caos, música, efectos y entrada unificada\n  main.ts     Punto de entrada delgado: solo importa y arranca GameApp
 ```
 
 La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
@@ -237,6 +237,15 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
 - **Panel del tablero por modos**: translúcido con efectos (el fondo se ve detrás de
   las piezas y las sombras se recortan contra el panel) y sólido sin ellos
   (`transparent: false`, sin blending ni ordenación) para ahorrar GPU.
+- **Render condicional**: `renderer.render()` solo se ejecuta cuando hay un frame
+  sucio (cambio de grid/pieza, sombra, escombros, clima, shake, HUD o render
+  pendiente); pantallas estáticas (menú, pausa, gameover) no re-dibujan.
+- **Altura de pila cacheada** en el motor (`stackHeight`): se recalcula solo cuando
+  el grid muta (invalidado por `gridVersion`), no cada frame en la señal de música.
+- **Salida temprana en clima**: `FallField.update()` retorna sin tocar buffers cuando
+  el campo está desvanecido y no hay caída, vagabundeo ni titileo.
+- **Constantes con nombre** para números mágicos del loop (intervalo de música 10 Hz,
+  refresco HUD 80 ms, delta máximo 100 ms, flecha de viento ≥ 1 s).
 - **Audio 100 % sintetizado**: osciladores WebAudio, cero ficheros. La música
   procedural se programa con scheduler lookahead (tipo *tale of two clocks*) y
   cambios de intensidad cuantizados al compás; incluye limitador (compresor) y
