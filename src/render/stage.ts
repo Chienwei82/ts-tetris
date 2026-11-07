@@ -6,6 +6,7 @@ import type { StageTheme } from './themes.js';
 import { WeatherSystem } from './weather.js';
 import { Characters } from './characters.js';
 import { WindSystem } from './fx/windSystem.js';
+import type { ScenarioManager } from './scenarios/scenarioManager.js';
 
 export interface StageOptions { onThunder?: () => void }
 
@@ -21,9 +22,15 @@ export interface Stage {
   setWind(dir: -1 | 1 | null): void;
   /** Ráfaga puntual de viento (acelera partículas un instante). */
   gust(dir: -1 | 1): void;
+  /** Personajes del diorama (para adaptación al escenario). */
+  characters(): Characters;
   /** Theme currently being displayed (target of the running transition). */
   theme(): StageTheme;
   update(dt: number): void;
+  /** Inyecta el gestor de escenarios (opcional). */
+  setScenarioManager(mgr: ScenarioManager | null): void;
+  /** Devuelve el gestor de escenarios inyectado (o null). */
+  scenarioManagerRef(): ScenarioManager | null;
 }
 
 const TRANSITION_SECONDS = 1.6;
@@ -71,6 +78,10 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   const tmpColor = new THREE.Color();
   const skyStops: [number, number, number, number] = [0, 0, 0, 0];
 
+  /** Gestor de escenarios (opcional). Cuando está activo, se encarga de
+   *  cielo, luces, niebla y suelo; el stage solo anima nubes, clima y personajes. */
+  let scenarioManager: ScenarioManager | null = null;
+
   function themeAt(i: number): StageTheme {
     return THEMES[i] ?? (THEMES[0] as StageTheme);
   }
@@ -82,6 +93,7 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   }
   /** Pushes the interpolated look between `fromIdx` and `toIdx` into the scene. */
   function apply(t: number, repaintSky = true): void {
+    if (scenarioManager && scenarioManager.effectsEnabled()) return;
     const a = themeAt(fromIdx);
     const b = themeAt(toIdx);
     skyStops[0] = mixHex(a.sky[0], b.sky[0], t, scratch);
@@ -188,6 +200,9 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   return {
     setLevel(lv: number, immediate = false): void {
       level = lv;
+      // El gestor de escenarios decide si se hace cargo del fondo; si no hay
+      // escenario para este nivel, cae al tema clásico.
+      if (scenarioManager && enabled && scenarioManager.setLevel(lv, immediate)) return;
       if (enabled) startTransition(themeIndexForLevel(lv), immediate);
     },
     setEffectsEnabled(on: boolean, immediate = false): void {
@@ -195,6 +210,7 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
       enabled = on;
       if (!on) {
         // Classic frozen background: day palette, extras hidden and paused.
+        if (scenarioManager) scenarioManager.setEffectsEnabled(false, immediate);
         startTransition(0, true);
         weather.setEnabled(false, true);
         weather.setOverlay(null, true);
@@ -214,7 +230,13 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
         characters.setGust(windWanted);
         if (windWanted) windFx.setDirection(windWanted);
         else windFx.setEnabled(false);
-        startTransition(themeIndexForLevel(level), immediate);
+        if (scenarioManager) {
+          scenarioManager.setEffectsEnabled(true, immediate);
+          // Si no hay escenario para el nivel actual, vuelve al tema clásico.
+          if (!scenarioManager.effectsEnabled()) startTransition(themeIndexForLevel(level), immediate);
+        } else {
+          startTransition(themeIndexForLevel(level), immediate);
+        }
       }
       syncVisibility();
     },
@@ -241,7 +263,11 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
       rainK += (rainTarget - rainK) * Math.min(1, dt * 2.6);
       if (Math.abs(rainK - rainTarget) < 0.002) rainK = rainTarget;
       if (enabled) {
-        if (transitioning) {
+        // Cuando hay escenario activo, él gestiona cielo/luces/niebla/suelo.
+        // El stage sigue animando nubes, floaters, confeti, clima y personajes.
+        if (scenarioManager && scenarioManager.effectsEnabled()) {
+          scenarioManager.update(dt);
+        } else if (transitioning) {
           k = Math.min(1, k + dt / TRANSITION_SECONDS);
           const done = k >= 1;
           if (done) transitioning = false;
@@ -265,10 +291,22 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
         characters.update(dt);
         lightning(dt);
       }
-      if (rainK > 0.001) parts.fog.color.copy(fogBase).lerp(RAIN_FOG, rainK * 0.55);
-      else parts.fog.color.copy(fogBase);
+      // Niebla base: la del escenario si controla el fondo; si no, la clásica.
+      const scenarioOn = scenarioManager !== null && scenarioManager.effectsEnabled();
+      const baseFog = scenarioOn && scenarioManager ? scenarioManager.currentFog() : fogBase;
+      if (rainK > 0.001) parts.fog.color.copy(baseFog).lerp(RAIN_FOG, rainK * 0.55);
+      else parts.fog.color.copy(baseFog);
       windFx.update(dt);
-      updateLightFlash();
-    }
+      // Con escenario activo sus luces ya están ajustadas: modulamos flash/lluvia
+      // sólo en modo clásico para no pisar el look del escenario.
+      if (!scenarioOn) updateLightFlash();
+    },
+    /** Inyecta el gestor de escenarios. Cuando está activo, este controla
+     *  cielo, luces, niebla y suelo en lugar de los temas. */
+    setScenarioManager(mgr: ScenarioManager | null): void { scenarioManager = mgr; },
+    /** Devuelve el gestor de escenarios inyectado (o null). */
+    scenarioManagerRef(): ScenarioManager | null { return scenarioManager; },
+    /** Personajes del diorama. */
+    characters(): Characters { return characters; },
   };
 }

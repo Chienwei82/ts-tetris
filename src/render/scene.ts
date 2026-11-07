@@ -31,6 +31,9 @@ export interface SceneParts {
   sky: SkyPart;
   fog: THREE.Fog;
   hills: THREE.Mesh[];
+  /** Grupo dedicado a la escenografía de los escenarios (edificios, árboles…).
+   *  Se limpia al cambiar de escenario para liberar la GPU correctamente. */
+  scenery: THREE.Group;
   sunGroup: THREE.Group;
   sunMat: THREE.MeshBasicMaterial;
   rayMat: THREE.MeshBasicMaterial;
@@ -209,6 +212,10 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
   ];
   for (const h of hills) scene.add(h);
 
+  // Contenedor de la escenografía de los escenarios (vacío en modo clásico).
+  const scenery = new THREE.Group();
+  scene.add(scenery);
+
   // Cut-paper sun (or moon) with rays; grouped so themes move/scale/recolour it.
   const sunMat = new THREE.MeshBasicMaterial({ color: 0xffd34e, fog: false });
   const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(3.4, 40), sunMat);
@@ -259,7 +266,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
   // El resize/orientation lo gestiona ViewportManager (src/platform/viewport.ts).
 
   const parts: SceneParts = {
-    scene, sky, fog, hills, sunGroup, sunMat, rayMat, rays,
+    scene, sky, fog, hills, scenery, sunGroup, sunMat, rayMat, rays,
     clouds, cloudMat, floaters, confetti,
     hemi, key, fill, groundMat, gridMat
   };

@@ -20,6 +20,9 @@ import { createScene } from './render/scene.js';
 import type { SceneOptions } from './render/scene.js';
 import { createStage } from './render/stage.js';
 import { THEMES, themeIndexForLevel } from './render/themes.js';
+import { ScenarioManager } from './render/scenarios/scenarioManager.js';
+// Importar el índice registra todos los escenarios en el ScenarioRegistry.
+import './render/scenarios/index.js';
 import { SoundFX } from './audio/sound.js';
 import { IntensityTracker } from './audio/intensityTracker.js';
 import { MusicDirector } from './audio/musicDirector.js';
@@ -81,6 +84,7 @@ export class GameApp {
   private readonly shake: CameraShake;
   private readonly debris: DebrisSystem;
   private readonly stage: ReturnType<typeof createStage>;
+  private readonly scenarioManager: ScenarioManager;
   private readonly stormShade: HTMLElement;
   private readonly windArrow: HTMLElement;
   private readonly windGlyph: HTMLElement;
@@ -162,6 +166,19 @@ export class GameApp {
     this.chaosHailOn = loadChaosHail();
 
     this.stage = createStage(parts, { onThunder: () => this.sound.play('thunder') });
+
+    // Gestor de escenarios: uno cada N niveles, transición ~2 s, libera GPU al cambiar.
+    this.scenarioManager = new ScenarioManager({
+      parts,
+      levelsPerScenario: 5,
+      transitionSeconds: 2,
+      onScenarioChange: (id) => {
+        this.stage.characters().setScenario(id);
+        const s = this.scenarioManager.activeScenario();
+        if (s) this.hud.setStageChip(s.icon + ' ' + s.name);
+      },
+    });
+    this.stage.setScenarioManager(this.scenarioManager);
 
     this.stormShade = el<HTMLDivElement>('storm-shade');
     this.windArrow = el<HTMLDivElement>('wind-arrow');
@@ -604,7 +621,7 @@ export class GameApp {
     this.music.startWithGenreSeed();
     console.info('[música] género:', this.music.getGenre(), '· semilla:', this.music.getSeed());
     this.lastThemeIdx = themeIndexForLevel(lv);
-    this.hud.setStageChip(stageLabelFor(lv));
+    this.hud.setStageChip(this.activeScenarioLabel(lv));
     this.hud.hideOverlay();
     this.hud.setStats(0, lv, 0);
     this.refreshGauge();
@@ -774,7 +791,7 @@ export class GameApp {
           this.hud.toast('Nivel ' + lv + ' — ¡más velocidad!', 2200);
           this.hud.levelBanner('NIVEL ' + lv, '¡más rápido!');
         }
-        this.hud.setStageChip(label);
+        this.hud.setStageChip(this.activeScenarioLabel(lv));
         break;
       }
       case 'gameover':
@@ -784,6 +801,13 @@ export class GameApp {
         this.showGameOver();
         break;
     }
+  }
+
+  /** Etiqueta del HUD: nombre del escenario activo o, si no hay, del tema. */
+  private activeScenarioLabel(lv: number): string {
+    const s = this.scenarioManager.activeScenario();
+    if (s) return s.icon + ' ' + s.name;
+    return stageLabelFor(lv);
   }
 
   private animate = (now: number): void => {
