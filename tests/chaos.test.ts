@@ -151,4 +151,59 @@ describe('piezas especiales (modo caos)', () => {
     expect(e.grid[0]![0]).toBe('I');
     expect(e.grid[1]![0]).toBe('T');
   });
+
+describe('guía de impacto del powerup (specialPreview)', () => {
+  it('Tradicional no dibuja guía', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    expect(e.specialPreview()).toBeNull();
+  });
+
+  it('bomba: anuncia las 2 filas donde caerá el fantasma', () => {
+    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 3 });
+    e.start();
+    fillRows(e, 0, 3); // el fantasma de la I cae sobre la fila 4
+    e.active = { kind: 'I', rotation: 0, x: 2, y: 12 };
+    e.special = 'bomb';
+    const preview = e.specialPreview();
+    expect(preview?.kind).toBe('bomb');
+    expect(preview?.rows.slice().sort((a, b) => a - b)).toEqual([3, 4]);
+    // Las celdas anunciadas son exactamente las ocupadas de esas filas.
+    let occupied = 0;
+    for (const y of preview?.rows ?? []) {
+      for (let x = 0; x < 10; x++) if (e.grid[y]?.[x] !== 0) occupied++;
+    }
+    expect(occupied).toBeGreaterThan(0);
+    expect(preview?.cells.length).toBe(occupied);
+    for (const c of preview?.cells ?? []) expect(preview?.rows).toContain(c.y);
+  });
+
+  it('rayo: anuncia exactamente los bloques que romperá', () => {
+    const events: GameEvent[] = [];
+    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 4, onEvent: (ev) => events.push(ev) });
+    e.start();
+    fillRows(e, 0, 2);
+    e.active = { kind: 'O', rotation: 0, x: 5, y: 10 };
+    e.special = 'bolt';
+    const preview = (e.specialPreview()?.cells ?? []).map((c) => c.x + ',' + c.y).sort();
+    e.hardDrop();
+    const bolt = events.find((ev) => ev.type === 'bolt');
+    const broken = (bolt?.cells ?? []).map((c) => c.x + ',' + c.y).sort();
+    expect(preview).toEqual(['5,1', '5,2', '6,1', '6,2']);
+    expect(preview).toEqual(broken);
+  });
+
+  it('taladro: anuncia las celdas bajo la base y desaparece tras hundirse', () => {
+    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 4 });
+    e.start();
+    fillRows(e, 0, 5);
+    e.active = { kind: 'O', rotation: 0, x: 5, y: 6 };
+    e.special = 'drill';
+    const preview = (e.specialPreview()?.cells ?? []).map((c) => c.x + ',' + c.y).sort();
+    expect(preview).toEqual(['5,4', '5,5', '6,4', '6,5']);
+    expect(e.drillSink()).toBe(true);
+    expect(e.specialPreview()).toBeNull();
+  });
+});
+
 });

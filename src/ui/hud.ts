@@ -120,16 +120,21 @@ export class HUD {
   setDebrisChip(on: boolean): void {
     if (this.debrisChipEl) this.debrisChipEl.classList.toggle('hidden', !on);
   }
-  /** Especial activo de la pieza (chip). '' oculta. */
-  setChaosStatus(text: string): void {
-    if (this.chaosEl && this.chaosEl.textContent !== text) this.chaosEl.textContent = text;
-    if (this.chaosEl) this.chaosEl.classList.toggle('hidden', text === '');
+  /** Especial activo de la pieza (chip). '' oculta; `tone` colorea por tipo. */
+  setChaosStatus(text: string, tone = ''): void {
+    if (!this.chaosEl) return;
+    if (this.chaosEl.textContent !== text) this.chaosEl.textContent = text;
+    this.chaosEl.classList.toggle('hidden', text === '');
+    this.chaosEl.classList.remove('bomb', 'bolt', 'drill');
+    if (text !== '' && tone !== '') this.chaosEl.classList.add(tone);
   }
-  /** Tormenta activa del Caos (chip). '' oculta. */
-  setMutatorChip(text: string): void {
+  /** Tormenta activa del Caos (chip). '' oculta; `tone` colorea por tormenta. */
+  setMutatorChip(text: string, tone = ''): void {
     if (!this.mutatorChipEl) return;
     if (this.mutatorChipEl.textContent !== text) this.mutatorChipEl.textContent = text;
     this.mutatorChipEl.classList.toggle('hidden', text === '');
+    this.mutatorChipEl.classList.remove('wind', 'rain', 'lightning', 'hail', 'drill');
+    if (text !== '' && tone !== '') this.mutatorChipEl.classList.add(tone);
   }
   showOverlay(title: string, subHtml: string, statsHtml: string, showStartOptions = false): void {
     this.titleEl.textContent = title;

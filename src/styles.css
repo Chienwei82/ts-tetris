@@ -123,6 +123,16 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #mutator-chip.hidden { display: none; }
 #chaos-status { margin-top: 10px; padding: 6px 10px; background: var(--red); color: #fff; border: 2px solid var(--ink); border-radius: 10px; font-weight: 700; font-size: 14px; text-align: center; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.3); }
 #chaos-status.hidden { display: none; }
+/* Color por powerup: bomba (rojo), rayo (ámbar) y taladro (cobre). */
+#chaos-status.bomb { background: #c8442f; }
+#chaos-status.bolt { background: #d9a91f; color: var(--ink); }
+#chaos-status.drill { background: #b8652f; }
+/* Color por tormenta: cada aviso se reconoce de un vistazo. */
+#mutator-chip.wind { background: #b9d6e8; }
+#mutator-chip.rain { background: #6f9dc4; color: #fff; }
+#mutator-chip.lightning { background: #ffd94a; }
+#mutator-chip.hail { background: #cfe6ff; }
+#mutator-chip.drill { background: #e08a63; }
 /* ============ Tormentas del Caos: oscurecimiento + flecha de viento ============ */
 #storm-shade {
   position: fixed; inset: 0; pointer-events: none; z-index: 3; opacity: 0;

@@ -22,6 +22,8 @@ export interface Stage {
   setWind(dir: -1 | 1 | null): void;
   /** Ráfaga puntual de viento (acelera partículas un instante). */
   gust(dir: -1 | 1): void;
+  /** Fogonazo de cielo puntual (relámpago del Caos, independiente del tema). */
+  flashLightning(): void;
   /** Personajes del diorama (para adaptación al escenario). */
   characters(): Characters;
   /** Theme currently being displayed (target of the running transition). */
@@ -52,6 +54,18 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   flash.position.set(0, 10, -78);
   flash.visible = false;
   parts.scene.add(flash);
+
+  // Fogonazo puntual para los relámpagos del Caos (independiente del tema):
+  // el cielo responde siempre, aunque el escenario no sea tormentoso.
+  const chaosFlashMat = new THREE.MeshBasicMaterial({
+    color: 0xdff0ff, transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false
+  });
+  const chaosFlash = new THREE.Mesh(new THREE.PlaneGeometry(240, 130), chaosFlashMat);
+  chaosFlash.position.set(0, 10, -77.8);
+  chaosFlash.visible = false;
+  parts.scene.add(chaosFlash);
+  let chaosFlashK = 0;
 
   let level = 1;
   let enabled = true;
@@ -190,7 +204,7 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   }
   /** Keeps light intensities in sync with the current base values and any flash. */
   function updateLightFlash(): void {
-    const f = enabled ? flashK : 0;
+    const f = enabled ? Math.max(flashK, chaosFlashK) : 0;
     parts.key.intensity = baseKey * (1 + 1.8 * f) * (1 - 0.42 * rainK);
     parts.hemi.intensity = baseHemi * (1 + 0.7 * f) * (1 - 0.3 * rainK);
   }
@@ -222,6 +236,9 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
         flashK = 0;
         flashMat.opacity = 0;
         flash.visible = false;
+        chaosFlashK = 0;
+        chaosFlashMat.opacity = 0;
+        chaosFlash.visible = false;
       } else {
         weather.setEnabled(true, true);
         weather.setOverlay(rainWanted ? 'storm' : null, true);
@@ -254,6 +271,12 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
     },
     gust(dir: -1 | 1): void {
       if (enabled) windFx.gust(dir);
+    },
+    flashLightning(): void {
+      if (!enabled) return;
+      chaosFlashK = 1;
+      chaosFlashMat.opacity = 0.85;
+      chaosFlash.visible = true;
     },
     theme(): StageTheme { return themeAt(toIdx); },
     update(dt: number): void {
@@ -297,6 +320,12 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
       if (rainK > 0.001) parts.fog.color.copy(baseFog).lerp(RAIN_FOG, rainK * 0.55);
       else parts.fog.color.copy(baseFog);
       windFx.update(dt);
+      // Fogonazo del Caos: decae siempre para no quedarse encendido en pausa/off.
+      if (chaosFlashK > 0) {
+        chaosFlashK = Math.max(0, chaosFlashK - dt / 0.32);
+        chaosFlashMat.opacity = chaosFlashK * 0.85;
+        chaosFlash.visible = chaosFlashK > 0.02;
+      }
       // Con escenario activo sus luces ya están ajustadas: modulamos flash/lluvia
       // sólo en modo clásico para no pisar el look del escenario.
       if (!scenarioOn) updateLightFlash();

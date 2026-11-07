@@ -103,10 +103,14 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   - 🔩 **Taladro**: se hunde 2 filas destruyendo lo que tiene debajo (una sola
     vez por pieza; viaja con la reserva).
   La secuencia es **determinista por semilla** (misma semilla ⇒ mismos
-  powerups) y el modo Tradicional no cambia en nada.
+  powerups). Al sostener un powerup el tablero muestra su **zona de impacto**
+  (las 2 filas de la bomba, los bloques del rayo, las celdas del taladro) con
+  una guía pulsante, y el objeto flota y gira sobre la pieza fantasma.
+  **Tradicional es siempre el modo por defecto al arrancar**: elegir Caos vale
+  solo para la partida que se empieza y no se recuerda entre sesiones.
 - **Tormentas del Caos** (solo en Caos): a los 18 s llega la primera, avisada
-  1,6 s antes; luego hay 12 s de calma. Solo hay una a la vez y se alternan
-  viento y lluvia.
+  1,6 s antes; luego hay 12 s de calma. Solo hay una a la vez y no se repite la
+  misma dos veces seguidas. El chip del HUD se colorea según la tormenta.
   - 🌬️ **Viento**: sopla cada 6 s durante 18 s. Una flecha marca la dirección
     **1,2 s antes** de cada empuje; la pieza activa se mueve 1 celda si cabe
     (contra la pared el golpe se pierde). Los personajes se inclinan y vuelan
@@ -117,9 +121,18 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
     como una sola acción (un reset de lock delay y un sonido); el viento no
     provoca deslizamiento. El ambiente se oscurece y los personajes se cubren
     con paraguas.
+  - ⚡ **Relámpago**: cada 5 s un rayo rompe el bloque más alto de 3 columnas
+    ocupadas. El tablero dibuja el rayo dentado y el cielo destella aunque el
+    escenario no sea tormentoso.
+  - 🌨️ **Granizo**: cada 2,2 s deja hielo en 2 columnas al azar (se ve caer y
+    brilla); a los 7 s se derrite con chispas. El chip indica las columnas
+    golpeadas.
+  - 🔩 **Taladro**: 1,2 s antes de perforar, un haz pulsante con flecha marca
+    la columna objetivo; la perforación baja hasta el fondo y convierte la
+    columna en roca roja (`R`), que se limpia con las líneas como el resto.
   Qué tormenta toca y hacia dónde sopla sale del **RNG con semilla del motor**
-  (reproducible); las partículas y el resto de la puesta en escena usan el RNG
-  cosmético.
+  (reproducible); las guías, partículas y el resto de la puesta en escena usan
+  el RNG cosmético.
 - **Escenarios y clima**: un tema cada 2 niveles (Pradera, Brisa, Atardecer,
   Lluvia, Tormenta con rayos y trueno, Noche, Nieve, Aurora, Amanecer, Cosmos)
   con transición suave de cielo, niebla, colinas, luces y clima (hojas, lluvia,
@@ -174,7 +187,7 @@ src/
     stage.ts        Controlador: transiciones de tema, rayos, toggle de efectos y tormentas del Caos
     weather.ts      Clima procedural (lluvia, tormenta, nieve, hojas, estrellas, aurora, fugaces)
     characters.ts   Personajes de papel (globo, pájaros, conejo, pingüino, OVNI) que se inclinan y cubren
-    boardRenderer.ts Cubos con pool, fantasma, marco de cartón, washi tape y panel traslúcido
+    boardRenderer.ts Cubos con pool, fantasma, guía de impacto del powerup, granizo animado y marco de cartón
     particles.ts    Confeti de papel (ráfagas + ambiente) con shader propio y alpha global
     effects.ts      Vibración de cámara, destello de línea
     fx/             Efectos cosméticos reutilizables
@@ -183,6 +196,8 @@ src/
       debrisSystem.ts   InstancedMesh con color/alfa por instancia; API spawnBurst/spawnCells
       debrisMode.ts     Activación Caos/Tradicional/efectos/movimiento reducido (pura)
       windSystem.ts     Partículas de viento con RNG cosmético y fundido propio
+      chaosFx.ts        Ondas, rayos dentados y haz de aviso del taladro (pools fijos)
+      boltPath.ts       Trazado dentado del rayo (puro, testeado, RNG inyectable)
       fxRandom.ts       RNG exclusivo de efectos, independiente de la semilla del juego
       fxQuality.ts      Tipo y validación de la calidad de efectos
     materials.ts    Texturas procedurales (papel, cartón, cuadrícula, cinta) + toon + tinta
@@ -199,7 +214,9 @@ src/
   tools/     fuera del bundle: curate-seeds.ts (npm run curate) puntúa semillas;
              screenshots.mjs (npm run shots) genera las capturas del README;
              touch-layout-check.mjs valida la ergonomía del layout táctil (node)
-  app.ts      GameApp: estado, bucle de render (con render condicional por frame sucio),\n              tormentas del Caos, música, efectos y entrada unificada\n  main.ts     Punto de entrada delgado: solo importa y arranca GameApp
+  app.ts      GameApp: estado, bucle de render (con render condicional por frame sucio),
+              tormentas del Caos, música, efectos y entrada unificada
+  main.ts     Punto de entrada delgado: solo importa y arranca GameApp
 ```
 
 La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
