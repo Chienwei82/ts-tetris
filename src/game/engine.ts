@@ -9,6 +9,19 @@ import type { ActivePiece, GameEvent, GameMode, GamePhase, Grid, LevelProgress, 
 
 export type SpecialKind = 'bomb' | 'bolt' | 'drill';
 
+/**
+ * Zona de impacto que tendría un powerup si se soltara ahora mismo.
+ * Es lógica pura (misma aritmética que `applyBomb`/`applyBolt`/`drillSink`) y la
+ * usa la vista para dibujar la guía de aterrizaje sin duplicar reglas.
+ */
+export interface SpecialPreview {
+  kind: SpecialKind;
+  /** Filas completas afectadas (solo bomba). */
+  rows: number[];
+  /** Celdas concretas destruidas/marcadas (rayo y taladro). */
+  cells: Vec2[];
+}
+
 export interface EngineOptions {
   rng?: () => number;
   onEvent?: (e: GameEvent) => void;
@@ -330,33 +343,49 @@ export class TetrisEngine implements MutatorHost {
   result(): { score: number; level: number; lines: number; mode: GameMode; seed?: number } {
     return { score: this.score, level: this.level, lines: this.lines, mode: this.mode, seed: this.seed };
   }
-  /** Bomba: revienta las 2 filas del impacto (la de aterrizaje y la contigua hacia
-   *  el monton); lo que quedaba encima cae. El objeto se consume en la explosion. */
-  private applyBomb(cells: Vec2[]): void {
-    if (cells.length === 0) return;
+  /** Guía del powerup activo: zona de impacto si se soltara ahora (posición fantasma). */
+  specialPreview(): SpecialPreview | null {
+    if (this.phase !== 'playing' || !this.active || !this.special) return null;
+    // El taladro solo actúa una vez: tras hundirse ya no hay guía.
+    if (this.special === 'drill' && this.drillUsed) return null;
+    const cells = this.ghostCells();
+    if (cells.length === 0) return null;
+    if (this.special === 'bomb') {
+      const rows = this.bombRowsFor(cells);
+      if (rows.length === 0) return null;
+      return { kind: 'bomb', rows, cells: this.cellsInRows(rows) };
+    }
+    if (this.special === 'bolt') {
+      return { kind: 'bolt', rows: [], cells: this.boltTargets(cells) };
+    }
+    return { kind: 'drill', rows: [], cells: this.drillTargets(cells) };
+  }
+
+  /** Filas que revienta la bomba al aterrizar en `cells` (misma regla que el efecto). */
+  private bombRowsFor(cells: Vec2[]): number[] {
+    if (cells.length === 0) return [];
     let minY = Number.POSITIVE_INFINITY;
     for (const c of cells) minY = Math.min(minY, c.y);
-    if (!Number.isFinite(minY)) return;
+    if (!Number.isFinite(minY)) return [];
     const rowA = Math.max(0, Math.min(TOTAL_ROWS - 1, minY));
     const rowB = rowA > 0 ? rowA - 1 : Math.min(TOTAL_ROWS - 1, rowA + 1);
-    const blast: Vec2[] = [];
-    for (const y of [rowA, rowB]) {
+    return rowA === rowB ? [rowA] : [rowA, rowB];
+  }
+
+  /** Celdas ocupadas de las filas dadas (para la guía y la explosión de la bomba). */
+  private cellsInRows(rows: number[]): Vec2[] {
+    const out: Vec2[] = [];
+    for (const y of rows) {
       const row = this.grid[y];
       if (!row) continue;
-      for (let x = 0; x < COLS; x++) {
-        if (row[x] !== 0) blast.push({ x, y });
-        row[x] = 0;
-      }
+      for (let x = 0; x < COLS; x++) if (row[x] !== 0 && row[x] !== undefined) out.push({ x, y });
     }
-    if (blast.length === 0) return;
-    this.settleColumns();
-    this.refreshStackHeight();
-    this.gridVersion++;
-    this.emit({ type: 'bomb', rows: [rowA, rowB], cells: blast });
+    return out;
   }
-  /** Rayo: rompe los BOLT_BREAKS bloques mas altos bajo la base de la pieza. */
-  private applyBolt(cells: Vec2[]): void {
-    if (cells.length === 0) return;
+
+  /** Bloques que rompería el rayo bajo la base de `cells` (los más altos). */
+  private boltTargets(cells: Vec2[]): Vec2[] {
+    if (cells.length === 0) return [];
     const baseY = new Map<number, number>();
     for (const c of cells) {
       const cur = baseY.get(c.x);
@@ -370,7 +399,51 @@ export class TetrisEngine implements MutatorHost {
       }
     }
     under.sort((a, b) => b.y - a.y || a.x - b.x);
-    const broken = under.slice(0, BOLT_BREAKS);
+    return under.slice(0, BOLT_BREAKS);
+  }
+
+  /** Bloques que el taladro destruiría bajo la base de `cells` (hasta DRILL_DEPTH). */
+  private drillTargets(cells: Vec2[]): Vec2[] {
+    if (cells.length === 0) return [];
+    let minY = Number.POSITIVE_INFINITY;
+    for (const c of cells) minY = Math.min(minY, c.y);
+    if (!Number.isFinite(minY) || minY <= 0) return [];
+    const sink = Math.min(DRILL_DEPTH, minY);
+    const baseY = new Map<number, number>();
+    for (const c of cells) {
+      const cur = baseY.get(c.x);
+      if (cur === undefined || c.y < cur) baseY.set(c.x, c.y);
+    }
+    const out: Vec2[] = [];
+    for (const [x, base] of baseY) {
+      for (let y = base - 1; y >= base - sink; y--) {
+        const row = this.grid[y];
+        if (row && row[x] !== 0) out.push({ x, y });
+      }
+    }
+    return out;
+  }
+
+  /** Bomba: revienta las 2 filas del impacto (la de aterrizaje y la contigua hacia
+   *  el monton); lo que quedaba encima cae. El objeto se consume en la explosion. */
+  private applyBomb(cells: Vec2[]): void {
+    const rows = this.bombRowsFor(cells);
+    if (rows.length === 0) return;
+    const blast = this.cellsInRows(rows);
+    if (blast.length === 0) return;
+    for (const y of rows) {
+      const row = this.grid[y];
+      if (!row) continue;
+      for (let x = 0; x < COLS; x++) row[x] = 0;
+    }
+    this.settleColumns();
+    this.refreshStackHeight();
+    this.gridVersion++;
+    this.emit({ type: 'bomb', rows, cells: blast });
+  }
+  /** Rayo: rompe los BOLT_BREAKS bloques mas altos bajo la base de la pieza. */
+  private applyBolt(cells: Vec2[]): void {
+    const broken = this.boltTargets(cells);
     if (broken.length === 0) return;
     for (const c of broken) {
       const row = this.grid[c.y];
@@ -390,19 +463,13 @@ export class TetrisEngine implements MutatorHost {
     let minY = Number.POSITIVE_INFINITY;
     for (const c of cells) minY = Math.min(minY, c.y);
     if (!Number.isFinite(minY) || minY <= 0) return false; // en el suelo no hay nada bajo la base
+    // Mismos objetivos que anuncia la guía (`specialPreview`): una sola fuente de verdad.
+    const bored = this.drillTargets(cells);
+    for (const c of bored) {
+      const row = this.grid[c.y];
+      if (row) row[c.x] = 0;
+    }
     let sink = Math.min(DRILL_DEPTH, minY);
-    const baseY = new Map<number, number>();
-    for (const c of cells) {
-      const cur = baseY.get(c.x);
-      if (cur === undefined || c.y < cur) baseY.set(c.x, c.y);
-    }
-    const bored: Vec2[] = [];
-    for (const [x, base] of baseY) {
-      for (let y = base - 1; y >= base - sink; y--) {
-        const row = this.grid[y];
-        if (row && row[x] !== 0) { row[x] = 0; bored.push({ x, y }); }
-      }
-    }
     while (sink > 0 && collides(this.grid, this.cellsAt(this.active.x, this.active.y - sink))) sink--;
     if (sink <= 0) return false;
     this.active.y -= sink;

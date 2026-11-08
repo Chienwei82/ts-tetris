@@ -6,6 +6,7 @@ import type { StageTheme } from './themes.js';
 import { WeatherSystem } from './weather.js';
 import { Characters } from './characters.js';
 import { WindSystem } from './fx/windSystem.js';
+import type { ScenarioManager } from './scenarios/scenarioManager.js';
 
 export interface StageOptions { onThunder?: () => void }
 
@@ -21,9 +22,17 @@ export interface Stage {
   setWind(dir: -1 | 1 | null): void;
   /** Ráfaga puntual de viento (acelera partículas un instante). */
   gust(dir: -1 | 1): void;
+  /** Fogonazo de cielo puntual (relámpago del Caos, independiente del tema). */
+  flashLightning(): void;
+  /** Personajes del diorama (para adaptación al escenario). */
+  characters(): Characters;
   /** Theme currently being displayed (target of the running transition). */
   theme(): StageTheme;
   update(dt: number): void;
+  /** Inyecta el gestor de escenarios (opcional). */
+  setScenarioManager(mgr: ScenarioManager | null): void;
+  /** Devuelve el gestor de escenarios inyectado (o null). */
+  scenarioManagerRef(): ScenarioManager | null;
 }
 
 const TRANSITION_SECONDS = 1.6;
@@ -45,6 +54,18 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   flash.position.set(0, 10, -78);
   flash.visible = false;
   parts.scene.add(flash);
+
+  // Fogonazo puntual para los relámpagos del Caos (independiente del tema):
+  // el cielo responde siempre, aunque el escenario no sea tormentoso.
+  const chaosFlashMat = new THREE.MeshBasicMaterial({
+    color: 0xdff0ff, transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false
+  });
+  const chaosFlash = new THREE.Mesh(new THREE.PlaneGeometry(240, 130), chaosFlashMat);
+  chaosFlash.position.set(0, 10, -77.8);
+  chaosFlash.visible = false;
+  parts.scene.add(chaosFlash);
+  let chaosFlashK = 0;
 
   let level = 1;
   let enabled = true;
@@ -71,6 +92,10 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   const tmpColor = new THREE.Color();
   const skyStops: [number, number, number, number] = [0, 0, 0, 0];
 
+  /** Gestor de escenarios (opcional). Cuando está activo, se encarga de
+   *  cielo, luces, niebla y suelo; el stage solo anima nubes, clima y personajes. */
+  let scenarioManager: ScenarioManager | null = null;
+
   function themeAt(i: number): StageTheme {
     return THEMES[i] ?? (THEMES[0] as StageTheme);
   }
@@ -82,6 +107,7 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   }
   /** Pushes the interpolated look between `fromIdx` and `toIdx` into the scene. */
   function apply(t: number, repaintSky = true): void {
+    if (scenarioManager && scenarioManager.effectsEnabled()) return;
     const a = themeAt(fromIdx);
     const b = themeAt(toIdx);
     skyStops[0] = mixHex(a.sky[0], b.sky[0], t, scratch);
@@ -178,7 +204,7 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   }
   /** Keeps light intensities in sync with the current base values and any flash. */
   function updateLightFlash(): void {
-    const f = enabled ? flashK : 0;
+    const f = enabled ? Math.max(flashK, chaosFlashK) : 0;
     parts.key.intensity = baseKey * (1 + 1.8 * f) * (1 - 0.42 * rainK);
     parts.hemi.intensity = baseHemi * (1 + 0.7 * f) * (1 - 0.3 * rainK);
   }
@@ -188,6 +214,9 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   return {
     setLevel(lv: number, immediate = false): void {
       level = lv;
+      // El gestor de escenarios decide si se hace cargo del fondo; si no hay
+      // escenario para este nivel, cae al tema clásico.
+      if (scenarioManager && enabled && scenarioManager.setLevel(lv, immediate)) return;
       if (enabled) startTransition(themeIndexForLevel(lv), immediate);
     },
     setEffectsEnabled(on: boolean, immediate = false): void {
@@ -195,6 +224,7 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
       enabled = on;
       if (!on) {
         // Classic frozen background: day palette, extras hidden and paused.
+        if (scenarioManager) scenarioManager.setEffectsEnabled(false, immediate);
         startTransition(0, true);
         weather.setEnabled(false, true);
         weather.setOverlay(null, true);
@@ -206,6 +236,9 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
         flashK = 0;
         flashMat.opacity = 0;
         flash.visible = false;
+        chaosFlashK = 0;
+        chaosFlashMat.opacity = 0;
+        chaosFlash.visible = false;
       } else {
         weather.setEnabled(true, true);
         weather.setOverlay(rainWanted ? 'storm' : null, true);
@@ -214,7 +247,13 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
         characters.setGust(windWanted);
         if (windWanted) windFx.setDirection(windWanted);
         else windFx.setEnabled(false);
-        startTransition(themeIndexForLevel(level), immediate);
+        if (scenarioManager) {
+          scenarioManager.setEffectsEnabled(true, immediate);
+          // Si no hay escenario para el nivel actual, vuelve al tema clásico.
+          if (!scenarioManager.effectsEnabled()) startTransition(themeIndexForLevel(level), immediate);
+        } else {
+          startTransition(themeIndexForLevel(level), immediate);
+        }
       }
       syncVisibility();
     },
@@ -233,6 +272,12 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
     gust(dir: -1 | 1): void {
       if (enabled) windFx.gust(dir);
     },
+    flashLightning(): void {
+      if (!enabled) return;
+      chaosFlashK = 1;
+      chaosFlashMat.opacity = 0.85;
+      chaosFlash.visible = true;
+    },
     theme(): StageTheme { return themeAt(toIdx); },
     update(dt: number): void {
       time += dt;
@@ -241,7 +286,11 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
       rainK += (rainTarget - rainK) * Math.min(1, dt * 2.6);
       if (Math.abs(rainK - rainTarget) < 0.002) rainK = rainTarget;
       if (enabled) {
-        if (transitioning) {
+        // Cuando hay escenario activo, él gestiona cielo/luces/niebla/suelo.
+        // El stage sigue animando nubes, floaters, confeti, clima y personajes.
+        if (scenarioManager && scenarioManager.effectsEnabled()) {
+          scenarioManager.update(dt);
+        } else if (transitioning) {
           k = Math.min(1, k + dt / TRANSITION_SECONDS);
           const done = k >= 1;
           if (done) transitioning = false;
@@ -265,10 +314,28 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
         characters.update(dt);
         lightning(dt);
       }
-      if (rainK > 0.001) parts.fog.color.copy(fogBase).lerp(RAIN_FOG, rainK * 0.55);
-      else parts.fog.color.copy(fogBase);
+      // Niebla base: la del escenario si controla el fondo; si no, la clásica.
+      const scenarioOn = scenarioManager !== null && scenarioManager.effectsEnabled();
+      const baseFog = scenarioOn && scenarioManager ? scenarioManager.currentFog() : fogBase;
+      if (rainK > 0.001) parts.fog.color.copy(baseFog).lerp(RAIN_FOG, rainK * 0.55);
+      else parts.fog.color.copy(baseFog);
       windFx.update(dt);
-      updateLightFlash();
-    }
+      // Fogonazo del Caos: decae siempre para no quedarse encendido en pausa/off.
+      if (chaosFlashK > 0) {
+        chaosFlashK = Math.max(0, chaosFlashK - dt / 0.32);
+        chaosFlashMat.opacity = chaosFlashK * 0.85;
+        chaosFlash.visible = chaosFlashK > 0.02;
+      }
+      // Con escenario activo sus luces ya están ajustadas: modulamos flash/lluvia
+      // sólo en modo clásico para no pisar el look del escenario.
+      if (!scenarioOn) updateLightFlash();
+    },
+    /** Inyecta el gestor de escenarios. Cuando está activo, este controla
+     *  cielo, luces, niebla y suelo en lugar de los temas. */
+    setScenarioManager(mgr: ScenarioManager | null): void { scenarioManager = mgr; },
+    /** Devuelve el gestor de escenarios inyectado (o null). */
+    scenarioManagerRef(): ScenarioManager | null { return scenarioManager; },
+    /** Personajes del diorama. */
+    characters(): Characters { return characters; },
   };
 }

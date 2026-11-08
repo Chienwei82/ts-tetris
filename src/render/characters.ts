@@ -167,6 +167,12 @@ export class Characters {
   private lean = 0;
   private shelter = false;
   private readonly balloonPhase = Math.random() * 12;
+  /** Identificador del escenario activo (para adaptación de color/accesorio). */
+  private scenarioId: string | null = null;
+  /** Tinte del escenario aplicado a los personajes. */
+  private scenarioTint = 0xffffff;
+  /** Color original de cada material, para no acumular tinte entre escenarios. */
+  private readonly baseColors = new Map<THREE.Material, number>();
   constructor(scene: THREE.Scene) {
     this.balloon = buildBalloon();
     this.balloon.position.set(0, 8, -30);
@@ -222,6 +228,50 @@ export class Characters {
     this.shelter = on;
     this.bunnyUmbrella.visible = on && this.bunny.visible;
     this.penguinUmbrella.visible = on && this.penguin.visible;
+  }
+
+  /** Adapta el color de los personajes al escenario activo. */
+  setScenario(id: string | null): void {
+    if (this.scenarioId === id) return;
+    this.scenarioId = id;
+    switch (id) {
+      case 'cityNight': this.scenarioTint = 0x6a5a8a; break;   // azul púrpura nocturno
+      case 'forest':    this.scenarioTint = 0x6a8a5a; break;   // verde bosque
+      case 'space':     this.scenarioTint = 0x8a6aa0; break;   // púrpura espacial
+      case 'deepSea':   this.scenarioTint = 0x4a8aa0; break;   // azul marino
+      default:          this.scenarioTint = 0xffffff; break;
+    }
+    this.applyScenarioTint();
+  }
+
+  private applyScenarioTint(): void {
+    const tint = new THREE.Color(this.scenarioTint);
+    // Sin escenario: se recuperan los colores originales (fuerza 0).
+    const strength = this.scenarioId ? 0.5 : 0;
+    const apply = (material: THREE.Material): void => {
+      const m = material as THREE.MeshBasicMaterial | THREE.MeshToonMaterial;
+      if (!m.color) return;
+      // Guarda el color original la primera vez para no acumular el tinte en
+      // cambios sucesivos de escenario.
+      if (!this.baseColors.has(m)) this.baseColors.set(m, m.color.getHex());
+      const base = this.baseColors.get(m);
+      if (base === undefined) return;
+      m.color.setHex(base);
+      if (strength > 0) m.color.lerp(tint, strength);
+    };
+    const tintChar = (g: THREE.Object3D): void => {
+      g.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh)) return;
+        const mat = obj.material;
+        if (Array.isArray(mat)) mat.forEach(apply);
+        else if (mat) apply(mat);
+      });
+    };
+    tintChar(this.balloon);
+    for (const b of this.birds) tintChar(b.group);
+    tintChar(this.bunny);
+    tintChar(this.penguin);
+    tintChar(this.ufo);
   }
   update(dt: number): void {
     if (!this.enabled) return;

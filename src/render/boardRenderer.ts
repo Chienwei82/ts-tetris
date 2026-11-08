@@ -72,6 +72,21 @@ export class BoardRenderer {
   /** Drill-red cells left by the taladro. */
   private drillState = new Set<number>();
   private drillIMesh = new THREE.InstancedMesh(this.geo, new THREE.MeshToonMaterial({ color: DRILL_COLOR, emissive: DRILL_COLOR, emissiveIntensity: 0.25 }), MAX_LOCKED);
+  /** Guía luminosa de la zona de impacto del powerup activo (bomba/rayo/taladro). */
+  private guideIMesh = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.94, 0.94, 0.05),
+    new THREE.MeshBasicMaterial({ color: 0xff8a3d, transparent: true, opacity: 0.3, depthWrite: false }),
+    MAX_LOCKED
+  );
+  private guideOn = false;
+  /** Reloj cosmético compartido por la guía, el icono y el granizo. */
+  private fxClock = 0;
+  /** Caída animada del granizo: clave de celda -> progreso 0..1. */
+  private hailFall = new Map<number, number>();
+  private specialKind: string | null = null;
+  private specialBaseScale = 1;
+  private specialBaseY = 0;
+  private specialClock = 0;
   private seenScratch = new Set<number>();
   private activeGroup = new THREE.Group();
   private ghostGroup = new THREE.Group();
@@ -101,6 +116,10 @@ export class BoardRenderer {
     this.drillIMesh.receiveShadow = true;
     this.drillIMesh.frustumCulled = false;
     this.group.add(this.drillIMesh);
+    this.guideIMesh.count = 0;
+    this.guideIMesh.frustumCulled = false;
+    this.guideIMesh.renderOrder = 6;
+    this.group.add(this.guideIMesh);
     this.group.add(this.activeGroup, this.ghostGroup);
     this.group.add(this.particles.points);
     scene.add(this.group);
@@ -153,15 +172,33 @@ export class BoardRenderer {
       const col = k % COLS;
       const row = Math.floor(k / COLS);
       const p = cellToWorld(col, row);
-      scratchPos.set(p.x, p.y, 0);
+      const fall = this.hailFall.get(k);
+      let y = p.y;
+      let scale = 1;
+      if (fall !== undefined) {
+        // Cae del cielo acelerando y se asienta con un pequeño estirón.
+        const e = fall * fall;
+        y += (1 - e) * 8;
+        scale = 0.7 + 0.3 * fall;
+      }
+      scratchPos.set(p.x, y, 0);
       scratchQuat.identity();
-      scratchScale.set(1, 1, 1);
+      scratchScale.set(scale, scale, scale);
       scratchMatrix.compose(scratchPos, scratchQuat, scratchScale);
       this.hailIMesh.setMatrixAt(this.hailIMesh.count, scratchMatrix);
       this.hailIMesh.count++;
     }
     this.hailIMesh.instanceMatrix.needsUpdate = true;
     this.shadowDirty = true;
+  }
+
+  /** Chispas de hielo y gotas cuando el granizo se derrite. */
+  private burstHailMelt(key: number): void {
+    const col = key % COLS;
+    const row = Math.floor(key / COLS);
+    const p = cellToWorld(col, row);
+    this.particles.burst(new THREE.Vector3(p.x, p.y, 0.7), 0xdcefff, 7, 2.6, 2.4);
+    this.particles.burst(new THREE.Vector3(p.x, p.y - 0.2, 0.6), 0x8fc6ef, 4, 1.8, 1.6);
   }
 
   private rebuildDrill(): void {
@@ -281,7 +318,7 @@ export class BoardRenderer {
         if (v === 0 || v === undefined || v === 'G' || v === 'R') {
           if (v === 'G') {
             seenHail.add(k);
-            if (!this.hailState.has(k)) { this.hailState.add(k); hailChanged = true; }
+            if (!this.hailState.has(k)) { this.hailState.add(k); this.hailFall.set(k, 0); hailChanged = true; }
           }
           if (v === 'R') {
             seenDrill.add(k);
@@ -305,7 +342,12 @@ export class BoardRenderer {
       if (!seen.has(k)) { this.lockedState.delete(k); changed = true; }
     }
     for (const k of this.hailState) {
-      if (!seenHail.has(k)) { this.hailState.delete(k); hailChanged = true; }
+      if (!seenHail.has(k)) {
+        this.hailState.delete(k);
+        this.hailFall.delete(k);
+        this.burstHailMelt(k);
+        hailChanged = true;
+      }
     }
     if (changed) this.rebuildLocked();
     if (hailChanged) this.rebuildHail();
@@ -361,6 +403,7 @@ export class BoardRenderer {
   private updateSpecialIcon(special: string | null, cells: Vec2[]): void {
     if (!special || cells.length === 0) {
       if (this.specialIcon) this.specialIcon.visible = false;
+      this.specialKind = null;
       return;
     }
     let tex = this.iconTex.get(special);
@@ -380,7 +423,13 @@ export class BoardRenderer {
     }
     const f = this.footprint(cells);
     // El objeto cubre su huella con holgura: se ve como lo que es, no como pieza.
-    this.specialIcon.scale.setScalar(f.span + 0.6);
+    if (this.specialKind !== special) {
+      this.specialKind = special;
+      this.specialClock = 0;
+    }
+    this.specialBaseScale = f.span + 0.6;
+    this.specialBaseY = f.y;
+    this.specialIcon.scale.setScalar(this.specialBaseScale);
     this.specialIcon.position.set(f.x, f.y, 1.6);
     this.specialIcon.visible = this.activeGroup.visible;
   }
@@ -468,6 +517,41 @@ export class BoardRenderer {
       m.position.set(p.x, p.y, -0.05);
     }
   }
+  /**
+   * Guía de la zona de impacto del powerup activo. `rows` (bomba) se pinta como
+   * bandas completas; el resto, celda a celda. Es una capa aditiva sobre el
+   * papel: comunica el efecto exacto antes de soltar la pieza.
+   */
+  setSpecialGuide(guide: { kind: string; rows: number[]; cells: Vec2[] } | null): void {
+    if (!guide) {
+      this.guideOn = false;
+      this.guideIMesh.count = 0;
+      return;
+    }
+    const mat = this.guideIMesh.material as THREE.MeshBasicMaterial;
+    const color = guide.kind === 'bomb' ? 0xff7a2a : guide.kind === 'bolt' ? 0xffd21e : 0xff4d3d;
+    mat.color.setHex(color);
+    this.guideIMesh.count = 0;
+    if (guide.kind === 'bomb' && guide.rows.length > 0) {
+      for (const y of guide.rows) {
+        for (let x = 0; x < COLS; x++) this.pushGuideCell(x, y);
+      }
+    } else {
+      for (const c of guide.cells) this.pushGuideCell(c.x, c.y);
+    }
+    this.guideIMesh.instanceMatrix.needsUpdate = true;
+    this.guideOn = this.guideIMesh.count > 0;
+  }
+
+  private pushGuideCell(x: number, y: number): void {
+    if (y < 0 || y >= VISIBLE_ROWS) return;
+    const p = cellToWorld(x, y);
+    // Delante de los bloques (cara visible en z≈0.46): la marca se lee encima.
+    scratchMatrix.makeTranslation(p.x, p.y, 0.52);
+    this.guideIMesh.setMatrixAt(this.guideIMesh.count, scratchMatrix);
+    this.guideIMesh.count++;
+  }
+
   playLock(cells: Vec2[], kind: PieceKind): void {
     for (const c of cells) {
       if (c.y < 0 || c.y >= VISIBLE_ROWS) continue;
@@ -579,10 +663,54 @@ export class BoardRenderer {
         this.clearingRows.delete(r);
       }
     }
+    this.fxClock += dt;
+    // Guía del powerup: pulso lento de opacidad (avisa de la zona del efecto).
+    if (this.guideOn) {
+      const gmat = this.guideIMesh.material as THREE.MeshBasicMaterial;
+      gmat.opacity = 0.34 + 0.16 * (0.5 + 0.5 * Math.sin(this.fxClock * 6));
+    }
+    // Icono del powerup: flota, late y gira (el taladro rota como una broca).
+    if (this.specialIcon?.visible) {
+      this.specialClock += dt;
+      this.specialIcon.position.y = this.specialBaseY + Math.sin(this.specialClock * 5) * 0.16;
+      this.specialIcon.scale.setScalar(this.specialBaseScale * (1 + 0.045 * Math.sin(this.specialClock * 7)));
+      const smat = this.specialIcon.material as THREE.SpriteMaterial;
+      smat.rotation = this.specialKind === 'drill' ? this.specialClock * 2.6 : Math.sin(this.specialClock * 3) * 0.14;
+    }
+    if (this.ghostSpecial?.visible) {
+      const gmat = this.ghostSpecial.material as THREE.SpriteMaterial;
+      gmat.opacity = 0.3 + 0.16 * (0.5 + 0.5 * Math.sin(this.fxClock * 4));
+    }
+    // Granizo: caída desde el cielo, impacto y brillo de hielo.
+    if (this.hailFall.size > 0) {
+      for (const [k, t] of this.hailFall) {
+        const nt = t + dt / 0.42;
+        if (nt >= 1) {
+          this.hailFall.delete(k);
+          const col = k % COLS;
+          const row = Math.floor(k / COLS);
+          const p = cellToWorld(col, row);
+          this.particles.burst(new THREE.Vector3(p.x, p.y + 0.3, 0.7), 0xdcefff, 6, 2.4, 2.2);
+        } else {
+          this.hailFall.set(k, nt);
+        }
+      }
+      this.rebuildHail();
+      moved = true;
+    }
+    if (this.hailState.size > 0) {
+      const hmat = this.hailIMesh.material as THREE.MeshToonMaterial;
+      hmat.emissiveIntensity = 0.16 + 0.16 * (0.5 + 0.5 * Math.sin(this.fxClock * 3));
+    }
     this.particles.update(dt);
     return moved;
   }
   get busyClearing(): boolean { return this.clearingRows.size > 0; }
+  /** Animaciones cosméticas activas: la app fuerza un render aunque no haya movimiento. */
+  get animating(): boolean {
+    return this.guideOn || this.hailFall.size > 0 || this.hailState.size > 0
+      || (this.specialIcon?.visible ?? false) || (this.ghostSpecial?.visible ?? false);
+  }
   reset(): void {
     const recycle = (g: THREE.Group): void => {
       this.group.remove(g); this.pullFree.push(g); g.visible = false;
@@ -593,6 +721,10 @@ export class BoardRenderer {
     this.rebuildHail();
     this.drillState.clear();
     this.rebuildDrill();
+    this.guideOn = false;
+    this.guideIMesh.count = 0;
+    this.hailFall.clear();
+    this.specialKind = null;
     // Meshes mid clear/lock animation are no longer in `lockedState`: without
     // this they would stay in the scene forever after a restart.
     for (const [, c] of this.clearingRows) for (const m of c.meshes) recycle(m);

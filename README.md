@@ -27,7 +27,7 @@ npm run dev      # local: http://localhost:5173 · LAN: http://<tu-IP>:5173
 ```
 
 ```bash
-npm test         # tests de lógica (vitest 5, 136 tests)
+npm test         # tests de lógica (vitest 5, 151 tests)
 npm run build    # type-check (tsc 7 nativo) + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
@@ -44,7 +44,7 @@ npm run shots    # (opcional) regenera las capturas del README (ver tools/screen
 | Z | Rotar antihorario |
 | Espacio | Caída instantánea (+2 ptos/fila, con fantasma) |
 | C | Reserva (hold, un uso por pieza) |
-| E | Efectos del fondo on/off (clima, personajes, temas) |
+| E | Efectos del fondo on/off (clima, personajes, escenarios) |
 | M | Música procedural on/off |
 | H | Ayuda (bloques y ayudas del juego) |
 | P / Esc | Pausa |
@@ -96,17 +96,22 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   elegido también fija el escenario de arranque.
 - **Modo Caos** (se elige en la pantalla de inicio, junto al nivel): el juego
   clásico con **powerups literales**. Cada cierto tiempo cae un objeto 💣 ⚡ 🔩
-  en vez de una pieza (se anuncia con badge en el preview y con un chip en el
-  HUD) y, al bloquearse, aplica su efecto y desaparece sin dejar bloques:
+  en vez de una pieza (se anuncia con badge en el preview y con un chip
+  coloreado por tipo en el HUD) y, al bloquearse, aplica su efecto y desaparece
+  sin dejar bloques:
   - 💣 **Bomba**: revienta 2 filas (la de aterrizaje y la contigua).
   - ⚡ **Rayo**: rompe los 4 bloques más altos bajo su base.
   - 🔩 **Taladro**: se hunde 2 filas destruyendo lo que tiene debajo (una sola
     vez por pieza; viaja con la reserva).
   La secuencia es **determinista por semilla** (misma semilla ⇒ mismos
-  powerups) y el modo Tradicional no cambia en nada.
+  powerups). Al sostener un powerup el tablero muestra su **zona de impacto**
+  (las 2 filas de la bomba, los bloques del rayo, las celdas del taladro) con
+  una guía pulsante, y el objeto flota y gira sobre la pieza fantasma.
+  **Tradicional es siempre el modo por defecto al arrancar**: elegir Caos vale
+  solo para la partida que se empieza y no se recuerda entre sesiones.
 - **Tormentas del Caos** (solo en Caos): a los 18 s llega la primera, avisada
-  1,6 s antes; luego hay 12 s de calma. Solo hay una a la vez y se alternan
-  viento y lluvia.
+  1,6 s antes; luego hay 12 s de calma. Solo hay una a la vez y no se repite la
+  misma dos veces seguidas. El chip del HUD se colorea según la tormenta.
   - 🌬️ **Viento**: sopla cada 6 s durante 18 s. Una flecha marca la dirección
     **1,2 s antes** de cada empuje; la pieza activa se mueve 1 celda si cabe
     (contra la pared el golpe se pierde). Los personajes se inclinan y vuelan
@@ -117,14 +122,29 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
     como una sola acción (un reset de lock delay y un sonido); el viento no
     provoca deslizamiento. El ambiente se oscurece y los personajes se cubren
     con paraguas.
+  - ⚡ **Relámpago**: cada 5 s un rayo rompe el bloque más alto de 3 columnas
+    ocupadas. El tablero dibuja el rayo dentado y el cielo destella aunque el
+    escenario no sea tormentoso.
+  - 🌨️ **Granizo**: cada 2,2 s deja hielo en 2 columnas al azar (se ve caer y
+    brilla); a los 7 s se derrite con chispas. El chip indica las columnas
+    golpeadas.
+  - 🔩 **Taladro**: 1,2 s antes de perforar, un haz pulsante con flecha marca
+    la columna objetivo; la perforación baja hasta el fondo y convierte la
+    columna en roca roja (`R`), que se limpia con las líneas como el resto.
   Qué tormenta toca y hacia dónde sopla sale del **RNG con semilla del motor**
-  (reproducible); las partículas y el resto de la puesta en escena usan el RNG
-  cosmético.
-- **Escenarios y clima**: un tema cada 2 niveles (Pradera, Brisa, Atardecer,
-  Lluvia, Tormenta con rayos y trueno, Noche, Nieve, Aurora, Amanecer, Cosmos)
-  con transición suave de cielo, niebla, colinas, luces y clima (hojas, lluvia,
-  nieve, estrellas, luciérnagas, fugaces), más personajes de papel de fondo
-  (globo, pájaros, conejo, pingüino y OVNI).
+  (reproducible); las guías, partículas y el resto de la puesta en escena usan
+  el RNG cosmético.
+- **Escenarios y clima**: los niveles 1–2 usan el tema clásico en papel (☀️
+  Pradera) con su clima y personajes de fondo (globo, pájaros, conejo, pingüino
+  y OVNI); al apagar los efectos, ese mismo diorama queda congelado como fondo
+  clásico. Desde el nivel 3 el fondo lo toman **escenarios 3D modulares** que
+  rotan cada 5 niveles con un fundido de ~2 s: 🌲 **Bosque** (3–5), 🌃 **Ciudad
+  nocturna** (6–10), 🚀 **Espacio** (11–15) y 🌊 **Fondo del mar** (16–20). Cada
+  uno aporta su escenografía, paleta, luces y suelo propios, los personajes se
+  tiñen a juego, el chip del HUD muestra el escenario actual y al cambiar se
+  libera su memoria de GPU. El clima procedural (hojas, lluvia, nieve,
+  estrellas, luciérnagas, fugaces) y las tormentas del Caos se dibujan por
+  encima.
 - **Toggle de efectos** (botón o tecla E): apaga clima, personajes, confeti y
   cambios de tema, dejando el fondo clásico congelado. Con efectos el panel del
   tablero es **translúcido** (el escenario se ve detrás de las piezas y las
@@ -170,11 +190,11 @@ src/
       types.ts      MutatorId, eventos y host que implementa el motor
   render/     Three.js (sin reglas de juego)
     scene.ts        Diorama base: cielo repintable, colinas, nubes, sol/luna, luces, confeti
-    themes.ts       Los 10 escenarios: paletas, luces, clima y viento por nivel
-    stage.ts        Controlador: transiciones de tema, rayos, toggle de efectos y tormentas del Caos
+    themes.ts       Temas clásicos: paletas, luces, clima y viento (niveles 1–2 y fondo congelado)
+    stage.ts        Controlador: delega en ScenarioManager o transiciona temas, rayos, toggle y tormentas
     weather.ts      Clima procedural (lluvia, tormenta, nieve, hojas, estrellas, aurora, fugaces)
     characters.ts   Personajes de papel (globo, pájaros, conejo, pingüino, OVNI) que se inclinan y cubren
-    boardRenderer.ts Cubos con pool, fantasma, marco de cartón, washi tape y panel traslúcido
+    boardRenderer.ts Cubos con pool, fantasma, guía de impacto del powerup, granizo animado y marco de cartón
     particles.ts    Confeti de papel (ráfagas + ambiente) con shader propio y alpha global
     effects.ts      Vibración de cámara, destello de línea
     fx/             Efectos cosméticos reutilizables
@@ -183,8 +203,16 @@ src/
       debrisSystem.ts   InstancedMesh con color/alfa por instancia; API spawnBurst/spawnCells
       debrisMode.ts     Activación Caos/Tradicional/efectos/movimiento reducido (pura)
       windSystem.ts     Partículas de viento con RNG cosmético y fundido propio
+      chaosFx.ts        Ondas, rayos dentados y haz de aviso del taladro (pools fijos)
+      boltPath.ts       Trazado dentado del rayo (puro, testeado, RNG inyectable)
       fxRandom.ts       RNG exclusivo de efectos, independiente de la semilla del juego
       fxQuality.ts      Tipo y validación de la calidad de efectos
+    scenarios/      Escenarios 3D modulares (uno cada 5 niveles desde el 3)
+      scenario.ts        Interfaz Scenario/ScenarioLook + disposeResources (liberación de GPU)
+      scenarioRegistry.ts Registro único de escenarios (rechaza ids duplicados)
+      scenarioManager.ts  Selección por nivel, fundido de ~2 s y liberación al cambiar
+      levelMapping.ts     scenarioForLevel (puro, testeado)
+      forest.ts · cityNight.ts · space.ts · deepSea.ts  Escenografías y looks de cada escenario
     materials.ts    Texturas procedurales (papel, cartón, cuadrícula, cinta) + toon + tinta
   ui/         Entrada con DAS/ARR, gestos de arrastre de la pieza, HUD, previews 2D, preferencias
   platform/   Detección de dispositivo (escritorio/móvil/tableta) y ViewportManager
@@ -199,7 +227,9 @@ src/
   tools/     fuera del bundle: curate-seeds.ts (npm run curate) puntúa semillas;
              screenshots.mjs (npm run shots) genera las capturas del README;
              touch-layout-check.mjs valida la ergonomía del layout táctil (node)
-  app.ts      GameApp: estado, bucle de render (con render condicional por frame sucio),\n              tormentas del Caos, música, efectos y entrada unificada\n  main.ts     Punto de entrada delgado: solo importa y arranca GameApp
+  app.ts      GameApp: estado, bucle de render (con render condicional por frame sucio),
+              tormentas del Caos, música, efectos y entrada unificada
+  main.ts     Punto de entrada delgado: solo importa y arranca GameApp
 ```
 
 La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
@@ -218,7 +248,7 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
 - **SRS con wall-kicks** simplificado (tablas JLSTZ e I) para rotaciones correctas junto a paredes.
 - **Render con pooling**: una `BoxGeometry` + `EdgesGeometry` compartidas y materiales por
   pieza cacheados; los meshes se reciclan para no generar basura por frame.
-- **Eventos del motor → efectos**: el engine emite `lock/clear/levelup/harddrop…` y `main.ts`
+- **Eventos del motor → efectos**: el engine emite `lock/clear/levelup/harddrop…` y `app.ts`
   los traduce a partículas, destellos, vibración y sonido. Separación lógica/vista total.
 - **Progresión híbrida y testeable**: `LINES_PER_LEVEL`/`SECONDS_PER_LEVEL`/`MAX_LEVEL`
   viven en `game/types.ts`; `levelProgress()` es puro y devuelve ratio + regla líder,
@@ -265,12 +295,14 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
   como fondo (recibe sombras) y micro-rotación aleatoria por bloque fijado (colocados a mano).
 - **HUD en papel**: fichas crema con borde de tinta, sombras en capas, cinta adhesiva, leves
   rotaciones y tipografía redondeada (Fredoka con fallback del sistema). Gauge de progreso con
-  relleno verde (líneas) o azul (reloj) y banner de nivel en papel amarillo.
-- **Viaje visual de 10 etapas**: cada 2 niveles cambia el escenario con transición suave
-  (~1,6 s) de cielo (canvas repintado), niebla, colinas, sol/luna, luces y suelo; tormenta
-  con rayos (destello aditivo + trueno sintetizado), aurora aditiva, estrellas con parpadeo,
-  luciérnagas y estrellas fugaces; personajes de papel animados según el tema (globo, bandada,
-  conejo, pingüino y OVNI).
+  relleno verde (líneas) o azul (reloj) y banner de nivel en papel amarillo. El chip del
+  escenario actual y los chips de powerup/tormenta usan color por tipo.
+- **Viaje visual por etapas**: los niveles 1–2 lucen el diorama de papel clásico
+  (sol de cartón, colinas, nubes) y desde el 3 desfilan los escenarios 3D (bosque,
+  ciudad nocturna, espacio y fondo del mar) con fundido de ~2 s, escenografía propia
+  y personajes teñidos a juego; el clima (tormenta con rayos y trueno, aurora
+  aditiva, estrellas con parpadeo, luciérnagas y estrellas fugaces) y el confeti
+  siguen animándose por encima.
 - Cámara en perspectiva con **deriva sinusoidal sutil** + trauma/shake en drops, clears y niveles.
 - Feedback en cada acción: rebote al fijar, fichas que vuelan + destello al limpiar,
   lluvia de confeti en hard drop, toasts de Tetris/combo/nivel y overlay cartón con cinta.

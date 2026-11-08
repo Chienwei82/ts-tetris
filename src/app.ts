@@ -9,6 +9,7 @@ import { cellToWorld, MAX_FPS, pxPerCell } from './render/constants.js';
 import { CameraShake, ClearFlash } from './render/effects.js';
 import { debrisActive } from './render/fx/debrisMode.js';
 import { DebrisSystem } from './render/fx/debrisSystem.js';
+import { ChaosFx } from './render/fx/chaosFx.js';
 import { createFxRandom } from './render/fx/fxRandom.js';
 import type { MutatorEvent, MutatorId } from './game/mutators/types.js';
 import { isFxQuality } from './render/fx/fxQuality.js';
@@ -20,6 +21,9 @@ import { createScene } from './render/scene.js';
 import type { SceneOptions } from './render/scene.js';
 import { createStage } from './render/stage.js';
 import { THEMES, themeIndexForLevel } from './render/themes.js';
+import { ScenarioManager } from './render/scenarios/scenarioManager.js';
+// Importar el índice registra todos los escenarios en el ScenarioRegistry.
+import './render/scenarios/index.js';
 import { SoundFX } from './audio/sound.js';
 import { IntensityTracker } from './audio/intensityTracker.js';
 import { MusicDirector } from './audio/musicDirector.js';
@@ -33,7 +37,7 @@ import { InputManager } from './ui/inputManager.js';
 import { ModeSelect } from './ui/modeSelect.js';
 import { HUD } from './ui/hud.js';
 import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
-import { loadEffectsEnabled, loadGameMode, loadMusicEnabled, loadMusicGenre, loadDebrisClassic, loadFxQuality, loadChaosLightning, loadChaosHail, prefersReducedMotion, saveEffectsEnabled, saveGameMode, saveMusicEnabled, saveMusicGenre, saveDebrisClassic, saveFxQuality, saveChaosLightning, saveChaosHail } from './ui/settings.js';
+import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, loadDebrisClassic, loadFxQuality, loadChaosLightning, loadChaosHail, prefersReducedMotion, saveEffectsEnabled, saveMusicEnabled, saveMusicGenre, saveDebrisClassic, saveFxQuality, saveChaosLightning, saveChaosHail } from './ui/settings.js';
 import { randomSeed } from './game/rng.js';
 import { MusicMenu } from './ui/musicMenu.js';
 import { initAnalytics } from './analytics.js';
@@ -80,7 +84,9 @@ export class GameApp {
   private readonly flash: ClearFlash;
   private readonly shake: CameraShake;
   private readonly debris: DebrisSystem;
+  private readonly chaosFx: ChaosFx;
   private readonly stage: ReturnType<typeof createStage>;
+  private readonly scenarioManager: ScenarioManager;
   private readonly stormShade: HTMLElement;
   private readonly windArrow: HTMLElement;
   private readonly windGlyph: HTMLElement;
@@ -131,7 +137,9 @@ export class GameApp {
     this.holdCanvas = el<HTMLCanvasElement>('hold');
 
     this.hud = new HUD();
-    this.gameMode = loadGameMode();
+    // El modo por defecto es SIEMPRE Tradicional (el Caos se elige por partida
+    // y no se recuerda entre sesiones; ver `memory-bank`).
+    this.gameMode = 'classic';
     this.chaosSeed = randomSeed();
     this.sound = new SoundFX();
 
@@ -152,6 +160,7 @@ export class GameApp {
     this.board = new BoardRenderer(scene);
     this.flash = new ClearFlash(scene, 10);
     this.shake = new CameraShake();
+    this.chaosFx = new ChaosFx(scene);
 
     const fallbackQuality: FxQuality = this.device.kind === 'desktop' ? 'high' : this.device.kind === 'tablet' ? 'medium' : 'low';
     this.fxQuality = loadFxQuality(fallbackQuality);
@@ -162,6 +171,19 @@ export class GameApp {
     this.chaosHailOn = loadChaosHail();
 
     this.stage = createStage(parts, { onThunder: () => this.sound.play('thunder') });
+
+    // Gestor de escenarios: uno cada N niveles, transición ~2 s, libera GPU al cambiar.
+    this.scenarioManager = new ScenarioManager({
+      parts,
+      levelsPerScenario: 5,
+      transitionSeconds: 2,
+      onScenarioChange: (id) => {
+        this.stage.characters().setScenario(id);
+        const s = this.scenarioManager.activeScenario();
+        if (s) this.hud.setStageChip(s.icon + ' ' + s.name);
+      },
+    });
+    this.stage.setScenarioManager(this.scenarioManager);
 
     this.stormShade = el<HTMLDivElement>('storm-shade');
     this.windArrow = el<HTMLDivElement>('wind-arrow');
@@ -350,6 +372,7 @@ export class GameApp {
     this.stage.setRain(false);
     this.stage.setWind(null);
     this.stormShade.classList.remove('on');
+    this.chaosFx.clear();
   }
 
   private setRainStorm(on: boolean): void {
@@ -380,12 +403,12 @@ export class GameApp {
   private handleMutatorEvent(e: MutatorEvent): void {
     switch (e.kind) {
       case 'warn':
-        this.hud.setMutatorChip('⏳ ' + MUTATOR_LABEL[e.mutator] + '…');
+        this.hud.setMutatorChip('⏳ ' + MUTATOR_LABEL[e.mutator] + '…', e.mutator);
         this.hud.toast('⛈️ ' + MUTATOR_LABEL[e.mutator] + ' en ' + Math.max(1, Math.ceil(e.seconds)) + ' s', 1600);
         break;
       case 'start':
         this.activeMutator = e.mutator;
-        this.hud.setMutatorChip(MUTATOR_LABEL[e.mutator]);
+        this.hud.setMutatorChip(MUTATOR_LABEL[e.mutator], e.mutator);
         if (e.mutator === 'rain') {
           this.setRainStorm(true);
           this.hud.toast('🌧️ Lluvia — el suelo resbala', 2200);
@@ -401,16 +424,17 @@ export class GameApp {
         }
         break;
       case 'drill-warn': {
-        this.hud.setMutatorChip('⏳ ' + MUTATOR_LABEL.drill + '…');
-        this.hud.toast('🔩 Taladro en columna ' + (e.column + 1) + ' — se avecina', 1600);
+        this.hud.setMutatorChip('⏳ ' + MUTATOR_LABEL.drill + ' · col ' + (e.column + 1), 'drill');
+        this.hud.toast('🔩 Taladro en columna ' + (e.column + 1) + ' — impacto en ' + Math.max(1, Math.ceil(e.seconds)) + ' s', 1800);
+        // Haz pulsante sobre la columna: el aviso se ve en el propio tablero.
+        this.chaosFx.drillWarning(e.column, e.seconds);
         break;
       }
-      case 'drill': {
-        this.sound.play('drill');
-        this.shake.add(0.5);
-        this.hud.toast('🔩 Taladro — columna ' + (e.column + 1) + ' perforada hasta el fondo', 2000);
+      case 'drill':
+        // La puesta en escena llega por `drill-strike` (incluye las celdas
+        // perforadas); aquí solo se restaura el chip tras el aviso.
+        this.hud.setMutatorChip(MUTATOR_LABEL.drill, 'drill');
         break;
-      }
       case 'wind-warn':
         this.setWindStorm(e.dir);
         this.showWindArrow(e.dir, e.seconds);
@@ -431,6 +455,9 @@ export class GameApp {
       case 'lightning': {
         this.sound.play('lock');
         this.shake.add(0.3);
+        // Rayo dibujado en el tablero + fogonazo del cielo (independiente del tema).
+        this.chaosFx.boltStrike(e.cells);
+        this.stage.flashLightning();
         if (this.effectsOn) {
           for (const cell of e.cells) {
             const p = cellToWorld(cell.x, cell.y);
@@ -442,6 +469,9 @@ export class GameApp {
       }
       case 'hail': {
         this.sound.play('lock');
+        // El chip indica las columnas golpeadas (1-based, como el tablero visible).
+        const cols = e.columns.map((c) => c + 1).join(' · ');
+        this.hud.setMutatorChip(MUTATOR_LABEL.hail + ' · col ' + cols, 'hail');
         if (this.effectsOn) {
           for (const col of e.columns) {
             const p = cellToWorld(col, TOTAL_ROWS - 1);
@@ -494,6 +524,7 @@ export class GameApp {
   private applyEffects(on: boolean, immediate = false, persist = true): void {
     this.effectsOn = on;
     this.stage.setEffectsEnabled(on, immediate);
+    this.chaosFx.setEnabled(on);
     if (!on) this.stormShade.classList.remove('on');
     else if (this.activeMutator === 'rain') this.stormShade.classList.add('on');
     const btnEffects = el<HTMLButtonElement>('btn-effects');
@@ -567,6 +598,8 @@ export class GameApp {
 
   private showGameOver(): void {
     this.clearStormVisuals();
+    this.board.setSpecialGuide(null);
+    this.hud.setChaosStatus('');
     const theme = this.stage.theme();
     this.gameMode = this.engine.mode;
     this.syncModePicker();
@@ -580,7 +613,6 @@ export class GameApp {
 
   private startGame(): void {
     this.gameMode = this.currentMode();
-    saveGameMode(this.gameMode);
     this.chaosSeed = randomSeed();
     this.lastSpecialV = -1;
     this.hud.setModeChip(this.gameMode === 'chaos' ? 'Caos' : 'Tradicional');
@@ -595,16 +627,19 @@ export class GameApp {
     });
     this.engine.start(lv);
     this.board.reset();
+    this.board.setSpecialGuide(null);
+    this.chaosFx.clear();
     this.debris.clear();
     this.clearStormVisuals();
     this.applyDebrisSettings();
     this.board.setActive(this.engine.active?.kind ?? 'T', this.engine.activeCells(), true, this.engine.special);
+    this.board.setSpecialGuide(this.engine.specialPreview());
     this.stage.setLevel(lv, true);
     this.intensity.reset();
     this.music.startWithGenreSeed();
     console.info('[música] género:', this.music.getGenre(), '· semilla:', this.music.getSeed());
     this.lastThemeIdx = themeIndexForLevel(lv);
-    this.hud.setStageChip(stageLabelFor(lv));
+    this.hud.setStageChip(this.activeScenarioLabel(lv));
     this.hud.hideOverlay();
     this.hud.setStats(0, lv, 0);
     this.refreshGauge();
@@ -668,13 +703,19 @@ export class GameApp {
       case 'hold': this.sound.play('hold'); break;
       case 'bomb': {
         this.sound.play('explosion');
-        this.shake.add(0.9);
+        this.shake.add(1);
         this.intensity.event('harddrop');
         const cells = e.cells ?? [];
         if (cells.length > 0) {
           const lo = Math.min(...cells.map((c) => c.y));
           const hi = Math.max(...cells.map((c) => c.y));
           this.flash.flash(lo, hi - lo + 1);
+          // Onda expansiva en el centro de la explosión.
+          let sx = 0;
+          let sy = 0;
+          for (const c of cells) { sx += c.x; sy += c.y; }
+          const center = cellToWorld(sx / cells.length, sy / cells.length);
+          this.chaosFx.bombBlast(center.x, center.y);
         }
         for (const c of cells) {
           const q = cellToWorld(c.x, c.y);
@@ -691,6 +732,8 @@ export class GameApp {
         if (cells.length > 0) {
           const ys = cells.map((c) => c.y);
           this.flash.flash(Math.min(...ys), Math.max(...ys) - Math.min(...ys) + 1);
+          this.chaosFx.boltStrike(cells);
+          this.stage.flashLightning();
           for (const c of cells) {
             const q = cellToWorld(c.x, c.y);
             this.board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0xffd23f, 8, 3.0, 3.2);
@@ -702,9 +745,19 @@ export class GameApp {
       case 'drill': {
         this.sound.play('lock');
         this.shake.add(0.35);
-        for (const c of e.cells ?? []) {
+        const cells = e.cells ?? [];
+        let sx = 0;
+        let sy = 0;
+        for (const c of cells) {
+          sx += c.x;
+          sy += c.y;
           const q = cellToWorld(c.x, c.y);
           this.board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0x9aa7ff, 10, 3.2, 3.2);
+        }
+        if (cells.length > 0) {
+          // Onda de polvo donde la broca muerde el montón.
+          const center = cellToWorld(sx / cells.length, sy / cells.length);
+          this.chaosFx.impact(center.x, center.y, 0xffa06a);
         }
         this.hud.toast('🔩 Taladro — se hunde 2 filas', 1500);
         break;
@@ -718,6 +771,7 @@ export class GameApp {
           const ys = cells.map((c) => c.y);
           this.flash.flash(Math.min(...ys), Math.max(...ys) - Math.min(...ys) + 1);
         }
+        this.chaosFx.drillStrike(column);
         for (const c of cells) {
           const q = cellToWorld(c.x, c.y);
           this.board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0xe4573f, 10, 3.4, 3.6);
@@ -774,7 +828,7 @@ export class GameApp {
           this.hud.toast('Nivel ' + lv + ' — ¡más velocidad!', 2200);
           this.hud.levelBanner('NIVEL ' + lv, '¡más rápido!');
         }
-        this.hud.setStageChip(label);
+        this.hud.setStageChip(this.activeScenarioLabel(lv));
         break;
       }
       case 'gameover':
@@ -784,6 +838,13 @@ export class GameApp {
         this.showGameOver();
         break;
     }
+  }
+
+  /** Etiqueta del HUD: nombre del escenario activo o, si no hay, del tema. */
+  private activeScenarioLabel(lv: number): string {
+    const s = this.scenarioManager.activeScenario();
+    if (s) return s.icon + ' ' + s.name;
+    return stageLabelFor(lv);
   }
 
   private animate = (now: number): void => {
@@ -821,8 +882,10 @@ export class GameApp {
             this.lastSpecialV = this.engine.pieceVersion;
             this.hud.toast('Pieza especial: ' + label, 1600);
           }
-          this.hud.setChaosStatus(label);
+          this.hud.setChaosStatus(label, sp ?? '');
           this.board.setGhost(this.engine.ghostCells(), sp);
+          // Guía de impacto: mismas celdas que tocará el efecto si se suelta.
+          this.board.setSpecialGuide(this.engine.specialPreview());
         }
       }
 
@@ -839,6 +902,10 @@ export class GameApp {
       this.renderer.shadowMap.needsUpdate = true;
       frameDirty = true;
     }
+    // Guía/icono/granizo se animan sin mover geometría con sombra: basta con redibujar.
+    if (this.board.animating) frameDirty = true;
+    const fxDt = this.engine.phase === 'paused' || this.helpOpen ? 0 : rawDt;
+    if (this.chaosFx.update(fxDt)) frameDirty = true;
 
     this.debris.setPaused(this.engine.phase === 'paused' || this.helpOpen);
     this.debris.update(rawDt);
