@@ -72,6 +72,7 @@
           <label><input type="radio" name="game-mode" value="chaos" /> Caos</label>
         </div>
         <div id="start-options">
+          <p id="mode-hint">Tradicional es siempre el modo por defecto al arrancar: elegir Caos vale solo para la partida que empiezas y no se recuerda entre sesiones.</p>
           <label for="level-range">Nivel inicial</label>
           <div class="range-row">
             <input id="level-range" type="range" min="1" max="20" step="1" value="1" />
@@ -89,7 +90,7 @@
             <input type="checkbox" id="chaos-hail" />
             <span>🌨️ Granizo en Caos</span>
           </label>
-          <p class="option-hint">En Caos están activos por defecto y además caen tormentas (viento y lluvia). La calidad se puede ajustar abajo.</p>
+          <p class="option-hint">En Caos están activos por defecto y además caen tormentas (viento, lluvia, relámpagos y granizo). La calidad se puede ajustar abajo.</p>
           <div class="quality-row">
             <label for="fx-quality">Calidad de efectos</label>
             <select id="fx-quality">
@@ -155,7 +156,8 @@
           <li><strong>⏱️ Nivel híbrido</strong> — subes cada 10 líneas o 45 s (lo que llegue antes), hasta el nivel 20.</li>
           <li><strong>🎵 Música procedural</strong> — se genera en vivo y se adapta a la acción: tranquila al principio y más enérgica cuando sube la intensidad. Actívala o apágala con <span class="key">M</span>.</li>
           <li><strong>👆 Arrastrar y tocar (móvil)</strong> — arrastra la pieza para moverla (hacia abajo, caída suave) y toca el tablero para rotarla en sentido horario.</li>
-          <li><strong>🌪️ Modo Caos</strong> — elígelo en la pantalla inicial junto al nivel. Es el juego clásico con dos ingredientes: <strong>powerups literales</strong> y <strong>tormentas</strong>. Cada cierto tiempo cae un objeto 💣 ⚡ 🔩 en vez de una pieza (se anuncia con badge en el preview): la bomba revienta 2 filas, el rayo rompe los 4 bloques más altos bajo su base y el taladro se hunde 2 filas. Al bloquearse aplican su efecto y desaparecen sin dejar bloques. Además, cada cierto tiempo llega una tormenta avisada con un cartel: 🌬️ <strong>Viento</strong> empuja la pieza activa 1 celda hacia un lado (una flecha marca la dirección al menos 1 s antes; el fondo se inclina y vuelan papeles) y 🌧️ <strong>Lluvia</strong> deja el suelo resbaladizo (cada movimiento lateral desliza 1 celda extra si cabe; el ambiente se oscurece y los personajes se cubren).</li>
+          <li><strong>🌪️ Modo Caos</strong> — elígelo en la pantalla inicial junto al nivel (<strong>Tradicional es siempre el modo por defecto al arrancar</strong>; el Caos vale para la partida que empiezas y no se recuerda). Es el juego clásico con dos ingredientes: <strong>powerups literales</strong> y <strong>tormentas</strong>. Cada cierto tiempo cae un objeto 💣 ⚡ 🔩 en vez de una pieza (se anuncia con badge en el preview y con un chip coloreado en el HUD): la bomba revienta 2 filas, el rayo rompe los 4 bloques más altos bajo su base y el taladro se hunde 2 filas. Al sostener un powerup el tablero muestra su <strong>zona de impacto</strong> con una guía pulsante y el objeto flota y gira sobre la pieza fantasma. Al bloquearse aplican su efecto y desaparecen sin dejar bloques.</li>
+          <li><strong>⛈️ Tormentas del Caos</strong> — llegan avisadas con un cartel y el chip del HUD se colorea según la tormenta: 🌬️ <strong>Viento</strong> empuja la pieza 1 celda (una flecha marca la dirección al menos 1 s antes; el fondo se inclina y vuelan papeles), 🌧️ <strong>Lluvia</strong> deja el suelo resbaladizo (cada movimiento lateral desliza 1 celda extra si cabe; el ambiente se oscurece y los personajes se cubren), ⚡ <strong>Relámpago</strong> rompe el bloque más alto de 3 columnas (el rayo dentado se dibuja en el tablero y el cielo destella) y 🌨️ <strong>Granizo</strong> deja hielo en 2 columnas que se derrite con chispas (el chip indica las columnas golpeadas).</li>
         </ul>
         <p class="help-note">No hay objetos que recoger: estas ayudas están siempre disponibles.</p>
 
