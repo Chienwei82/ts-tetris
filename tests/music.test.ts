@@ -7,8 +7,9 @@ import {
 import { IntensityTracker } from '../src/audio/intensityTracker.js';
 import type { IntensitySignals } from '../src/audio/intensityTracker.js';
 import {
-  barPattern, chordForBar, cutoffFor, freqForDegree, layersForIntensity,
-  maskDensityFor, pickCuratedSeed, songProfile, songScore, tempoFor
+  barPattern, chordForBar, cutoffFor, freqForDegree, humanizeFor, layersForIntensity,
+  maskDensityFor, motifFor, omissionsFor, passingDegree, pickCuratedSeed, sectionForBar,
+  songProfile, songScore, tempoFor, voiceLeadChord
 } from '../src/audio/musicPatterns.js';
 import { hashSeed, mulberry32, rngForBar } from '../src/audio/musicRng.js';
 
@@ -162,6 +163,35 @@ describe('mapeo intensidad → capas / tempo / brillo', () => {
     expect(maskDensityFor(THRESHOLD_ARPEGIO)).toBeCloseTo(MASK_DENSITY_MIN);
     expect(maskDensityFor(1)).toBe(1);
     expect(maskDensityFor(0.5)).toBeLessThan(maskDensityFor(0.9));
+  });
+});
+
+describe('extensión pura: motivo, sección, humanización y voz', () => {
+  it('motifFor es determinista y cambia con la semilla', () => {
+    expect(motifFor(7)).toEqual(motifFor(7));
+    expect(motifFor(7)).not.toEqual(motifFor(8));
+    expect(motifFor(7).length).toBeGreaterThanOrEqual(8);
+  });
+  it('sección de 16 compases y omisiones acotadas', () => {
+    expect(sectionForBar(0)).toBe(0); expect(sectionForBar(15)).toBe(0); expect(sectionForBar(16)).toBe(1);
+    for (let bar = 0; bar < 64; bar++) {
+      const o = omissionsFor(42, bar);
+      expect(o).toEqual(omissionsFor(42, bar));
+      expect(o.length).toBeLessThanOrEqual(1);
+    }
+  });
+  it('humanizeFor acota timing y velocity', () => {
+    for (let bar = 0; bar < 8; bar++) for (let step = 0; step < 16; step++) {
+      const h = humanizeFor(42, bar, step);
+      expect(Math.abs(h.timing)).toBeLessThanOrEqual(0.006);
+      expect(h.velocity).toBeGreaterThanOrEqual(0.9); expect(h.velocity).toBeLessThanOrEqual(1.1);
+    }
+  });
+  it('passingDegree y voiceLeadChord mantienen la escala', () => {
+    expect(Math.abs(passingDegree(0, 4) - 0)).toBe(1);
+    const led = voiceLeadChord([0, 2, 4], [3, 5, 7]);
+    expect(led.length).toBe(3);
+    for (const d of led) expect(((d % 7) + 7) % 7).toBeGreaterThanOrEqual(0);
   });
 });
 

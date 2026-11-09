@@ -10,7 +10,7 @@ import {
   CURATED_SONG_SEEDS, GROOVE_BASS_STEPS, GROOVE_HAT_STEPS, GROOVE_KICK_STEPS, GROOVE_SWING,
   HIGH_DENSITY, MASK_DENSITY_MAX, MASK_DENSITY_MIN, MAX_REPEAT, MELODY_DEGREES,
   MIN_DEGREES, MOTION_TARGET, MOTION_WEIGHT, REPEAT_WEIGHT, ROOT_FREQ,
-  SCALE_INTERVALS, SONG_BARS, STEPS_PER_BAR, SWING_S,
+  SCALE_INTERVALS, SONG_BARS, STEPS_PER_BAR, SWING_S, SECTION_BARS,
   THRESHOLD_ARPEGIO, THRESHOLD_BASS, THRESHOLD_DRUMS, VARIETY_WEIGHT,
 } from './musicConstants.js';
 import { mulberry32, rngForBar } from './musicRng.js';
@@ -238,6 +238,52 @@ export function maskDensityFor(intensity: number): number {
   return MASK_DENSITY_MIN + (MASK_DENSITY_MAX - MASK_DENSITY_MIN) * t;
 }
 
+/** Saltos cardinales de un stream independiente para la extensión por motivos. */
+const MOTIF_SALT = 0x4d4f5446;
+const SECTION_SALT = 0x53454354;
+const HUMAN_SALT = 0x48554d41;
+export const MOTIF_MIN_DEGREES = 8;
+/** Nota de paso determinista entre dos grados (sempre diatónica). */
+export function passingDegree(a: number, b: number): number {
+  const d = b - a;
+  if (d === 0) return a;
+  return a + (d > 0 ? 1 : -1);
+}
+/** Conducción de voces acotada: cada nota va a su objetivo más cercano. */
+export function voiceLeadChord(previous: readonly number[], target: readonly number[]): number[] {
+  if (!previous.length || target.length !== previous.length) return [...target];
+  return target.map((note, i) => {
+    const prev = previous[i] ?? note;
+    const base = Math.round((prev - note) / 7) * 7;
+    const options = [note + base - 7, note + base, note + base + 7];
+    return options.reduce((best, value) => Math.abs(value - prev) < Math.abs(best - prev) ? value : best, note + base);
+  });
+}
+/** Sección pura por compás. */
+export function sectionForBar(bar: number): number { return Math.floor(bar / SECTION_BARS); }
+/** Variante determinista de una nota dentro de la escala. */
+export function motifFor(seed: number): number[] {
+  const rng = mulberry32((seed >>> 0) ^ MOTIF_SALT);
+  const count = 8 + Math.floor(rng() * 8);
+  const degrees: number[] = [];
+  let current = Math.floor(rng() * 7);
+  for (let i = 0; i < count; i++) {
+    degrees.push(current);
+    const move = (Math.floor(rng() * 5) - 2);
+    current = Math.max(0, Math.min(14, current + move));
+  }
+  return degrees;
+}
+/** Omisiones por sección: devuelve drum/arpeggio/bass o vacío. */
+export function omissionsFor(seed: number, bar: number): ('drums' | 'arpeggio' | 'bass')[] {
+  const rng = mulberry32((((seed >>> 0) ^ SECTION_SALT) + Math.floor(bar / SECTION_BARS) * 0x9e3779b1) >>> 0);
+  return rng() < 0.24 ? ['drums'] : rng() < 0.18 ? ['arpeggio'] : [];
+}
+/** Humanización determinista: offset de timing y factor de velocity. */
+export function humanizeFor(seed: number, bar: number, step: number): { timing: number; velocity: number } {
+  const rng = mulberry32(((seed >>> 0) ^ HUMAN_SALT ^ Math.imul(bar + 1, 0x9e3779b1) ^ Math.imul(step + 1, 0x85ebca6b)) >>> 0);
+  return { timing: (rng() - 0.5) * 0.012, velocity: 0.9 + rng() * 0.2 };
+}
 /** Duración de un tiempo (segundos) para un tempo dado. */
 export function beatDurationSec(bpm: number): number {
   return 60 / (bpm > 0 ? bpm : BPM_MIN);

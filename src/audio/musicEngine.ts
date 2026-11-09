@@ -10,12 +10,12 @@ import {
   DELAY_TIME_S, FADE_IN_S, LOOKAHEAD_S, MASTER_PEAK, STEPS_PER_BAR, TICK_MS,
 } from './musicConstants.js';
 import type { BarPattern, LayerGates } from './musicPatterns.js';
-import { clamp01 } from './musicPatterns.js';
+import { clamp01, humanizeFor } from './musicPatterns.js';
 import type { GenreId, GenreProfile } from './genreProfiles.js';
 import { DEFAULT_GENRE, GENRE_PROFILES } from './genreProfiles.js';
 import {
   barPatternFor, chordForGenreBar, cutoffForGenre, freqForGenreDegree,
-  layersForGenre, maskDensityForGenre, songProfileFor, tempoForGenre,
+  layersForGenre, layersSmoothForGenre, maskDensityForGenre, songProfileFor, tempoForGenre, textureOf,
 } from './genrePatterns.js';
 import { mulberry32 } from './musicRng.js';
 
@@ -38,6 +38,12 @@ export class MusicEngine {
   private readonly brightness: BiquadFilterNode[] = [];
   private readonly noise: AudioBuffer;
   private readonly sources = new Set<AudioScheduledSourceNode>();
+  private readonly padDuck: GainNode;
+  private readonly spaceSend: GainNode;
+  private readonly space: ConvolverNode;
+  private readonly spaceWet: GainNode;
+  private readonly pans = new Map<string, StereoPannerNode>();
+  private padVoices = 0;
   private timer = 0;
   private nextStepTime = 0;
   private step = 0;
@@ -69,30 +75,27 @@ export class MusicEngine {
     this.master.connect(this.compressor);
     this.compressor.connect(this.ctx.destination);
 
+    const tex = textureOf(this.profile());
     this.padBus = this.createBus(this.profile().gains.pad);
     this.bassBus = this.createBus(this.profile().gains.bass);
     this.arpBus = this.createBus(this.profile().gains.arp);
-    this.drumBus = this.ctx.createGain();
-    this.drumBus.gain.value = this.profile().gains.drums;
-    this.drumBus.connect(this.master);
-
-    /* "Reverb" simple: delay con feedback filtrado sobre el arpegio. */
-    const send = this.ctx.createGain();
-    send.gain.value = SEND_LEVEL;
-    const delay = this.ctx.createDelay(1);
-    delay.delayTime.value = DELAY_TIME_S;
-    const fb = this.ctx.createGain();
-    fb.gain.value = DELAY_FEEDBACK;
-    const dfilter = this.ctx.createBiquadFilter();
-    dfilter.type = 'lowpass';
-    dfilter.frequency.value = DELAY_FILTER_HZ;
-    this.arpBus.connect(send);
-    send.connect(delay);
-    delay.connect(dfilter);
-    dfilter.connect(fb);
-    fb.connect(delay);
-    dfilter.connect(this.master);
-
+    this.drumBus = this.createBus(this.profile().gains.drums);
+    // Pan por capa (si el navegador lo soporta).
+    this.setPan('pad', tex.panPad); this.setPan('bass', tex.panBass); this.setPan('arp', tex.panArp); this.setPan('drums', tex.panDrums);
+    // Ducking simple: nodo de ganancia en serie con el pad (sidechain por kick).
+    this.padDuck = this.ctx.createGain(); this.padDuck.gain.value = 1;
+    // Reverb por convolución con IR sintética (sin samples) + delay de control.
+    this.spaceSend = this.ctx.createGain(); this.spaceSend.gain.value = tex.reverbMix;
+    this.space = this.ctx.createConvolver(); this.space.buffer = this.createImpulse(tex.reverbDecayS);
+    this.spaceWet = this.ctx.createGain(); this.spaceWet.gain.value = 0.9;
+    this.spaceSend.connect(this.space); this.space.connect(this.spaceWet); this.spaceWet.connect(this.master);
+    this.arpBus.connect(this.spaceSend); this.padBus.connect(this.spaceSend);
+    // Delay filtrado como color adicional sobre el arpegio (conservado).
+    const send = this.ctx.createGain(); send.gain.value = SEND_LEVEL;
+    const delay = this.ctx.createDelay(1); delay.delayTime.value = DELAY_TIME_S;
+    const fb = this.ctx.createGain(); fb.gain.value = DELAY_FEEDBACK;
+    const dfilter = this.ctx.createBiquadFilter(); dfilter.type = 'lowpass'; dfilter.frequency.value = DELAY_FILTER_HZ;
+    this.arpBus.connect(send); send.connect(delay); delay.connect(dfilter); dfilter.connect(fb); fb.connect(delay); dfilter.connect(this.master);
     this.noise = this.createNoise();
   }
 
@@ -205,7 +208,8 @@ export class MusicEngine {
     }
     this.sources.clear();
     for (const n of [this.padBus, this.bassBus, this.arpBus, this.drumBus,
-      this.master, this.compressor, ...this.brightness]) {
+      this.master, this.compressor, this.padDuck, this.spaceSend, this.space, this.spaceWet,
+      ...this.brightness, ...this.pans.values()]) {
       try { n.disconnect(); } catch { /* ignore */ }
     }
     this.brightness.length = 0;
@@ -279,9 +283,13 @@ export class MusicEngine {
     }
   }
 
-  /** Swing determinista: desplaza solo los pasos débiles (impares). */
-  private swingOffset(swing: number, step: number): number {
-    return swing > 0 && step % 2 === 1 ? swing : 0;
+  /** Swing relativo (% del stepDur) + humanización determinista. */
+  private swingOffset(swing: number, step: number, stepDur = this.stepDur): number {
+    const ratio = textureOf(this.profile()).swingRatio;
+    const base = swing > 0 && step % 2 === 1 ? Math.max(swing * stepDur, ratio * stepDur) : 0;
+    const human = humanizeFor(this.seed, Math.floor(this.step / STEPS_PER_BAR), step).timing;
+    const clamped = Math.max(-0.45 * stepDur, Math.min(0.45 * stepDur, base + human));
+    return clamped;
   }
 
   /** Aplica intensidad → tempo, brillo y ganancias de capa, todo con rampas. */
@@ -290,24 +298,28 @@ export class MusicEngine {
     const profile = this.profile();
     const cutoff = cutoffForGenre(profile, v);
     for (const f of this.brightness) f.frequency.setTargetAtTime(cutoff, at, 0.4);
+    // Gates continuos (smoothstep) en vez de on/off brusco.
+    const smooth = layersSmoothForGenre(profile, v);
     this.gates = layersForGenre(profile, v);
     this.density = maskDensityForGenre(profile, v);
-    this.padBus.gain.setTargetAtTime(profile.gains.pad * (0.75 + 0.25 * v), at, 0.6);
-    this.bassBus.gain.setTargetAtTime(this.gates.bass ? profile.gains.bass : 0.0001, at, 0.6);
-    this.arpBus.gain.setTargetAtTime(this.gates.arpeggio ? profile.gains.arp : 0.0001, at, 0.6);
-    this.drumBus.gain.setTargetAtTime(this.gates.drums ? profile.gains.drums : 0.0001, at, 0.6);
+    const tex = textureOf(profile);
+    this.padBus.gain.setTargetAtTime(profile.gains.pad * (0.75 + 0.25 * v) * (1 - tex.ducking * 0.5), at, 0.6);
+    this.bassBus.gain.setTargetAtTime(profile.gains.bass * smooth.bass, at, 0.6);
+    this.arpBus.gain.setTargetAtTime(profile.gains.arp * smooth.arpeggio, at, 0.6);
+    this.drumBus.gain.setTargetAtTime(profile.gains.drums * smooth.drums, at, 0.6);
   }
   /* ------------------------------- voces ---------------------------------- */
 
   private ensurePad(at: number, chord: number[], dur: number): void {
     // El pad es continuo: no reenganchar si aún está sonando el actual.
-    if (at < this.padUntil - 0.3) return;
+    if (at < this.padUntil - 0.45) return; // solape controlado
     this.schedulePad(at, dur, chord);
   }
 
   private schedulePad(at: number, dur: number, chord: number[]): void {
     this.padUntil = at + dur;
     const timbre = this.profile().timbre.pad;
+    this.padVoices = Math.min(24, this.padVoices + chord.length * 4);
     const bodyLevel = 0.14 * timbre.level;
     const airLevel = 0.08 * timbre.level;
     for (const degree of chord) {
@@ -327,7 +339,7 @@ export class MusicEngine {
           g.connect(this.padBus);
           osc.start(at);
           osc.stop(at + dur + timbre.releaseS * 1.5);
-          this.trackVoice(osc, g);
+          const src: AudioScheduledSourceNode = osc as AudioScheduledSourceNode; this.padVoices = Math.max(0, this.padVoices - 4); this.trackVoice(src, g);
         }
       }
     }
@@ -378,6 +390,8 @@ export class MusicEngine {
     g.connect(this.drumBus);
     osc.start(at);
     osc.stop(at + KICK_DECAY_S + 0.05);
+    // Ducking: el pad se hueca un poco con cada kick.
+    const tex = textureOf(this.profile()); if (tex.ducking > 0) { this.padDuck.gain.cancelScheduledValues(at); this.padDuck.gain.setValueAtTime(Math.max(0.6, 1 - tex.ducking), at); this.padDuck.gain.setTargetAtTime(1, at + 0.05, 0.18); }
     this.trackVoice(osc, g);
   }
 
@@ -437,6 +451,23 @@ export class MusicEngine {
     filter.connect(this.master);
     this.brightness.push(filter);
     return g;
+  }
+  private setPan(name: string, value: number): void {
+    const bus = name === 'pad' ? this.padBus : name === 'bass' ? this.bassBus : name === 'arp' ? this.arpBus : this.drumBus;
+    if (!bus) return;
+    const Ctor = (window as unknown as { StereoPannerNode?: typeof StereoPannerNode }).StereoPannerNode;
+    if (!Ctor) return;
+    const pan = new Ctor(this.ctx); pan.pan.value = Math.max(-1, Math.min(1, value));
+    // Re-cablea: bus -> pan -> master (el filtro de brillo sigue entre bus y pan si existe).
+    try { bus.disconnect(); } catch { /* ignore */ }
+    bus.connect(pan); pan.connect(this.master); this.pans.set(name, pan);
+  }
+  private createImpulse(decayS: number): AudioBuffer {
+    const len = Math.max(1, Math.floor(this.ctx.sampleRate * Math.max(0.4, decayS)));
+    const buf = this.ctx.createBuffer(2, len, this.ctx.sampleRate);
+    const rng = mulberry32(0x1a11ce);
+    for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < len; i++) { d[i] = (rng()*2-1) * Math.pow(1 - i/len, 2.4); } }
+    return buf;
   }
 
   /** Ruido blanco generado una vez con el RNG (no es un sample externo). */

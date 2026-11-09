@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Música preview · TETRIS 3D</title>
+  <link rel="stylesheet" href="/src/preview/preview.css" />
+</head>
+<body>
+  <main id="preview-root">
+    <h1>Music Preview <small>(sin juego)</small></h1>
+    <p>Genera desde GENRE_PROFILES[genre].seeds · mismo MusicDirector del juego.</p>
+    <section class="controls">
+      <label>Género
+        <select id="pv-genre">
+          <option value="electronic">Electronic</option>
+          <option value="pop">Pop</option>
+          <option value="techno">Techno</option>
+          <option value="dance">Dance</option>
+          <option value="classic">Classic</option>
+        </select>
+      </label>
+      <label>Semilla
+        <input id="pv-seed" type="number" min="0" step="1" value="11" />
+      </label>
+      <label>Banco
+        <select id="pv-preset"><option value="">— manual —</option></select>
+      </label>
+      <label>Intensidad <span id="pv-int-val">0</span>
+        <input id="pv-intensity" type="range" min="0" max="1" step="0.01" value="0" />
+      </label>
+    </section>
+    <div class="actions">
+      <button id="pv-play">Reproducir</button>
+      <button id="pv-stop">Detener</button>
+      <output id="pv-note">—</output>
+    </div>
+    <pre id="pv-meta">bare: —</pre>
+  </main>
+  <script type="module" src="/src/preview/musicPreview.ts"></script>
+</body>
+</html>
