@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GENRE_IDS, GENRE_PROFILES, isGenreId } from '../src/audio/genreProfiles.js';
-import { barPatternFor, chordForGenreBar, cutoffForGenre, freqForGenreDegree, layersForGenre, maskDensityForGenre, rootHzFor, songProfileFor, tempoForGenre } from '../src/audio/genrePatterns.js';
+import { barPatternFor, chordForGenreBar, cutoffForGenre, freqForGenreDegree, gateRamp, layersForGenre, layersSmoothForGenre, maskDensityForGenre, rootHzFor, songProfileFor, tempoForGenre, textureOf } from '../src/audio/genrePatterns.js';
 import { normalizeGenre, pickSeed, seedsOf } from '../src/audio/genreRegistry.js';
 import { CROSSFADE_BARS, crossfadeGains, isCrossfadeDone } from '../src/audio/genreCrossfader.js';
 import { STEPS_PER_BAR } from '../src/audio/musicConstants.js';
@@ -108,6 +108,40 @@ describe('mapeo intensidad -> capas/BPM por perfil', () => {
     }
   });
 });
+describe('extensión por género: motivo, secciones, gates y texture', () => {
+  it('songProfileFor incluye modo, registro y motivo por semilla', () => {
+    for (const g of GENRE_IDS) {
+      const p = songProfileFor(g, 42);
+      expect([-7, 0, 7]).toContain(p.registerShift); expect(p.mode).toBeGreaterThanOrEqual(0); expect(p.mode).toBeLessThanOrEqual(2);
+      expect(p.motif.length).toBeGreaterThanOrEqual(8);
+    }
+  });
+  it('gates suaves crecen con la intensidad y respetan thresholds', () => {
+    for (const g of GENRE_IDS) {
+      const prof = GENRE_PROFILES[g];
+      const mid = layersSmoothForGenre(prof, 0.5); const high = layersSmoothForGenre(prof, 0.85);
+      expect(mid.bass).toBeGreaterThanOrEqual(0); expect(mid.bass).toBeLessThanOrEqual(1);
+      expect(high.bass).toBeGreaterThanOrEqual(mid.bass);
+      expect(gateRamp(0, prof.thresholds.bass, 0.2)).toBe(0);
+      if (prof.thresholds.drums <= 1) expect(gateRamp(1, prof.thresholds.drums, 0.2)).toBe(1);
+      else expect(layersSmoothForGenre(prof, 1).drums).toBe(0); // classic
+    }
+  });
+  it('fills y secciones no rompen el patrón (16 pasos, acordes de 3)', () => {
+    for (const g of GENRE_IDS) for (let bar = 0; bar < 32; bar++) {
+      const p = barPatternFor(g, 42, bar);
+      expect(p.arpeggio.length).toBe(STEPS_PER_BAR);
+      expect(p.chord.length).toBe(3);
+      for (const s of [...p.kick, ...p.hat, ...p.snare]) { expect(s.step).toBeGreaterThanOrEqual(0); expect(s.step).toBeLessThan(16); expect(s.threshold).toBeGreaterThanOrEqual(0); expect(s.threshold).toBeLessThanOrEqual(1); }
+    }
+  });
+  it('texture define carácter por género sin romper valores', () => {
+    const tech = textureOf(GENRE_PROFILES.techno); const classic = textureOf(GENRE_PROFILES.classic);
+    expect(tech.ducking).toBeGreaterThan(0); expect(classic.ducking).toBe(0);
+    expect(classic.reverbDecayS).toBeGreaterThan(tech.reverbDecayS);
+  });
+});
+
 describe('crossfade', () => {
   it('curvas de igual potencia: empieza en out y termina en in', () => {
     expect(crossfadeGains(0)).toEqual({ out: 1, in: 0 });

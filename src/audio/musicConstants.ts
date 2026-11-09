@@ -96,6 +96,10 @@ export const CURATED_SONG_SEEDS = [
 
 /** Compases que dura cada acorde (progresión lenta de 8 compases). */
 export const BARS_PER_CHORD = 2;
+/** Una sección completa de la canción. Extensión determinista pura. */
+export const SECTION_BARS = 16;
+/** Suspensiones deterministas por sección para que no todo sea igual. */
+export const SECTION_OMISSIONS = ['drums', 'arpeggio'] as const;
 
 /** Resolución rítmica: semicorcheas por compás de 4 tiempos. */
 export const BEATS_PER_BAR = 4;

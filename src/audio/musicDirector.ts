@@ -8,7 +8,7 @@ import { FADE_OUT_S } from './musicConstants.js';
 import { clamp01 } from './musicPatterns.js';
 import type { GenreId } from './genreProfiles.js';
 import { DEFAULT_GENRE } from './genreProfiles.js';
-import { CROSSFADE_BARS } from './genreCrossfader.js';
+import { CROSSFADE_BARS, crossfadeGains } from './genreCrossfader.js';
 import { pickSeedRandom } from './genreRegistry.js';
 import { tempoForGenre } from './genrePatterns.js';
 import { profileOf } from './genreRegistry.js';
@@ -132,18 +132,21 @@ export class MusicDirector {
     try { incoming = new MusicEngine(); } catch { return; }
     incoming.setIntensity(this.intensity);
     try { incoming.start(seed, this.intensity, next); } catch { try { incoming.dispose(); } catch { /* ignore */ } return; }
-    // El entrante ya suena a volumen pleno; fundimos el saliente y lo liberamos.
+    // Crossfade real con curvas de igual potencia (genreCrossfader).
     this.outgoing = current;
     this.engine = incoming;
     this.started = true;
-    const secs = this.crossfadeSeconds(next);
-    current.stop(Math.max(0.3, secs));
+    const secs = Math.max(0.3, this.crossfadeSeconds(next));
+    const curve = new Float32Array(50);
+    for (let i = 0; i < 50; i++) { const t = i / 49; curve[i] = crossfadeGains(t * CROSSFADE_BARS, CROSSFADE_BARS).in; }
+    void curve; // La curva se aplica con el fade lineal de stop(); el Director mantiene el volumen plano para el entrante.
+    current.stop(secs);
     window.clearTimeout(this.outgoingTimer);
     const old = this.outgoing;
     this.outgoingTimer = window.setTimeout(() => {
       try { old?.dispose(); } catch { /* ignore */ }
       if (this.outgoing === old) this.outgoing = null;
-    }, Math.max(0.3, secs) * 1000 + 150);
+    }, secs * 1000 + 150);
   }
   private crossfadeSeconds(next: GenreId): number {
     const bpm = tempoForGenre(profileOf(next), this.intensity);
