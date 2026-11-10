@@ -27,7 +27,7 @@ npm run dev      # local: http://localhost:5173 · LAN: http://<tu-IP>:5173
 ```
 
 ```bash
-npm test         # tests de lógica (vitest 5, 151 tests)
+npm test         # tests de lógica (vitest 5, 167 tests)
 npm run build    # type-check (tsc 7 nativo) + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
@@ -191,6 +191,7 @@ src/
   render/     Three.js (sin reglas de juego)
     scene.ts        Diorama base: cielo repintable, colinas, nubes, sol/luna, luces, confeti
     themes.ts       Temas clásicos: paletas, luces, clima y viento (niveles 1–2 y fondo congelado)
+    sceneLighting.ts Gradación de la luz de cada fondo (puro, testeado): el diorama no se apaga
     stage.ts        Controlador: delega en ScenarioManager o transiciona temas, rayos, toggle y tormentas
     weather.ts      Clima procedural (lluvia, tormenta, nieve, hojas, estrellas, aurora, fugaces)
     characters.ts   Personajes de papel (globo, pájaros, conejo, pingüino, OVNI) que se inclinan y cubren
@@ -256,6 +257,15 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
 - **Escenarios desacoplados**: `themes.ts` es solo datos (paletas, luces, clima,
   viento); `stage.ts` los interpola (~1,6 s) y `weather.ts`/`characters.ts` usan
   pools fijos con `visible = false` cuando están inactivos: coste cero en reposo.
+- **La luz del fondo no apaga el diorama**: `render/sceneLighting.ts` (puro) gradúa
+  el look de cada tema/escenario antes de aplicarlo — conserva solo una fracción de
+  la diferencia de intensidad con la luz de referencia, mezcla los colores de luz
+  hacia el tinte base, acerca el suelo al papel y aleja el comienzo de la niebla
+  para que nunca empiece delante del tablero. Con un fondo nocturno el diorama baja
+  ~20 % de luz (antes ~75 %), y las piezas conservan color y contraste.
+- **El tablero no recibe niebla**: sus materiales (bloques, contorno de tinta, marco,
+  panel y capas de juego) usan `fog: false`; la niebla es del horizonte y no tiñe el
+  plano de juego, ni siquiera cuando la cámara se aleja en pantallas estrechas.
 - **Toggle de efectos**: apagarlo congela el diorama en la paleta clásica y corta la
   simulación de clima, personajes, confeti, nubes y cubos flotantes (no solo los
   oculta), dejando el coste por frame como antes de la feature; se recuerda en
