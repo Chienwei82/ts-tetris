@@ -4,8 +4,10 @@ import type { Grid, PieceKind, Vec2 } from '../game/types.js';
 import { BOARD_D, BOARD_H, BOARD_W, cellToWorld } from './constants.js';
 import { INK, blockMaterial, cardboardMaterial, graphPaperMaterial, outlineMaterial, tapeMaterial } from './materials.js';
 import { ParticleSystem } from './particles.js';
-const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false });
-const ghostEdgeMat = new THREE.LineBasicMaterial({ color: INK, transparent: true, opacity: 0.7 });
+// Materiales del tablero: `fog: false` en todos — la niebla del fondo es para el
+// horizonte y no debe teñir el plano de juego (piezas, panel, fantasmas, guías).
+const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false, fog: false });
+const ghostEdgeMat = new THREE.LineBasicMaterial({ color: INK, transparent: true, opacity: 0.7, fog: false });
 /** Instanced-render capacity: every visible cell at once. */
 const MAX_LOCKED = COLS * VISIBLE_ROWS;
 /** Inverted-hull ink outline scale (cut-out edge). */
@@ -68,14 +70,14 @@ export class BoardRenderer {
   private hullIMesh = new THREE.InstancedMesh(this.geo, outlineMaterial(), MAX_LOCKED);
   /** Temporary hail cells. */
   private hailState = new Set<number>();
-  private hailIMesh = new THREE.InstancedMesh(this.geo, new THREE.MeshToonMaterial({ color: 0x9ec8ff, emissive: 0x9ec8ff, emissiveIntensity: 0.18 }), MAX_LOCKED);
+  private hailIMesh = new THREE.InstancedMesh(this.geo, new THREE.MeshToonMaterial({ color: 0x9ec8ff, emissive: 0x9ec8ff, emissiveIntensity: 0.18, fog: false }), MAX_LOCKED);
   /** Drill-red cells left by the taladro. */
   private drillState = new Set<number>();
-  private drillIMesh = new THREE.InstancedMesh(this.geo, new THREE.MeshToonMaterial({ color: DRILL_COLOR, emissive: DRILL_COLOR, emissiveIntensity: 0.25 }), MAX_LOCKED);
+  private drillIMesh = new THREE.InstancedMesh(this.geo, new THREE.MeshToonMaterial({ color: DRILL_COLOR, emissive: DRILL_COLOR, emissiveIntensity: 0.25, fog: false }), MAX_LOCKED);
   /** Guía luminosa de la zona de impacto del powerup activo (bomba/rayo/taladro). */
   private guideIMesh = new THREE.InstancedMesh(
     new THREE.BoxGeometry(0.94, 0.94, 0.05),
-    new THREE.MeshBasicMaterial({ color: 0xff8a3d, transparent: true, opacity: 0.3, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: 0xff8a3d, transparent: true, opacity: 0.3, depthWrite: false, fog: false }),
     MAX_LOCKED
   );
   private guideOn = false;
@@ -277,7 +279,7 @@ export class BoardRenderer {
     back.receiveShadow = true;
     const backEdge = new THREE.LineSegments(
       new THREE.EdgesGeometry(back.geometry),
-      new THREE.LineBasicMaterial({ color: INK })
+      new THREE.LineBasicMaterial({ color: INK, fog: false })
     );
     backEdge.position.z = 0.01;
     back.add(backEdge);
@@ -412,7 +414,7 @@ export class BoardRenderer {
       this.iconTex.set(special, tex);
     }
     if (!this.specialIcon) {
-      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false });
       this.specialIcon = new THREE.Sprite(mat);
       this.specialIcon.renderOrder = 30;
       this.group.add(this.specialIcon);
@@ -458,7 +460,7 @@ export class BoardRenderer {
       this.iconTex.set(special, tex);
     }
     if (!this.ghostSpecial) {
-      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.42, depthTest: false, depthWrite: false });
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.42, depthTest: false, depthWrite: false, fog: false });
       this.ghostSpecial = new THREE.Sprite(mat);
       this.ghostSpecial.renderOrder = 8; // sobre el fondo, bajo el icono activo (30)
       this.group.add(this.ghostSpecial);
@@ -477,7 +479,7 @@ export class BoardRenderer {
     this.fogOn = on;
     if (on && !this.fogMesh) {
       const geo = new THREE.PlaneGeometry(BOARD_W + 1.4, BOARD_H / 2 + 0.6);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xf7efdb, transparent: true, opacity: 0.45, depthWrite: false });
+      const mat = new THREE.MeshBasicMaterial({ color: 0xf7efdb, transparent: true, opacity: 0.45, depthWrite: false, fog: false });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(0, BOARD_H / 4 + 0.2, 2.6);
       mesh.renderOrder = 5;

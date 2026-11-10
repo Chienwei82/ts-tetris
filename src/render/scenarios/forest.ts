@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { paintSky } from '../scene.js';
 import type { SceneParts } from '../scene.js';
 import type { Scenario, ScenarioLook, ScenarioResources } from './scenario.js';
 import { scenarioRegistry } from './scenarioRegistry.js';
@@ -70,24 +69,9 @@ export const forest: Scenario = {
   build(parts: SceneParts): void {
     const res: ScenarioResources = { meshes: [], lights: [], materials: [], geometries: [], textures: [], points: [] };
 
-    paintSky(parts.sky, SKY);
-    parts.fog.color.setHex(LOOK.fog.color);
-    parts.fog.near = LOOK.fog.near;
-    parts.fog.far = LOOK.fog.far;
-    parts.hemi.color.setHex(LOOK.hemi.sky);
-    parts.hemi.groundColor.setHex(LOOK.hemi.ground);
-    parts.hemi.intensity = LOOK.hemi.intensity;
-    parts.key.color.setHex(LOOK.key.color);
-    parts.key.intensity = LOOK.key.intensity;
-    parts.fill.color.setHex(LOOK.fill.color);
-    parts.fill.intensity = LOOK.fill.intensity;
-    parts.groundMat.color.setHex(LOOK.ground.color);
-    const gm = parts.gridMat as THREE.Material;
-    gm.transparent = true;
-    gm.opacity = LOOK.ground.gridOpacity;
-    parts.cloudMat.color.setHex(LOOK.clouds.color);
-    for (const c of parts.clouds) c.mesh.visible = LOOK.clouds.visible;
-    parts.confetti.setAlpha(LOOK.confetti);
+    // Cielo, luces, niebla y suelo los aplica ScenarioManager con el look ya
+    // graduado (ver render/sceneLighting.ts): así el fondo cambia sin apagar
+    // el tablero ni las piezas. Aquí solo se construye la escenografía.
 
     // Árboles (van al grupo de escenografía del escenario).
     const specs: Array<[number, number, number, number, number]> = [

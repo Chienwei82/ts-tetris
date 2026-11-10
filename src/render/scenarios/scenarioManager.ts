@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { paintSky } from '../scene.js';
 import type { SceneParts } from '../scene.js';
+import { gradeSceneLighting, lightingOf, mixHex } from '../sceneLighting.js';
+import type { SceneLighting } from '../sceneLighting.js';
 import type { Scenario, ScenarioLook } from './scenario.js';
 import { scenarioRegistry } from './scenarioRegistry.js';
 import { scenarioForLevel } from './levelMapping.js';
@@ -22,6 +24,9 @@ export class ScenarioManager {
 
   private fromLook: ScenarioLook | null = null;
   private toScenario: Scenario | null = null;
+  /** Luces ya graduadas de los extremos del fundido (ver `sceneLighting`). */
+  private fromGraded: SceneLighting | null = null;
+  private toGraded: SceneLighting | null = null;
   private transitionK = 1;
   private transitioning = false;
 
@@ -112,6 +117,8 @@ export class ScenarioManager {
       this.transitioning = false;
       this.fromLook = null;
       this.toScenario = null;
+      this.fromGraded = null;
+      this.toGraded = null;
       this.onScenarioChange?.(targetId);
       return;
     }
@@ -120,6 +127,8 @@ export class ScenarioManager {
     // niebla, suelo); la geometría nueva se construye al terminar el fundido.
     this.fromLook = previous.look;
     this.toScenario = target;
+    this.fromGraded = gradeSceneLighting(lightingOf(previous.look));
+    this.toGraded = gradeSceneLighting(lightingOf(target.look));
     this.transitionK = 0;
     this.transitioning = true;
 
@@ -141,6 +150,8 @@ export class ScenarioManager {
     }
     this.fromLook = null;
     this.toScenario = null;
+    this.fromGraded = null;
+    this.toGraded = null;
   }
 
   private releaseActive(): void {
@@ -153,24 +164,30 @@ export class ScenarioManager {
     this.parts.sunGroup.visible = true;
   }
 
+  /**
+   * Aplica el look de un escenario. La iluminación se gradúa (`sceneLighting`)
+   * para que el fondo cambie de ambiente sin oscurecer el diorama ni las piezas:
+   * el cielo, las nubes y el confeti sí son los del escenario.
+   */
   private applyLook(look: ScenarioLook): void {
     const p = this.parts;
+    const light = gradeSceneLighting(lightingOf(look));
     paintSky(p.sky, look.sky);
     // Oculta la escenografía clásica mientras un escenario está activo.
     for (const h of p.hills) h.visible = false;
     p.sunGroup.visible = false;
     p.fog.color.setHex(look.fog.color);
-    p.fog.near = look.fog.near;
-    p.fog.far = look.fog.far;
+    p.fog.near = light.fog.near;
+    p.fog.far = light.fog.far;
     this.cleanFog.copy(p.fog.color);
-    p.hemi.color.setHex(look.hemi.sky);
-    p.hemi.groundColor.setHex(look.hemi.ground);
-    p.hemi.intensity = look.hemi.intensity;
-    p.key.color.setHex(look.key.color);
-    p.key.intensity = look.key.intensity;
-    p.fill.color.setHex(look.fill.color);
-    p.fill.intensity = look.fill.intensity;
-    p.groundMat.color.setHex(look.ground.color);
+    p.hemi.color.setHex(light.hemi.sky);
+    p.hemi.groundColor.setHex(light.hemi.ground);
+    p.hemi.intensity = light.hemi.intensity;
+    p.key.color.setHex(light.key.color);
+    p.key.intensity = light.key.intensity;
+    p.fill.color.setHex(light.fill.color);
+    p.fill.intensity = light.fill.intensity;
+    p.groundMat.color.setHex(light.ground);
     const gm = p.gridMat as THREE.Material;
     gm.transparent = true;
     gm.opacity = look.ground.gridOpacity;
@@ -181,42 +198,44 @@ export class ScenarioManager {
 
   private applyBlend(t: number): void {
     const a = this.fromLook;
-    const b = this.toScenario ? this.toScenario.look : this.active!.look;
+    const b = this.toScenario ? this.toScenario.look : this.active?.look ?? null;
+    const ga = this.fromGraded;
+    const gb = this.toGraded;
     if (!a || !b) { if (b) this.applyLook(b); return; }
+    if (!ga || !gb) { this.applyLook(b); return; }
 
     const p = this.parts;
-    const scratch = new THREE.Color();
-    const skyStops: [number, number, number, number] = [
-      lerpHex(a.sky[0], b.sky[0], t, scratch),
-      lerpHex(a.sky[1], b.sky[1], t, scratch),
-      lerpHex(a.sky[2], b.sky[2], t, scratch),
-      lerpHex(a.sky[3], b.sky[3], t, scratch),
-    ];
-    paintSky(p.sky, skyStops);
+    paintSky(p.sky, [
+      mixHex(a.sky[0], b.sky[0], t),
+      mixHex(a.sky[1], b.sky[1], t),
+      mixHex(a.sky[2], b.sky[2], t),
+      mixHex(a.sky[3], b.sky[3], t),
+    ]);
 
-    p.fog.color.copy(
-      new THREE.Color().setHex(a.fog.color).lerp(new THREE.Color().setHex(b.fog.color), t)
-    );
-    p.fog.near = a.fog.near + (b.fog.near - a.fog.near) * t;
-    p.fog.far = a.fog.far + (b.fog.far - a.fog.far) * t;
+    // La niebla (color) es ambiente; sus distancias se interpolan ya graduadas
+    // para que nunca llegue a empezar delante del plano del tablero.
+    p.fog.color.setHex(mixHex(a.fog.color, b.fog.color, t));
+    p.fog.near = ga.fog.near + (gb.fog.near - ga.fog.near) * t;
+    p.fog.far = ga.fog.far + (gb.fog.far - ga.fog.far) * t;
     this.cleanFog.copy(p.fog.color);
 
-    p.hemi.color.setHex(lerpHex(a.hemi.sky, b.hemi.sky, t, scratch));
-    p.hemi.groundColor.setHex(lerpHex(a.hemi.ground, b.hemi.ground, t, scratch));
-    p.hemi.intensity = a.hemi.intensity + (b.hemi.intensity - a.hemi.intensity) * t;
+    // Luces graduadas: el fundido de ambiente no apaga el diorama.
+    p.hemi.color.setHex(mixHex(ga.hemi.sky, gb.hemi.sky, t));
+    p.hemi.groundColor.setHex(mixHex(ga.hemi.ground, gb.hemi.ground, t));
+    p.hemi.intensity = ga.hemi.intensity + (gb.hemi.intensity - ga.hemi.intensity) * t;
 
-    p.key.color.setHex(lerpHex(a.key.color, b.key.color, t, scratch));
-    p.key.intensity = a.key.intensity + (b.key.intensity - a.key.intensity) * t;
+    p.key.color.setHex(mixHex(ga.key.color, gb.key.color, t));
+    p.key.intensity = ga.key.intensity + (gb.key.intensity - ga.key.intensity) * t;
 
-    p.fill.color.setHex(lerpHex(a.fill.color, b.fill.color, t, scratch));
-    p.fill.intensity = a.fill.intensity + (b.fill.intensity - a.fill.intensity) * t;
+    p.fill.color.setHex(mixHex(ga.fill.color, gb.fill.color, t));
+    p.fill.intensity = ga.fill.intensity + (gb.fill.intensity - ga.fill.intensity) * t;
 
-    p.groundMat.color.setHex(lerpHex(a.ground.color, b.ground.color, t, scratch));
+    p.groundMat.color.setHex(mixHex(ga.ground, gb.ground, t));
     const gm = p.gridMat as THREE.Material;
     gm.transparent = true;
     gm.opacity = a.ground.gridOpacity + (b.ground.gridOpacity - a.ground.gridOpacity) * t;
 
-    p.cloudMat.color.setHex(lerpHex(a.clouds.color, b.clouds.color, t, scratch));
+    p.cloudMat.color.setHex(mixHex(a.clouds.color, b.clouds.color, t));
     for (const c of p.clouds) c.mesh.visible = b.clouds.visible;
 
     p.confetti.setAlpha(a.confetti + (b.confetti - a.confetti) * t);
@@ -237,11 +256,4 @@ export class ScenarioManager {
     // Animación propia del escenario (parpadeos, deriva, etc.).
     if (this.active) this.active.update(dt);
   }
-}
-
-function lerpHex(a: number, b: number, t: number, out: THREE.Color): number {
-  out.setHex(a);
-  const c2 = new THREE.Color().setHex(b);
-  out.lerp(c2, t);
-  return out.getHex();
 }

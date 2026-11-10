@@ -3,6 +3,7 @@ import { paintSky } from './scene.js';
 import type { SceneParts } from './scene.js';
 import { THEMES, themeIndexForLevel } from './themes.js';
 import type { StageTheme } from './themes.js';
+import { REFERENCE_LOOK, gradeSceneLighting, mixHex } from './sceneLighting.js';
 import { WeatherSystem } from './weather.js';
 import { Characters } from './characters.js';
 import { WindSystem } from './fx/windSystem.js';
@@ -36,9 +37,6 @@ export interface Stage {
 }
 
 const TRANSITION_SECONDS = 1.6;
-/** Gradación de luz global: menos ambiente y más luz clave => sombras más marcadas. */
-const HEMI_GRADE = 0.62;
-const KEY_GRADE = 1.28;
 
 export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   const weather = new WeatherSystem(parts.scene);
@@ -88,8 +86,6 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   const RAIN_FOG = new THREE.Color(0x46566a);
   const fogBase = new THREE.Color();
 
-  const scratch = new THREE.Color();
-  const tmpColor = new THREE.Color();
   const skyStops: [number, number, number, number] = [0, 0, 0, 0];
 
   /** Gestor de escenarios (opcional). Cuando está activo, se encarga de
@@ -99,50 +95,68 @@ export function createStage(parts: SceneParts, opts: StageOptions = {}): Stage {
   function themeAt(i: number): StageTheme {
     return THEMES[i] ?? (THEMES[0] as StageTheme);
   }
-  function mixHex(a: number, b: number, t: number, out: THREE.Color): number {
-    out.setHex(a);
-    tmpColor.setHex(b);
-    out.lerp(tmpColor, t);
-    return out.getHex();
-  }
-  /** Pushes the interpolated look between `fromIdx` and `toIdx` into the scene. */
+  /**
+   * Pushes the interpolated look between `fromIdx` and `toIdx` into the scene.
+   * Las luces, el suelo y la niebla pasan por `gradeSceneLighting`: el tema
+   * cambia el ambiente, pero el diorama y las piezas conservan su lectura.
+   */
   function apply(t: number, repaintSky = true): void {
     if (scenarioManager && scenarioManager.effectsEnabled()) return;
     const a = themeAt(fromIdx);
     const b = themeAt(toIdx);
-    skyStops[0] = mixHex(a.sky[0], b.sky[0], t, scratch);
-    skyStops[1] = mixHex(a.sky[1], b.sky[1], t, scratch);
-    skyStops[2] = mixHex(a.sky[2], b.sky[2], t, scratch);
-    skyStops[3] = mixHex(a.sky[3], b.sky[3], t, scratch);
+    skyStops[0] = mixHex(a.sky[0], b.sky[0], t);
+    skyStops[1] = mixHex(a.sky[1], b.sky[1], t);
+    skyStops[2] = mixHex(a.sky[2], b.sky[2], t);
+    skyStops[3] = mixHex(a.sky[3], b.sky[3], t);
     // La lenta gradación del cielo admite media tasa: el resto va a 60 fps.
     if (repaintSky) paintSky(parts.sky, skyStops);
-    mixHex(a.fog.color, b.fog.color, t, parts.fog.color);
-    parts.fog.near = a.fog.near + (b.fog.near - a.fog.near) * t;
-    parts.fog.far = a.fog.far + (b.fog.far - a.fog.far) * t;
+    parts.fog.color.setHex(mixHex(a.fog.color, b.fog.color, t));
     // Guardamos la niebla del tema: la lluvia la oscurece encima sin pisarla.
     fogBase.copy(parts.fog.color);
     for (let i = 0; i < parts.hills.length; i++) {
       const mesh = parts.hills[i];
       if (!mesh) continue;
       const mat = mesh.material as THREE.MeshBasicMaterial;
-      mat.color.setHex(mixHex(a.hills[i] ?? 0xffffff, b.hills[i] ?? 0xffffff, t, scratch));
+      mat.color.setHex(mixHex(a.hills[i] ?? 0xffffff, b.hills[i] ?? 0xffffff, t));
     }
-    parts.sunMat.color.setHex(mixHex(a.sun.color, b.sun.color, t, scratch));
-    parts.rayMat.color.setHex(mixHex(a.sun.rayColor, b.sun.rayColor, t, scratch));
+    parts.sunMat.color.setHex(mixHex(a.sun.color, b.sun.color, t));
+    parts.rayMat.color.setHex(mixHex(a.sun.rayColor, b.sun.rayColor, t));
     parts.sunGroup.position.set(
       a.sun.x + (b.sun.x - a.sun.x) * t,
       a.sun.y + (b.sun.y - a.sun.y) * t,
       -52
     );
     parts.sunGroup.scale.setScalar(a.sun.scale + (b.sun.scale - a.sun.scale) * t);
-    parts.hemi.color.setHex(mixHex(a.hemi.sky, b.hemi.sky, t, scratch));
-    parts.hemi.groundColor.setHex(mixHex(a.hemi.ground, b.hemi.ground, t, scratch));
-    baseHemi = (a.hemi.intensity + (b.hemi.intensity - a.hemi.intensity) * t) * HEMI_GRADE;
-    parts.key.color.setHex(mixHex(a.dir.color, b.dir.color, t, scratch));
-    baseKey = (a.dir.intensity + (b.dir.intensity - a.dir.intensity) * t) * KEY_GRADE;
-    parts.groundMat.color.setHex(mixHex(a.ground.color, b.ground.color, t, scratch));
+    const light = gradeSceneLighting({
+      hemi: {
+        sky: mixHex(a.hemi.sky, b.hemi.sky, t),
+        ground: mixHex(a.hemi.ground, b.hemi.ground, t),
+        intensity: a.hemi.intensity + (b.hemi.intensity - a.hemi.intensity) * t
+      },
+      key: {
+        color: mixHex(a.dir.color, b.dir.color, t),
+        intensity: a.dir.intensity + (b.dir.intensity - a.dir.intensity) * t
+      },
+      // El tema clásico no define relleno: usa el de referencia (el del diorama).
+      fill: REFERENCE_LOOK.fill,
+      ground: mixHex(a.ground.color, b.ground.color, t),
+      fog: {
+        near: a.fog.near + (b.fog.near - a.fog.near) * t,
+        far: a.fog.far + (b.fog.far - a.fog.far) * t
+      }
+    });
+    parts.hemi.color.setHex(light.hemi.sky);
+    parts.hemi.groundColor.setHex(light.hemi.ground);
+    baseHemi = light.hemi.intensity;
+    parts.key.color.setHex(light.key.color);
+    baseKey = light.key.intensity;
+    parts.fill.color.setHex(light.fill.color);
+    parts.fill.intensity = light.fill.intensity;
+    parts.groundMat.color.setHex(light.ground);
+    parts.fog.near = light.fog.near;
+    parts.fog.far = light.fog.far;
     parts.gridMat.opacity = a.ground.gridOpacity + (b.ground.gridOpacity - a.ground.gridOpacity) * t;
-    parts.cloudMat.color.setHex(mixHex(a.clouds.color, b.clouds.color, t, scratch));
+    parts.cloudMat.color.setHex(mixHex(a.clouds.color, b.clouds.color, t));
     parts.confetti.setAlpha(a.confetti + (b.confetti - a.confetti) * t);
     wind = a.wind + (b.wind - a.wind) * t;
   }
