@@ -189,7 +189,10 @@ export function blockMaterial(kind: PieceKind): THREE.MeshToonMaterial {
       map: paperTileTex,
       gradientMap: toonGradient,
       emissive: PIECE_COLORS[kind],
-      emissiveIntensity: 0.13
+      emissiveIntensity: 0.13,
+      // El tablero es el primer plano del diorama: la niebla del fondo (que
+      // oscurece el horizonte) no debe teñir las piezas.
+      fog: false
     });
     blockCache.set(kind, m);
   }
@@ -197,17 +200,17 @@ export function blockMaterial(kind: PieceKind): THREE.MeshToonMaterial {
 }
 
 /** Shared ink hull rendered as inverted outline (cut-out edge). */
-const inkOutline = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide });
+const inkOutline = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide, fog: false });
 export function outlineMaterial(): THREE.MeshBasicMaterial {
   return inkOutline;
 }
 
-const cardboardMat = new THREE.MeshStandardMaterial({ map: cardboardTex, color: 0xffffff, roughness: 1, metalness: 0 });
+const cardboardMat = new THREE.MeshStandardMaterial({ map: cardboardTex, color: 0xffffff, roughness: 1, metalness: 0, fog: false });
 export function cardboardMaterial(): THREE.MeshStandardMaterial {
   return cardboardMat;
 }
 
-const graphMat = new THREE.MeshStandardMaterial({ map: graphTex, color: 0xffffff, roughness: 1, metalness: 0 });
+const graphMat = new THREE.MeshStandardMaterial({ map: graphTex, color: 0xffffff, roughness: 1, metalness: 0, fog: false });
 export function graphPaperMaterial(): THREE.MeshStandardMaterial {
   return graphMat;
 }
@@ -218,7 +221,7 @@ export function tapeMaterial(color: number): THREE.MeshBasicMaterial {
   if (!m) {
     m = new THREE.MeshBasicMaterial({
       map: tapeTex, color, transparent: true, opacity: 0.92,
-      depthWrite: false, side: THREE.DoubleSide
+      depthWrite: false, side: THREE.DoubleSide, fog: false
     });
     tapeCache.set(color, m);
   }
