@@ -88,6 +88,27 @@ body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none
 }
 .card p { color: var(--muted); }
 #overlay-stats strong { color: var(--red); font-size: 24px; }
+
+/* CTA destacado del inicio: el acceso al ranking es el botón más llamativo de la
+   tarjeta, justo bajo el título. Late suavemente y respeta movimiento reducido. */
+#btn-overlay-scoreboard.cta-top {
+  display: block; width: min(420px, 100%); margin: 18px auto 6px;
+  padding: 16px 28px; font-size: 22px; line-height: 1.1; letter-spacing: 1.5px;
+  color: var(--ink);
+  background: linear-gradient(135deg, var(--yellow) 0%, #ffb32e 62%, #ff9f1c 100%);
+  border: 3px solid var(--ink); border-radius: 16px;
+  box-shadow: 6px 7px 0 rgba(var(--shadow), 0.32), inset 0 -5px 0 rgba(255, 255, 255, 0.35);
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.55);
+  transform: rotate(-1.2deg);
+  animation: topPulse 2.8s ease-in-out infinite;
+}
+#btn-overlay-scoreboard.cta-top:hover { transform: rotate(-1.2deg) translate(2px, 2px) scale(1.02); }
+#btn-overlay-scoreboard.cta-top:active { transform: rotate(-1.2deg) translate(4px, 5px) scale(0.99); }
+@keyframes topPulse {
+  0%, 100% { transform: rotate(-1.2deg) scale(1); }
+  50% { transform: rotate(-1.2deg) scale(1.025); }
+}
+@media (prefers-reduced-motion: reduce) { #btn-overlay-scoreboard.cta-top { animation: none; } }
 .btn-row { display: flex; gap: 12px; justify-content: center; margin-top: 20px; }
 button {
   cursor: pointer; border: 2.5px solid var(--ink); border-radius: 12px; padding: 12px 26px;
@@ -391,6 +412,7 @@ body.touch #music-menu { bottom: auto; top: calc(52px + env(safe-area-inset-top,
 .score-submit-status.ok { color: var(--green); }
 .score-submit-status.error { color: var(--red); }
 @media (max-width: 560px) {
+  #btn-overlay-scoreboard.cta-top { font-size: 18px; letter-spacing: 1px; padding: 13px 16px; }
   .sb-head, .sb-row { grid-template-columns: 38px minmax(70px, 1fr) 82px 46px; }
   .sb-head span:nth-child(5), .sb-head span:nth-child(6), .sb-lines, .sb-date { display: none; }
   .scoreboard-card { padding: 24px 16px; }

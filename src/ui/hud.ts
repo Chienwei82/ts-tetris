@@ -116,7 +116,7 @@ export class HUD {
   setModeChip(mode: string): void {
     if (this.modeChipEl && this.modeChipEl.textContent !== mode) this.modeChipEl.textContent = mode;
   }
-  /** Chip que indica que los escombros están activos (útil en Tradicional). */
+  /** Chip que indica que los escombros están activos (solo pueden serlo en Caos). */
   setDebrisChip(on: boolean): void {
     if (this.debrisChipEl) this.debrisChipEl.classList.toggle('hidden', !on);
   }

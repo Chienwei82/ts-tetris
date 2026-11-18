@@ -164,9 +164,8 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   sombras se recortan contra él); sin ellos vuelve a ser sólido para ahorrar
   render. La preferencia se guarda en `localStorage` y arranca apagada si el
   sistema pide movimiento reducido.
-- **Escombros cosméticos** (Caos por defecto; en Tradicional se activan con la
-  casilla de la pantalla de inicio): cada celda eliminada se convierte en un
-  cubito con gravedad, rebote y giro propios que se desvanece en 1–2 s. El
+- **Escombros cosméticos** (exclusivos del modo Caos): cada celda eliminada se
+  convierte en un cubito con gravedad, rebote y giro propios que se desvanece en 1–2 s. El
   sistema tiene pool fijo, recicla los cuerpos más antiguos al superar el
   límite, usa un RNG de efectos independiente del motor y respeta la calidad
   baja/media/alta y `prefers-reduced-motion`. No altera el tablero ni las reglas.
@@ -215,7 +214,7 @@ src/
       debrisConfig.ts   Valores ajustables: física, duraciones, capacidad y presets de calidad
       debrisSimulation.ts Física pura de escombros: gravedad, rebote, giro, fade y pool FIFO
       debrisSystem.ts   InstancedMesh con color/alfa por instancia; API spawnBurst/spawnCells
-      debrisMode.ts     Activación Caos/Tradicional/efectos/movimiento reducido (pura)
+      debrisMode.ts     Activación por modo (solo Caos), efectos y movimiento reducido (pura)
       windSystem.ts     Partículas de viento con RNG cosmético y fundido propio
       chaosFx.ts        Ondas, rayos dentados y haz de aviso del taladro (pools fijos)
       boltPath.ts       Trazado dentado del rayo (puro, testeado, RNG inyectable)
@@ -312,11 +311,12 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
   handler `api/scores.ts` atiende `GET` y `POST`. Los tableros de Tradicional y Caos
   son ZSET independientes: nunca se mezclan.
 
-## Clasificación (scoreboard + API)
+## Top de Puntajes (clasificación + API)
 
-La tabla guarda las **mejores partidas del modo Tradicional y del modo Caos por
-separado**. El panel muestra las 50 primeras (el almacén conserva 200 por modo) e
-incluye tu mejor puesto. El apodo se recuerda en `localStorage`; no hay cuentas,
+El botón **🏆 Top de Puntajes**, destacado justo bajo el título de la pantalla de
+inicio, abre la tabla. Guarda las **mejores partidas del modo Tradicional y del
+modo Caos por separado**. El panel muestra las 50 primeras (el almacén conserva
+200 por modo) e incluye tu mejor puesto. El apodo se recuerda en `localStorage`; no hay cuentas,
 emails ni cookies.
 
 ### Reglas de entrada
