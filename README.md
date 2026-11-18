@@ -36,11 +36,12 @@ npm run dev:api          # API en http://localhost:3000
 npm run dev              # juego en http://localhost:5173 (proxy /api)
 ```
 
-Sin el API levantado el juego funciona igual: el ranking muestra un aviso de
-conexión y el envío de puntaje se puede reintentar.
+Sin el API levantado el juego funciona igual: en la pantalla de inicio y en pausa
+aparece un aviso de clasificación no disponible (el botón nunca se oculta) y el
+envío de puntaje se puede reintentar.
 
 ```bash
-npm test         # tests de lógica (vitest 5, 195 tests)
+npm test         # tests de lógica (vitest 5, 216 tests)
 npm run build    # type-check (tsc 7 nativo) + type-check del API + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
@@ -50,23 +51,6 @@ npm run shots    # (opcional) regenera las capturas del README (ver tools/screen
 ## Controles
 
 La **ayuda inicial** (la que se abre al arrancar) y el panel lateral están centrados en **móvil**; el teclado sigue funcionando igual y sus atajos viven en un apartado plegable de la propia ayuda.
-
-### Teclado (escritorio)
-
-| Tecla | Acción |
-|---|---|
-| ← / → | Mover pieza (con auto-repetición DAS/ARR) |
-| ↓ | Caída suave (+1 pto/fila) |
-| ↑ / X | Rotar horario (SRS con wall-kicks) |
-| Z | Rotar antihorario |
-| Espacio | Caída instantánea (+2 ptos/fila, con fantasma) |
-| C | Reserva (hold, un uso por pieza) |
-| E | Efectos del fondo on/off (clima, personajes, escenarios) |
-| M | Música procedural on/off |
-| H | Ayuda (bloques y ayudas del juego) |
-| P / Esc | Pausa |
-| R | Reinicio |
-| Enter | Confirmar (jugar / continuar / reintentar) |
 
 ### Controles táctiles (móvil / tableta)
 
@@ -94,6 +78,23 @@ la HOLD va aislada arriba (lejos del ⇊) para no soltarla por accidente.
 | Tocar el tablero | Rotar en sentido horario |
 
 El gesto nunca dispara caída instantánea: eso solo vive en ⇊.
+
+### Teclado (escritorio)
+
+| Tecla | Acción |
+|---|---|
+| ← / → | Mover pieza (con auto-repetición DAS/ARR) |
+| ↓ | Caída suave (+1 pto/fila) |
+| ↑ / X | Rotar horario (SRS con wall-kicks) |
+| Z | Rotar antihorario |
+| Espacio | Caída instantánea (+2 ptos/fila, con fantasma) |
+| C | Reserva (hold, un uso por pieza) |
+| E | Efectos del fondo on/off (clima, personajes, escenarios) |
+| M | Música procedural on/off |
+| H | Ayuda (bloques y ayudas del juego) |
+| P / Esc | Pausa |
+| R | Reinicio |
+| Enter | Confirmar (jugar / continuar / reintentar) |
 
 El modo se elige automáticamente por detección de dispositivo; si la detección
 es ambigua aparece una pantalla de selección al arrancar y la elección persiste
@@ -195,8 +196,9 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   guardada en `localStorage`.
 - Lock delay de 0.5 s con hasta 15 reseteos al mover/rotar.
 - Pieza fantasma, vista previa de las 3 piezas siguientes y reserva.
-- **Pantalla de ayuda** (tecla `H`, visible al inicio): explica los 7 bloques y
-  todas las ayudas del juego. Abrirla durante la partida pausa el juego.
+- **Pantalla de ayuda** (se abre sola al arrancar; también con `H` o el botón
+  ❓): explica los 7 bloques y todas las ayudas del juego con enfoque móvil y un
+  desplegable opcional de teclado. Abrirla durante la partida pausa el juego.
 - Pausa, reinicio y pantalla de fin de juego con puntuación.
 
 ## Arquitectura
@@ -220,12 +222,12 @@ src/
     stage.ts        Controlador: delega en ScenarioManager o transiciona temas, rayos, toggle y tormentas
     weather.ts      Clima procedural (lluvia, tormenta, nieve, hojas, estrellas, aurora, fugaces)
     characters.ts   Personajes de papel (globo, pájaros, conejo, pingüino, OVNI) que se inclinan y cubren
-    boardRenderer.ts Cubos con pool, fantasma, guía de impacto del powerup, granizo animado y marco de cartón
+    boardRenderer.ts Cubos con pool, fantasma, guía de impacto, chatarra, granizo animado y marco de cartón
     particles.ts    Confeti de papel (ráfagas + ambiente) con shader propio y alpha global
-    effects.ts      Vibración de cámara, destello de línea
+    effects.ts      Vibración de cámara, terremoto (`quake`), destello de línea
     fx/             Efectos cosméticos reutilizables
       debrisConfig.ts   Valores ajustables: física, duraciones, capacidad y presets de calidad
-      debrisSimulation.ts Física pura de escombros: gravedad, rebote, giro, fade y pool FIFO
+      debrisSimulation.ts Física pura de escombros: gravedad, rebote, giro, fade, impactos y pool FIFO
       debrisSystem.ts   InstancedMesh con color/alfa por instancia; API spawnBurst/spawnCells
       debrisMode.ts     Activación por modo (solo Caos), efectos y movimiento reducido (pura)
       windSystem.ts     Partículas de viento con RNG cosmético y fundido propio
@@ -238,9 +240,19 @@ src/
       scenarioRegistry.ts Registro único de escenarios (rechaza ids duplicados)
       scenarioManager.ts  Selección por nivel, fundido de ~2 s y liberación al cambiar
       levelMapping.ts     scenarioForLevel (puro, testeado)
+      scenarioCatalog.ts  Metadatos puros compartidos (id/nombre/icono/minLevel y periodo)
       forest.ts · cityNight.ts · space.ts · deepSea.ts  Escenografías y looks de cada escenario
     materials.ts    Texturas procedurales (papel, cartón, cuadrícula, cinta) + toon + tinta
   ui/         Entrada con DAS/ARR, gestos de arrastre de la pieza, HUD, previews 2D, preferencias
+    scoreboard.ts      Overlay del Top (solo Tradicional), estados de carga/error/vacío
+    leaderboardStatus.ts Aviso de API caída en inicio/pausa (nunca oculta el botón)
+    levelBannerTheme.ts Fondo/animación del cartel para cada nivel (puro)
+  leaderboard/ Compartido cliente/servidor (sin DOM ni Node):
+    types.ts      DTOs, cotas, RANKED_MODE/isRankedMode
+    rules.ts      Sanitizado y validación del envío (solo nivel 1)
+    client.ts     fetch con timeout, errores tipados y validación de respuesta
+    availability.ts Sonda de disponibilidad y mensajes de caída
+    player.ts     playerId/apodo en localStorage y UUID con fallback
   platform/   Detección de dispositivo (escritorio/móvil/tableta) y ViewportManager
               (resize/orientation/visualViewport, pixel ratio limitado)
   audio/      Efectos sintetizados WebAudio (sin assets), incluido el trueno
@@ -318,11 +330,18 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
 - **Analítica en Vercel**: `@vercel/analytics` + `@vercel/speed-insights` inyectados
   desde `src/analytics.ts` (`mode: 'auto'`: solo envía datos en producción; en local
   loguea en consola).
+- **Aviso de API sin ocultar el acceso**: la sonda `GET limit=1` (timeout 4 s) se
+  lanza al arrancar y al abrir el panel; un 200 con HTML de fallback o un 5xx se
+  trata como caída. El aviso solo se pinta en inicio/pausa y el botón sigue visible.
+- **Cartel y chatarra**: `scenarioCatalog.ts` es la fuente única de metadatos de
+  escenario; `HUD.levelBanner` aplica `data-stage`/`data-advance` y CSS pinta la
+  animación. La chatarra es un especial más (`SPECIAL_KINDS`) que escribe celdas `'J'`.
 - **Clasificación sin dependencias extra**: las reglas de validación viven en
   `src/leaderboard/rules.ts` y son la MISMA función en el navegador y en el servidor;
   el almacén habla con Upstash por su API REST con `fetch` (sin SDK) y un único
-  handler `api/scores.ts` atiende `GET` y `POST`. Los tableros de Tradicional y Caos
-  son ZSET independientes: nunca se mezclan.
+  handler `api/scores.ts` atiende `GET` y `POST`. El juego consulta y envía **solo
+  Tradicional** (`RANKED_MODE='classic'`); el API conserva el ZSET de Caos por
+  compatibilidad, pero la UI no lo muestra.
 
 ## Top de Puntajes (clasificación + API)
 
@@ -355,6 +374,9 @@ Base: `/api/scores` (mismo origen que el juego; JSON, `Cache-Control: no-store`)
 |---|---|---|
 | `GET` | `/api/scores?mode=classic\|chaos&limit=20&playerId=<uuid>` | Tablero del modo + `me` opcional |
 | `POST` | `/api/scores` | Guarda una partida terminada |
+
+El juego solo usa `mode=classic`; `mode=chaos` sigue aceptado por el API para no
+romper datos antiguos, pero no se muestra en el Top ni se envía desde la UI actual.
 
 ```json
 {
