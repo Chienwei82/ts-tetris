@@ -149,6 +149,7 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #chaos-status.bomb { background: #c8442f; }
 #chaos-status.bolt { background: #d9a91f; color: var(--ink); }
 #chaos-status.drill { background: #b8652f; }
+#chaos-status.chatarra { background: #9d8a6b; color: #fff8ea; }
 /* Color por tormenta: cada aviso se reconoce de un vistazo. */
 #mutator-chip.wind { background: #b9d6e8; }
 #mutator-chip.rain { background: #6f9dc4; color: #fff; }
@@ -198,24 +199,112 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #start-options .quality-row label { margin-bottom: 0; }
 #fx-quality { font: inherit; font-size: 13px; font-weight: 700; color: var(--ink); background: var(--paper-hi); border: 2px solid var(--ink); border-radius: 9px; padding: 3px 8px; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.22); cursor: pointer; }
 
-/* Level-up banner */
+/* Level-up banner: una animación propia por escenario, con motivos temáticos. */
 #level-banner {
-  position: fixed; top: 19%; left: 50%; z-index: 8; pointer-events: none;
+  --lb-accent: #ffd23f; --lb-deep: #e09b1f; --lb-text: var(--ink);
+  position: fixed; top: 17%; left: 50%; z-index: 8; pointer-events: none;
+  min-width: 250px; max-width: min(560px, 92vw); padding: 15px 44px 16px;
   transform: translate(-50%, 0) rotate(-2deg); text-align: center;
-  padding: 13px 34px; background: var(--yellow); border: 3px solid var(--ink); border-radius: 14px;
-  box-shadow: 6px 7px 0 rgba(var(--shadow), 0.28); opacity: 0;
+  border: 3px solid var(--ink); border-radius: 16px; opacity: 0; overflow: hidden;
+  background: linear-gradient(135deg, var(--lb-accent), var(--lb-deep));
+  box-shadow: 6px 7px 0 rgba(var(--shadow), 0.3), inset 0 -8px 0 rgba(255, 255, 255, 0.2);
+  color: var(--lb-text);
 }
 #level-banner.hidden { display: none; }
-#level-banner.show { animation: banner 2.4s ease forwards; }
-#level-banner strong { display: block; font-size: 34px; letter-spacing: 3px; color: var(--ink); text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.7); }
-#level-banner span { display: block; margin-top: 2px; font-size: 15px; font-weight: 600; color: var(--ink); }
-@keyframes banner {
-  0% { opacity: 0; transform: translate(-50%, 12px) rotate(-2deg) scale(0.7); }
-  10% { opacity: 1; transform: translate(-50%, 0) rotate(-2deg) scale(1.04); }
-  16% { transform: translate(-50%, 0) rotate(-2deg) scale(1); }
-  80% { opacity: 1; transform: translate(-50%, 0) rotate(-2deg) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -14px) rotate(-2deg) scale(1); }
+#level-banner.show { animation: lbPop 2.6s cubic-bezier(0.2, 0.9, 0.25, 1) forwards; }
+#level-banner[data-advance="speed"].show { animation-duration: 2.15s; }
+#level-banner .lb-icon {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-size: 132px; line-height: 1; opacity: 0.18; filter: saturate(1.2);
 }
+#level-banner strong {
+  position: relative; z-index: 1; display: block; font-size: 34px; letter-spacing: 3px;
+  color: var(--lb-text); text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.55);
+}
+#level-banner #level-banner-sub {
+  position: relative; z-index: 1; display: block; margin-top: 3px;
+  font-size: 15px; font-weight: 700; color: var(--lb-text);
+}
+#level-banner::before {
+  content: '✦'; position: absolute; right: 12px; top: 6px; z-index: 0;
+  font-size: 26px; opacity: 0.85; color: var(--lb-text);
+}
+#level-banner::after {
+  content: ''; position: absolute; inset: -30%; z-index: 0; opacity: 0.42;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.85) 0 2px, transparent 2.5px);
+  background-size: 22px 22px;
+}
+
+/* Pradera: sol, confeti cálido y balanceo suave. */
+#level-banner[data-stage="pradera"] { --lb-accent: #ffe066; --lb-deep: #ffb703; }
+#level-banner[data-stage="pradera"]::before { content: '☀️'; animation: lbSpin 2.6s ease-in-out; }
+
+/* Bosque: hojas que caen y cartel de madera que se mece. */
+#level-banner[data-stage="forest"] { --lb-accent: #c8ecb4; --lb-deep: #5b9b4f; }
+#level-banner[data-stage="forest"]::before { content: '🍃'; animation: lbLeaf 2.6s ease-in; }
+#level-banner[data-stage="forest"]::after { background-image: radial-gradient(circle, rgba(255,255,255,.65) 0 3px, transparent 3.5px); }
+
+/* Ciudad nocturna: neón, luces que parpadean y entrada lateral. */
+#level-banner[data-stage="cityNight"] { --lb-accent: #9db8ff; --lb-deep: #34346b; --lb-text: #fff8ea; }
+#level-banner[data-stage="cityNight"]::before { content: '✨'; animation: lbTwinkle 2.6s steps(2, end) infinite; }
+
+/* Espacio: estrellas, flotación orbital y destello del cohete. */
+#level-banner[data-stage="space"] { --lb-accent: #c3acff; --lb-deep: #3b2878; --lb-text: #fff8ea; }
+#level-banner[data-stage="space"]::before { content: '✦'; animation: lbOrbit 2.6s ease-in-out; }
+
+/* Fondo del mar: burbujas y vaivén de algas. */
+#level-banner[data-stage="deepSea"] { --lb-accent: #9ff0e8; --lb-deep: #1f6f8f; --lb-text: #fff8ea; }
+#level-banner[data-stage="deepSea"]::before { content: '🫧'; animation: lbBubble 2.6s ease-out; }
+
+#level-banner[data-stage="forest"].show { animation-name: lbForest; }
+#level-banner[data-stage="cityNight"].show { animation-name: lbCity; }
+#level-banner[data-stage="space"].show { animation-name: lbSpace; }
+#level-banner[data-stage="deepSea"].show { animation-name: lbSea; }
+
+@keyframes lbPop {
+  0% { opacity: 0; transform: translate(-50%, 14px) rotate(-2deg) scale(0.68); }
+  12% { opacity: 1; transform: translate(-50%, 0) rotate(-2deg) scale(1.06); }
+  18% { transform: translate(-50%, 0) rotate(-2deg) scale(1); }
+  82% { opacity: 1; transform: translate(-50%, 0) rotate(-2deg) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -16px) rotate(-2deg) scale(1); }
+}
+@keyframes lbForest {
+  0% { opacity: 0; transform: translate(-50%, -10px) rotate(-9deg) scale(0.85); }
+  14% { opacity: 1; transform: translate(-50%, 2px) rotate(2deg) scale(1.03); }
+  22%, 78% { opacity: 1; transform: translate(-50%, 0) rotate(-1.5deg) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, 10px) rotate(-4deg) scale(0.98); }
+}
+@keyframes lbCity {
+  0% { opacity: 0; transform: translate(calc(-50% + 60px), 0) rotate(4deg) scale(0.9); filter: brightness(1.8); }
+  12% { opacity: 1; transform: translate(-50%, 0) rotate(-2deg) scale(1.04); filter: brightness(1); }
+  20% { transform: translate(-50%, 0) rotate(-2deg) scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -10px) rotate(-2deg) scale(1); }
+}
+@keyframes lbSpace {
+  0% { opacity: 0; transform: translate(-50%, 24px) rotate(-6deg) scale(0.7); }
+  16% { opacity: 1; transform: translate(-50%, -4px) rotate(1deg) scale(1.08); }
+  26%, 76% { opacity: 1; transform: translate(-50%, 0) rotate(-2deg) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -26px) rotate(-2deg) scale(1.04); }
+}
+@keyframes lbSea {
+  0% { opacity: 0; transform: translate(-50%, 18px) rotate(4deg) scale(0.8); }
+  14% { opacity: 1; transform: translate(-50%, 0) rotate(-2.5deg) scale(1.05); }
+  30%, 40% { transform: translate(-50%, 2px) rotate(1.5deg) scale(1); }
+  52%, 62% { transform: translate(-50%, -1px) rotate(-2deg) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -12px) rotate(-3deg) scale(1); }
+}
+@keyframes lbSpin { 0%, 100% { transform: rotate(0) scale(1); } 50% { transform: rotate(160deg) scale(1.15); } }
+@keyframes lbLeaf { 0% { transform: translate(0, -18px) rotate(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(-16px, 42px) rotate(220deg); opacity: 0; } }
+@keyframes lbTwinkle { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes lbOrbit { 0% { transform: translate(0, 0) rotate(0); } 50% { transform: translate(-16px, -8px) rotate(140deg); } 100% { transform: translate(0, 0) rotate(280deg); } }
+@keyframes lbBubble { 0% { transform: translate(0, 24px) scale(0.7); opacity: 0; } 35% { opacity: 0.9; } 100% { transform: translate(-14px, -34px) scale(1.15); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  #level-banner.show { animation: none; opacity: 1; }
+  #level-banner::before, #level-banner .lb-icon { animation: none !important; }
+}
+
 /* Help screen (shown at startup, toggled with H) */
 #help-overlay {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -250,6 +339,13 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 }
 .help-list li { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
 .help-list strong { color: var(--ink); }
+.help-keyboard {
+  margin-top: 14px; padding: 8px 12px; text-align: left;
+  background: rgba(255, 255, 255, 0.35); border: 2px dashed rgba(59, 43, 32, 0.28); border-radius: 12px;
+}
+.help-keyboard summary { cursor: pointer; font-weight: 700; font-size: 13px; letter-spacing: 0.5px; }
+.help-keyboard[open] summary { margin-bottom: 8px; }
+.help-keyboard .help-list { grid-template-columns: 1fr; }
 .help-note { font-size: 11.5px; font-style: italic; margin: 12px 0 0; }
 .help-card .btn-row { margin-top: 16px; }
 .help-card .hint { text-align: center; }
@@ -369,6 +465,22 @@ body.touch #bottom-bar .bb-label { display: none; }
 #music-menu .music-dot { width: 18px; text-align: center; }
 body.touch #music-menu { bottom: auto; top: calc(52px + env(safe-area-inset-top, 0px)); right: calc(6px + env(safe-area-inset-right, 0px)); left: auto; transform: none; }
 @media (max-width: 720px), (max-height: 480px) { #music-menu { min-width: 220px; } }
+
+/* Aviso de clasificación no disponible (solo inicio y pausa). */
+#lb-warning {
+  max-width: 420px; margin: 0 auto 10px; padding: 7px 12px;
+  font-size: 12.5px; font-weight: 700; line-height: 1.35; color: #7a4a00;
+  background: rgba(255, 210, 90, 0.42); border: 1.5px dashed #b8791b;
+  border-radius: 10px; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.12);
+}
+#lb-warning.hidden { display: none; }
+#btn-overlay-scoreboard.cta-top.offline { outline: 3px dashed #c27a12; outline-offset: 3px; }
+#btn-scoreboard.offline { position: relative; }
+#btn-scoreboard.offline::after {
+  content: '!'; position: absolute; top: -7px; right: -7px; width: 16px; height: 16px;
+  display: grid; place-items: center; border-radius: 50%; background: var(--red);
+  color: #fff8ea; font-size: 11px; font-weight: 700; border: 1.5px solid var(--ink);
+}
 
 /* ============ Clasificación (API + scoreboard) ============ */
 #scoreboard-overlay {

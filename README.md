@@ -36,11 +36,12 @@ npm run dev:api          # API en http://localhost:3000
 npm run dev              # juego en http://localhost:5173 (proxy /api)
 ```
 
-Sin el API levantado el juego funciona igual: el ranking muestra un aviso de
-conexión y el envío de puntaje se puede reintentar.
+Sin el API levantado el juego funciona igual: en la pantalla de inicio y en pausa
+aparece un aviso de clasificación no disponible (el botón nunca se oculta) y el
+envío de puntaje se puede reintentar.
 
 ```bash
-npm test         # tests de lógica (vitest 5, 195 tests)
+npm test         # tests de lógica (vitest 5, 216 tests)
 npm run build    # type-check (tsc 7 nativo) + type-check del API + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
@@ -49,20 +50,7 @@ npm run shots    # (opcional) regenera las capturas del README (ver tools/screen
 
 ## Controles
 
-| Tecla | Acción |
-|---|---|
-| ← / → | Mover pieza (con auto-repetición DAS/ARR) |
-| ↓ | Caída suave (+1 pto/fila) |
-| ↑ / X | Rotar horario (SRS con wall-kicks) |
-| Z | Rotar antihorario |
-| Espacio | Caída instantánea (+2 ptos/fila, con fantasma) |
-| C | Reserva (hold, un uso por pieza) |
-| E | Efectos del fondo on/off (clima, personajes, escenarios) |
-| M | Música procedural on/off |
-| H | Ayuda (bloques y ayudas del juego) |
-| P / Esc | Pausa |
-| R | Reinicio |
-| Enter | Confirmar (jugar / continuar / reintentar) |
+La **ayuda inicial** (la que se abre al arrancar) y el panel lateral están centrados en **móvil**; el teclado sigue funcionando igual y sus atajos viven en un apartado plegable de la propia ayuda.
 
 ### Controles táctiles (móvil / tableta)
 
@@ -91,6 +79,23 @@ la HOLD va aislada arriba (lejos del ⇊) para no soltarla por accidente.
 
 El gesto nunca dispara caída instantánea: eso solo vive en ⇊.
 
+### Teclado (escritorio)
+
+| Tecla | Acción |
+|---|---|
+| ← / → | Mover pieza (con auto-repetición DAS/ARR) |
+| ↓ | Caída suave (+1 pto/fila) |
+| ↑ / X | Rotar horario (SRS con wall-kicks) |
+| Z | Rotar antihorario |
+| Espacio | Caída instantánea (+2 ptos/fila, con fantasma) |
+| C | Reserva (hold, un uso por pieza) |
+| E | Efectos del fondo on/off (clima, personajes, escenarios) |
+| M | Música procedural on/off |
+| H | Ayuda (bloques y ayudas del juego) |
+| P / Esc | Pausa |
+| R | Reinicio |
+| Enter | Confirmar (jugar / continuar / reintentar) |
+
 El modo se elige automáticamente por detección de dispositivo; si la detección
 es ambigua aparece una pantalla de selección al arrancar y la elección persiste
 en `localStorage` (se puede cambiar con **⚙️ Controles**).
@@ -108,18 +113,23 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
 - **Selector de nivel inicial (1–20)** en la pantalla de inicio; el nivel
   elegido también fija el escenario de arranque.
 - **Modo Caos** (se elige en la pantalla de inicio, junto al nivel): el juego
-  clásico con **powerups literales**. Cada cierto tiempo cae un objeto 💣 ⚡ 🔩
+  clásico con **powerups literales**. Cada cierto tiempo cae un objeto 💣 ⚡ 🔩 🧱
   en vez de una pieza (se anuncia con badge en el preview y con un chip
-  coloreado por tipo en el HUD) y, al bloquearse, aplica su efecto y desaparece
-  sin dejar bloques:
+  coloreado por tipo en el HUD). Al bloquearse aplica su efecto: los powerups
+  ventajosos desaparecen sin dejar bloques y la chatarra deja basura:
   - 💣 **Bomba**: revienta 2 filas (la de aterrizaje y la contigua).
   - ⚡ **Rayo**: rompe los 4 bloques más altos bajo su base.
   - 🔩 **Taladro**: se hunde 2 filas destruyendo lo que tiene debajo (una sola
     vez por pieza; viaja con la reserva).
+  - 🧱 **Chatarra** (desventaja): no da ventaja; al bloquearse deja sus 4 celdas
+    convertidas en **bloques de basura gris** que ocupan tablero hasta que se
+    limpie su línea. También viaja con la reserva y tiene su propia guía de
+    impacto y badge en el preview.
   La secuencia es **determinista por semilla** (misma semilla ⇒ mismos
   powerups). Al sostener un powerup el tablero muestra su **zona de impacto**
-  (las 2 filas de la bomba, los bloques del rayo, las celdas del taladro) con
-  una guía pulsante, y el objeto flota y gira sobre la pieza fantasma.
+  (las 2 filas de la bomba, los bloques del rayo, las celdas del taladro o la
+  huella de la chatarra) con una guía pulsante, y el objeto flota y gira sobre
+  la pieza fantasma.
   **Tradicional es siempre el modo por defecto al arrancar**: elegir Caos vale
   solo para la partida que se empieza y no se recuerda entre sesiones.
 - **Tormentas del Caos** (solo en Caos): a los 18 s llega la primera, avisada
@@ -157,17 +167,21 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   tiñen a juego, el chip del HUD muestra el escenario actual y al cambiar se
   libera su memoria de GPU. El clima procedural (hojas, lluvia, nieve,
   estrellas, luciérnagas, fugaces) y las tormentas del Caos se dibujan por
-  encima.
+  encima. Cada subida de nivel muestra un **cartel temático** con animación
+  propia del escenario que llega (sol de pradera, hojas de bosque, luces de
+  ciudad, órbita espacial o burbujas marinas).
 - **Toggle de efectos** (botón o tecla E): apaga clima, personajes, confeti y
   cambios de tema, dejando el fondo clásico congelado. Con efectos el panel del
   tablero es **translúcido** (el escenario se ve detrás de las piezas y las
   sombras se recortan contra él); sin ellos vuelve a ser sólido para ahorrar
   render. La preferencia se guarda en `localStorage` y arranca apagada si el
   sistema pide movimiento reducido.
-- **Escombros cosméticos** (exclusivos del modo Caos): cada celda eliminada se
-  convierte en un cubito con gravedad, rebote y giro propios que se desvanece en 1–2 s. El
-  sistema tiene pool fijo, recicla los cuerpos más antiguos al superar el
-  límite, usa un RNG de efectos independiente del motor y respeta la calidad
+- **Escombros cosméticos con terremoto** (exclusivos del modo Caos): cada celda
+  eliminada se convierte en un cubo de papel más grande, con más impulso, giro y
+  dispersión, que cae, rebota y se desvanece. Al limpiar líneas la cámara hace un
+  **terremoto** corto, el suelo levanta polvo y cada impacto de un cubo añade una
+  micro-sacudida, polvo y sonido. El sistema tiene pool fijo, recicla los cuerpos
+  más antiguos, usa un RNG de efectos independiente del motor y respeta la calidad
   baja/media/alta y `prefers-reduced-motion`. No altera el tablero ni las reglas.
 - **Música procedural adaptativa** (botón o tecla M): generada en vivo con la
   Web Audio API, sin ficheros. Escala dórica de La; cada semilla fija una
@@ -182,8 +196,9 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   guardada en `localStorage`.
 - Lock delay de 0.5 s con hasta 15 reseteos al mover/rotar.
 - Pieza fantasma, vista previa de las 3 piezas siguientes y reserva.
-- **Pantalla de ayuda** (tecla `H`, visible al inicio): explica los 7 bloques y
-  todas las ayudas del juego. Abrirla durante la partida pausa el juego.
+- **Pantalla de ayuda** (se abre sola al arrancar; también con `H` o el botón
+  ❓): explica los 7 bloques y todas las ayudas del juego con enfoque móvil y un
+  desplegable opcional de teclado. Abrirla durante la partida pausa el juego.
 - Pausa, reinicio y pantalla de fin de juego con puntuación.
 
 ## Arquitectura
@@ -207,12 +222,12 @@ src/
     stage.ts        Controlador: delega en ScenarioManager o transiciona temas, rayos, toggle y tormentas
     weather.ts      Clima procedural (lluvia, tormenta, nieve, hojas, estrellas, aurora, fugaces)
     characters.ts   Personajes de papel (globo, pájaros, conejo, pingüino, OVNI) que se inclinan y cubren
-    boardRenderer.ts Cubos con pool, fantasma, guía de impacto del powerup, granizo animado y marco de cartón
+    boardRenderer.ts Cubos con pool, fantasma, guía de impacto, chatarra, granizo animado y marco de cartón
     particles.ts    Confeti de papel (ráfagas + ambiente) con shader propio y alpha global
-    effects.ts      Vibración de cámara, destello de línea
+    effects.ts      Vibración de cámara, terremoto (`quake`), destello de línea
     fx/             Efectos cosméticos reutilizables
       debrisConfig.ts   Valores ajustables: física, duraciones, capacidad y presets de calidad
-      debrisSimulation.ts Física pura de escombros: gravedad, rebote, giro, fade y pool FIFO
+      debrisSimulation.ts Física pura de escombros: gravedad, rebote, giro, fade, impactos y pool FIFO
       debrisSystem.ts   InstancedMesh con color/alfa por instancia; API spawnBurst/spawnCells
       debrisMode.ts     Activación por modo (solo Caos), efectos y movimiento reducido (pura)
       windSystem.ts     Partículas de viento con RNG cosmético y fundido propio
@@ -225,9 +240,19 @@ src/
       scenarioRegistry.ts Registro único de escenarios (rechaza ids duplicados)
       scenarioManager.ts  Selección por nivel, fundido de ~2 s y liberación al cambiar
       levelMapping.ts     scenarioForLevel (puro, testeado)
+      scenarioCatalog.ts  Metadatos puros compartidos (id/nombre/icono/minLevel y periodo)
       forest.ts · cityNight.ts · space.ts · deepSea.ts  Escenografías y looks de cada escenario
     materials.ts    Texturas procedurales (papel, cartón, cuadrícula, cinta) + toon + tinta
   ui/         Entrada con DAS/ARR, gestos de arrastre de la pieza, HUD, previews 2D, preferencias
+    scoreboard.ts      Overlay del Top con pestañas Tradicional/Caos, estados de carga/error/vacío
+    leaderboardStatus.ts Aviso de API caída en inicio/pausa (nunca oculta el botón)
+    levelBannerTheme.ts Fondo/animación del cartel para cada nivel (puro)
+  leaderboard/ Compartido cliente/servidor (sin DOM ni Node):
+    types.ts      DTOs, cotas y LEADERBOARD_MODES (classic/chaos)
+    rules.ts      Sanitizado y validación del envío (solo nivel 1)
+    client.ts     fetch con timeout, errores tipados y validación de respuesta
+    availability.ts Sonda de disponibilidad y mensajes de caída
+    player.ts     playerId/apodo en localStorage y UUID con fallback
   platform/   Detección de dispositivo (escritorio/móvil/tableta) y ViewportManager
               (resize/orientation/visualViewport, pixel ratio limitado)
   audio/      Efectos sintetizados WebAudio (sin assets), incluido el trueno
@@ -305,23 +330,32 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
 - **Analítica en Vercel**: `@vercel/analytics` + `@vercel/speed-insights` inyectados
   desde `src/analytics.ts` (`mode: 'auto'`: solo envía datos en producción; en local
   loguea en consola).
+- **Aviso de API sin ocultar el acceso**: la sonda `GET limit=1` (timeout 4 s) se
+  lanza al arrancar y al abrir el panel; un 200 con HTML de fallback o un 5xx se
+  trata como caída. El aviso solo se pinta en inicio/pausa y el botón sigue visible.
+- **Cartel y chatarra**: `scenarioCatalog.ts` es la fuente única de metadatos de
+  escenario; `HUD.levelBanner` aplica `data-stage`/`data-advance` y CSS pinta la
+  animación. La chatarra es un especial más (`SPECIAL_KINDS`) que escribe celdas `'J'`.
 - **Clasificación sin dependencias extra**: las reglas de validación viven en
   `src/leaderboard/rules.ts` y son la MISMA función en el navegador y en el servidor;
   el almacén habla con Upstash por su API REST con `fetch` (sin SDK) y un único
-  handler `api/scores.ts` atiende `GET` y `POST`. Los tableros de Tradicional y Caos
-  son ZSET independientes: nunca se mezclan.
+  handler `api/scores.ts` atiende `GET` y `POST`. **Tradicional y Caos tienen
+  tableros independientes** (un ZSET por modo): el panel muestra una pestaña para
+  cada uno y el envío va al tablero del modo jugado.
 
 ## Top de Puntajes (clasificación + API)
 
 El botón **🏆 Top de Puntajes**, destacado justo bajo el título de la pantalla de
-inicio, abre la tabla. Guarda las **mejores partidas del modo Tradicional y del
-modo Caos por separado**. El panel muestra las 50 primeras (el almacén conserva
-200 por modo) e incluye tu mejor puesto. El apodo se recuerda en `localStorage`; no hay cuentas,
-emails ni cookies.
+inicio, abre la tabla. Tiene **pestañas independientes para Tradicional y Caos**:
+cada modo guarda y consulta su propio tablero y nunca se mezclan. El panel muestra
+las 50 primeras de cada modo (el almacén conserva 200) e incluye tu mejor puesto. El apodo se recuerda en
+`localStorage`; no hay cuentas, emails ni cookies. Si el API no responde, en la
+pantalla de inicio y en pausa aparece un **aviso** bajo el botón; el botón nunca
+se oculta y el juego sigue funcionando igual.
 
 ### Reglas de entrada
 
-- **Solo partidas empezadas en el nivel 1.** El puntaje se multiplica por el nivel
+- **Partidas empezadas en el nivel 1, en Tradicional o Caos.** El puntaje se multiplica por el nivel
   (`LINE_POINTS[n] * level`), así que mezclar niveles iniciales haría el ranking
   injusto; al terminar se explica y se ofrece reiniciar desde el nivel 1.
 - Se envían de forma **explícita** al pulsar `🏆 Guardar puntaje` (nunca solas).
@@ -339,6 +373,9 @@ Base: `/api/scores` (mismo origen que el juego; JSON, `Cache-Control: no-store`)
 |---|---|---|
 | `GET` | `/api/scores?mode=classic\|chaos&limit=20&playerId=<uuid>` | Tablero del modo + `me` opcional |
 | `POST` | `/api/scores` | Guarda una partida terminada |
+
+`mode` selecciona el tablero (Tradicional o Caos); el juego consulta y envía el
+modo que se está jugando.
 
 ```json
 {

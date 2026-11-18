@@ -1,16 +1,35 @@
 import * as THREE from 'three';
 import { BOARD_H } from './constants.js';
+
 export class CameraShake {
   trauma = 0;
+  /** Sacudida de terremoto: amplitud propia, más vertical y de mayor duración. */
+  private quakePower = 0;
+  private quakeLeft = 0;
+  private quakeTime = 0;
   /** Offset reutilizado cada frame: cero asignaciones en el game loop. */
   private readonly offset = { x: 0, y: 0 };
+
   add(amount: number): void { this.trauma = Math.min(1, this.trauma + amount); }
+
+  /** Terremoto de escombros: convive con el trauma normal y decae por separado. */
+  quake(power = 0.7, seconds = 0.6): void {
+    this.quakePower = Math.min(1, Math.max(this.quakePower, power));
+    this.quakeTime = Math.max(this.quakeTime, seconds);
+    this.quakeLeft = Math.max(this.quakeLeft, seconds);
+  }
+
   update(dt: number): { x: number; y: number } {
     this.trauma = Math.max(0, this.trauma - dt * 1.6);
+    this.quakeLeft = Math.max(0, this.quakeLeft - dt);
+    if (this.quakeLeft === 0) this.quakePower = 0;
     const s = this.trauma * this.trauma;
+    const q = this.quakeLeft > 0 && this.quakeTime > 0
+      ? this.quakePower * (this.quakeLeft / this.quakeTime)
+      : 0;
     const t = performance.now() / 1000;
-    this.offset.x = s * 0.55 * Math.sin(t * 61.7);
-    this.offset.y = s * 0.45 * Math.cos(t * 53.3);
+    this.offset.x = s * 0.55 * Math.sin(t * 61.7) + q * 0.42 * Math.sin(t * 43.1);
+    this.offset.y = s * 0.45 * Math.cos(t * 53.3) + q * 0.62 * Math.sin(t * 37.7);
     return this.offset;
   }
 }

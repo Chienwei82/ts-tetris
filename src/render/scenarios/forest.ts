@@ -3,6 +3,7 @@ import type { SceneParts } from '../scene.js';
 import type { Scenario, ScenarioLook, ScenarioResources } from './scenario.js';
 import { scenarioRegistry } from './scenarioRegistry.js';
 import { disposeResources } from './scenario.js';
+import { SCENARIO_META } from './scenarioCatalog.js';
 
 const SKY: [number, number, number, number] = [0x4a7c59, 0x8fbc8f, 0xd4e6d1, 0xe8f3e4];
 const LOOK: ScenarioLook = {
@@ -60,10 +61,7 @@ function collectResources(obj: THREE.Object3D, res: ScenarioResources): void {
 }
 
 export const forest: Scenario = {
-  id: 'forest',
-  name: 'Bosque',
-  icon: '🌲',
-  minLevel: 3,
+  ...SCENARIO_META.forest,
   look: LOOK,
 
   build(parts: SceneParts): void {

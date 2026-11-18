@@ -7,7 +7,9 @@ import type { MutatorEvent, MutatorHost, WindDir } from './mutators/types.js';
 import { BOLT_BREAKS, COLS, DRILL_CONE_WIDTH, DRILL_DEPTH, LINES_PER_LEVEL, LINE_POINTS, MAX_LEVEL, SECONDS_PER_LEVEL, SPECIAL_PROBABILITY, TOTAL_ROWS, VISIBLE_ROWS } from './types.js';
 import type { ActivePiece, GameEvent, GameMode, GamePhase, Grid, LevelProgress, PieceKind, RotationState, Vec2 } from './types.js';
 
-export type SpecialKind = 'bomb' | 'bolt' | 'drill';
+export type SpecialKind = 'bomb' | 'bolt' | 'drill' | 'chatarra';
+/** Especiales que pueden salir en Caos (misma probabilidad para todos). */
+export const SPECIAL_KINDS: readonly SpecialKind[] = ['bomb', 'bolt', 'drill', 'chatarra'];
 
 /**
  * Zona de impacto que tendría un powerup si se soltara ahora mismo.
@@ -130,8 +132,7 @@ export class TetrisEngine implements MutatorHost {
   private rollSpecial(): SpecialKind | null {
     if (this.mode !== 'chaos') return null;
     if (this.chaosRng() >= SPECIAL_PROBABILITY) return null;
-    const kinds: SpecialKind[] = ['bomb', 'bolt', 'drill'];
-    return kinds[Math.floor(this.chaosRng() * kinds.length) ?? 0] ?? 'bomb';
+    return SPECIAL_KINDS[Math.floor(this.chaosRng() * SPECIAL_KINDS.length) ?? 0] ?? 'bomb';
   }
   /** Consume el especial pendiente (pieza actual) y decide el del proximo spawn. */
   private nextSpecial(): SpecialKind | null {
@@ -358,6 +359,9 @@ export class TetrisEngine implements MutatorHost {
     if (this.special === 'bolt') {
       return { kind: 'bolt', rows: [], cells: this.boltTargets(cells) };
     }
+    if (this.special === 'chatarra') {
+      return { kind: 'chatarra', rows: [], cells };
+    }
     return { kind: 'drill', rows: [], cells: this.drillTargets(cells) };
   }
 
@@ -422,6 +426,20 @@ export class TetrisEngine implements MutatorHost {
       }
     }
     return out;
+  }
+
+  /** Chatarra: el objeto se convierte en bloques basura ('J') en sus propias celdas.
+   *  No da puntos ni rompe nada: ocupa espacio hasta que se limpie una linea. */
+  private applyJunk(cells: Vec2[]): void {
+    const placed: Vec2[] = [];
+    for (const c of cells) {
+      const row = this.grid[c.y];
+      if (row && row[c.x] === 0) { row[c.x] = 'J'; placed.push({ x: c.x, y: c.y }); }
+    }
+    if (placed.length === 0) return;
+    this.refreshStackHeight();
+    this.gridVersion++;
+    this.emit({ type: 'junk', cells: placed });
   }
 
   /** Bomba: revienta las 2 filas del impacto (la de aterrizaje y la contigua hacia
@@ -510,6 +528,7 @@ export class TetrisEngine implements MutatorHost {
       // (El taladro ya aplico su efecto al hundirse: drillSink).
       if (special === 'bomb') this.applyBomb(cells);
       else if (special === 'bolt') this.applyBolt(cells);
+      else if (special === 'chatarra') this.applyJunk(cells);
     } else {
       mergePiece(this.grid, cells, this.active.kind);
       this.refreshStackHeight();

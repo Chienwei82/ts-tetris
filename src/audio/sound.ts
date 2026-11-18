@@ -1,4 +1,4 @@
-export type SoundName = 'move' | 'rotate' | 'lock' | 'clear' | 'tetris' | 'levelup' | 'harddrop' | 'hold' | 'gameover' | 'pause' | 'thunder' | 'explosion' | 'wind' | 'drill';
+export type SoundName = 'move' | 'rotate' | 'lock' | 'clear' | 'tetris' | 'levelup' | 'harddrop' | 'hold' | 'gameover' | 'pause' | 'thunder' | 'explosion' | 'wind' | 'drill' | 'junk' | 'quake' | 'debris';
 export class SoundFX {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -64,6 +64,12 @@ export class SoundFX {
       case 'gameover': { const seq = [400, 350, 300, 220, 150]; seq.forEach((f, i) => this.tone(f, 0.22, 'sawtooth', 0.45, i * 0.14, -30)); break; }
       // Taladro: perforador metálico que baja en tono.
       case 'drill': this.tone(440, 0.15, 'square', 0.4); this.tone(330, 0.15, 'square', 0.4, 0.08); this.tone(220, 0.2, 'sawtooth', 0.5, 0.16, -100); break;
+      // Chatarra: golpe sordo + cascabeleo de bloques grises.
+      case 'junk': this.tone(78, 0.24, 'square', 0.8, 0, -26); this.tone(150, 0.1, 'triangle', 0.5, 0.03, -45); this.tone(420, 0.06, 'square', 0.25, 0, -220); break;
+      // Terremoto: retumbar grave que se apaga despacio.
+      case 'quake': this.tone(48, 0.65, 'sawtooth', 0.9, 0, -12); this.tone(72, 0.5, 'triangle', 0.7, 0.02, -20); this.tone(36, 0.8, 'sine', 0.8, 0.04, -6); break;
+      // Golpe de un cubo de papel contra la plataforma.
+      case 'debris': this.tone(160, 0.06, 'triangle', 0.35, 0, -70); this.tone(95, 0.08, 'sine', 0.3, 0.01, -30); break;
     }
   }
 }

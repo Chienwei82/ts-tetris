@@ -41,22 +41,20 @@
         <span id="mutator-chip" class="hidden"></span>
       </div>
       <div class="stat"><label>Siguiente</label><canvas id="next" width="160" height="190"></canvas></div>
-      <div class="stat"><label>Reserva <span class="key">C</span></label><canvas id="hold" width="160" height="80"></canvas></div>
+      <div class="stat"><label>Reserva <span class="key">HOLD</span></label><canvas id="hold" width="160" height="80"></canvas></div>
     </aside>
 
     <aside id="hud-right" class="panel">
-      <h2>Controles</h2>
+      <h2>Controles móviles</h2>
       <ul>
-        <li><span class="key">←</span><span class="key">→</span> mover</li>
-        <li><span class="key">↓</span> caída suave</li>
-        <li><span class="key">↑</span>/<span class="key">X</span> rotar</li>
-        <li><span class="key">Z</span> rotar ←</li>
-        <li><span class="key">Espacio</span> caída instantánea</li>
-        <li><span class="key">C</span> reserva</li>
-        <li><span class="key">E</span> efectos del fondo</li>
-        <li><span class="key">M</span> música</li>
-        <li><span class="key">H</span> ayuda</li>
-        <li><span class="key">P</span> pausa · <span class="key">R</span> reinicio</li>
+        <li>👆 Arrastra: mover / bajar</li>
+        <li>👆 Toca el tablero: rotar</li>
+        <li><span class="key">◀</span><span class="key">▶</span> mover</li>
+        <li><span class="key">↺</span><span class="key">↻</span> rotar</li>
+        <li><span class="key">⇊</span> caída instantánea</li>
+        <li><span class="key">HOLD</span> reserva</li>
+        <li>❓ ayuda · ⏸ pausa</li>
+        <li>⚙️ cambiar controles</li>
       </ul>
       <div id="chaos-status" class="hidden"></div>
       <div id="toast" class="hidden"></div>
@@ -67,7 +65,8 @@
         <h2 id="overlay-title">TETRIS 3D</h2>
         <!-- Acceso destacado al ranking, justo bajo el título -->
         <button id="btn-overlay-scoreboard" class="cta-top" type="button">🏆 Top de Puntajes</button>
-        <p id="overlay-sub">Pulsa <span class="key">Enter</span> o haz clic para jugar</p>
+        <p id="lb-warning" class="lb-warning hidden" role="status" aria-live="polite"></p>
+        <p id="overlay-sub">Toca <span class="key">▶ Jugar</span> o pulsa <span class="key">Enter</span> para empezar</p>
         <p id="overlay-stats"></p>
         <form id="score-submit" class="score-submit hidden" autocomplete="off" novalidate>
           <p id="score-submit-note" class="score-submit-note"></p>
@@ -111,7 +110,7 @@
           <button id="btn-start">▶ Jugar</button>
           <button id="btn-restart" class="ghost">↻ Reiniciar</button>
         </div>
-        <p class="hint">Sube de nivel cada 10 líneas o 45 s. Cada 2 niveles cambia el escenario y el clima.<br>Pulsa <span class="key">H</span> para ver la ayuda completa.</p>
+        <p class="hint">Sube de nivel cada 10 líneas o 45 s. Cada 5 niveles cambia el escenario y el clima.<br>Toca <span class="key">❓ Ayuda</span> para ver la ayuda completa.</p>
       </div>
     </div>
 
@@ -152,30 +151,39 @@
           </div>
         </div>
 
-        <h3>✨ Ayudas especiales</h3>
+        <h3>📱 Cómo jugar en el móvil</h3>
         <ul class="help-list">
+          <li><strong>👆 Arrastra la pieza</strong> — muévela a los lados y hacia abajo (caída suave, +1 punto por fila).</li>
+          <li><strong>👆 Toca el tablero</strong> — rota la pieza en sentido horario.</li>
+          <li><strong><span class="key">◀</span> <span class="key">▶</span> mover · <span class="key">↺</span> <span class="key">↻</span> rotar</strong> — botones grandes y precisos.</li>
+          <li><strong><span class="key">⇊</span> Caída instantánea</strong> — lanza la pieza abajo: +2 puntos por fila.</li>
+          <li><strong><span class="key">HOLD</span> Reserva</strong> — guarda la pieza actual para más tarde (un uso por pieza).</li>
           <li><strong>👻 Pieza fantasma</strong> — la sombra marca dónde aterrizará la pieza.</li>
-          <li><strong>📦 Reserva <span class="key">C</span></strong> — guarda la pieza actual para más tarde (un uso por pieza).</li>
-          <li><strong>⚡ Caída instantánea <span class="key">Espacio</span></strong> — lanza la pieza abajo: +2 puntos por fila.</li>
-          <li><strong>🌧️ Caída suave <span class="key">↓</span></strong> — baja más rápido: +1 punto por fila.</li>
           <li><strong>🔥 Combos</strong> — limpiar líneas seguidas suma +50 × combo × nivel.</li>
-          <li><strong>🔄 Wall-kicks <span class="key">↑</span>/<span class="key">X</span>/<span class="key">Z</span></strong> — al rotar junto a una pared o el suelo, la pieza se aparta sola.</li>
           <li><strong>⏱️ Nivel híbrido</strong> — subes cada 10 líneas o 45 s (lo que llegue antes), hasta el nivel 20.</li>
-          <li><strong>🎵 Música procedural</strong> — se genera en vivo y se adapta a la acción: tranquila al principio y más enérgica cuando sube la intensidad. Actívala o apágala con <span class="key">M</span>.</li>
-          <li><strong>👆 Arrastrar y tocar (móvil)</strong> — arrastra la pieza para moverla (hacia abajo, caída suave) y toca el tablero para rotarla en sentido horario.</li>
-          <li><strong>🌪️ Modo Caos</strong> — elígelo en la pantalla inicial junto al nivel (<strong>Tradicional es siempre el modo por defecto al arrancar</strong>; el Caos vale para la partida que empiezas y no se recuerda). Es el juego clásico con dos ingredientes: <strong>powerups literales</strong> y <strong>tormentas</strong>. Cada cierto tiempo cae un objeto 💣 ⚡ 🔩 en vez de una pieza (se anuncia con badge en el preview y con un chip coloreado en el HUD): la bomba revienta 2 filas, el rayo rompe los 4 bloques más altos bajo su base y el taladro se hunde 2 filas. Al sostener un powerup el tablero muestra su <strong>zona de impacto</strong> con una guía pulsante y el objeto flota y gira sobre la pieza fantasma. Al bloquearse aplican su efecto y desaparecen sin dejar bloques.</li>
+          <li><strong>🎵 Música procedural</strong> — se genera en vivo y se adapta a la acción: tranquila al principio y más enérgica cuando sube la intensidad. Actívala o apágala con el botón 🎵.</li>
+          <li><strong>🌪️ Modo Caos</strong> — elígelo en la pantalla inicial junto al nivel (<strong>Tradicional es siempre el modo por defecto al arrancar</strong>; el Caos vale para la partida que empiezas y no se recuerda). Es el juego clásico con <strong>powerups literales</strong>, <strong>tormentas</strong> y una <strong>pieza trampa</strong>: cada cierto tiempo cae un objeto 💣 ⚡ 🔩 🧱 en vez de una pieza (se anuncia con badge en el preview y con un chip coloreado en el HUD). La bomba revienta 2 filas, el rayo rompe los 4 bloques más altos bajo su base, el taladro se hunde 2 filas y la <strong>chatarra 🧱</strong> deja 4 bloques de basura: esquívala o prepárate para limpiar. Al sostener un powerup el tablero muestra su <strong>zona de impacto</strong> con una guía pulsante y el objeto flota y gira sobre la pieza fantasma.</li>
           <li><strong>⛈️ Tormentas del Caos</strong> — llegan avisadas con un cartel y el chip del HUD se colorea según la tormenta: 🌬️ <strong>Viento</strong> empuja la pieza 1 celda (una flecha marca la dirección al menos 1 s antes; el fondo se inclina y vuelan papeles), 🌧️ <strong>Lluvia</strong> deja el suelo resbaladizo (cada movimiento lateral desliza 1 celda extra si cabe; el ambiente se oscurece y los personajes se cubren), ⚡ <strong>Relámpago</strong> rompe el bloque más alto de 3 columnas (el rayo dentado se dibuja en el tablero y el cielo destella) y 🌨️ <strong>Granizo</strong> deja hielo en 2 columnas que se derrite con chispas (el chip indica las columnas golpeadas).</li>
         </ul>
-        <p class="help-note">No hay objetos que recoger: estas ayudas están siempre disponibles.</p>
+        <details class="help-keyboard">
+          <summary>⌨️ ¿Juegas con teclado? (opcional)</summary>
+          <ul class="help-list">
+            <li><strong><span class="key">←</span> <span class="key">→</span></strong> mover · <strong><span class="key">↓</span></strong> caída suave · <strong><span class="key">↑</span> / <span class="key">X</span> / <span class="key">Z</span></strong> rotar.</li>
+            <li><strong><span class="key">Espacio</span></strong> caída instantánea · <strong><span class="key">C</span></strong> reserva · <strong><span class="key">H</span></strong> ayuda · <strong><span class="key">P</span></strong> pausa · <strong><span class="key">R</span></strong> reinicio.</li>
+            <li><strong><span class="key">E</span></strong> efectos del fondo · <strong><span class="key">M</span></strong> música.</li>
+          </ul>
+        </details>
+        <p class="help-note">No hay objetos que recoger: estas ayudas están siempre disponibles. En escritorio el teclado sigue funcionando; la ayuda inicial prioriza el móvil.</p>
 
         <div class="btn-row">
           <button id="btn-help-close">✔ Entendido</button>
         </div>
-        <p class="hint">Pulsa <span class="key">H</span>, <span class="key">Esc</span> o <span class="key">Enter</span> para cerrar</p>
+        <p class="hint">Usa <span class="key">✔ Entendido</span> para cerrar</p>
       </div>
     </div>
 
     <div id="level-banner" class="hidden" aria-hidden="true">
+      <span id="level-banner-icon" class="lb-icon" aria-hidden="true">☀️</span>
       <strong id="level-banner-title">NIVEL 2</strong>
       <span id="level-banner-sub">☀️ Pradera</span>
     </div>
@@ -212,12 +220,12 @@
     <div id="scoreboard-overlay" class="hidden-overlay" role="dialog" aria-modal="true" aria-labelledby="scoreboard-title">
       <div class="card scoreboard-card">
         <h2 id="scoreboard-title">TOP DE PUNTAJES</h2>
-        <p class="sb-sub">Mejores partidas · solo nivel inicial 1</p>
+        <p class="sb-sub">Mejores partidas por modo · solo nivel inicial 1</p>
         <div id="sb-tabs" role="tablist" aria-label="Modo de juego">
           <button id="sb-tab-classic" type="button" class="sb-tab active" role="tab" aria-selected="true">Tradicional</button>
           <button id="sb-tab-chaos" type="button" class="sb-tab" role="tab" aria-selected="false">Caos</button>
         </div>
-        <div id="sb-board" role="tabpanel" aria-live="polite">
+        <div id="sb-board" role="region" aria-label="Tabla de puntajes" aria-live="polite">
           <div class="sb-head" aria-hidden="true">
             <span>#</span><span>Jugador</span><span>Puntos</span><span>Nivel</span><span>Líneas</span><span>Fecha</span>
           </div>

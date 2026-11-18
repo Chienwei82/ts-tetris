@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ALL_KINDS, COLS, DRILL_COLOR, PIECE_COLORS, VISIBLE_ROWS } from '../game/types.js';
+import { ALL_KINDS, COLS, DRILL_COLOR, JUNK_COLOR, PIECE_COLORS, VISIBLE_ROWS } from '../game/types.js';
 import type { Grid, PieceKind, Vec2 } from '../game/types.js';
 import { BOARD_D, BOARD_H, BOARD_W, cellToWorld } from './constants.js';
 import { INK, blockMaterial, cardboardMaterial, graphPaperMaterial, outlineMaterial, tapeMaterial } from './materials.js';
@@ -22,7 +22,7 @@ interface LockedCell {
 }
 /** Celda que desaparece al limpiar una fila, ya en coordenadas de mundo. */
 export interface ClearedCell {
-  kind: PieceKind;
+  kind: PieceKind | 'J';
   x: number;
   y: number;
 }
@@ -34,7 +34,7 @@ export interface ClearOptions {
 }
 /** Especiales: objetos literales (💣/⚡/🔩). Se dibujan como UN sprite grande,
  *  jamas como bloques de pieza con tintes. */
-const SPECIAL_ICON: Record<string, string> = { bomb: '💣', bolt: '⚡', drill: '🔩' };
+const SPECIAL_ICON: Record<string, string> = { bomb: '💣', bolt: '⚡', drill: '🔩', chatarra: '🧱' };
 function specialIconTexture(emoji: string): THREE.CanvasTexture {
   const cv = document.createElement('canvas');
   cv.width = 256; cv.height = 256;
@@ -74,6 +74,10 @@ export class BoardRenderer {
   /** Drill-red cells left by the taladro. */
   private drillState = new Set<number>();
   private drillIMesh = new THREE.InstancedMesh(this.geo, new THREE.MeshToonMaterial({ color: DRILL_COLOR, emissive: DRILL_COLOR, emissiveIntensity: 0.25, fog: false }), MAX_LOCKED);
+  /** Bloques de chatarra que deja la pieza desventajosa del Caos. */
+  private junkState = new Set<number>();
+  private readonly junkBlockMaterial = new THREE.MeshToonMaterial({ color: JUNK_COLOR, fog: false });
+  private junkIMesh = new THREE.InstancedMesh(this.geo, new THREE.MeshToonMaterial({ color: JUNK_COLOR, fog: false }), MAX_LOCKED);
   /** Guía luminosa de la zona de impacto del powerup activo (bomba/rayo/taladro). */
   private guideIMesh = new THREE.InstancedMesh(
     new THREE.BoxGeometry(0.94, 0.94, 0.05),
@@ -118,6 +122,11 @@ export class BoardRenderer {
     this.drillIMesh.receiveShadow = true;
     this.drillIMesh.frustumCulled = false;
     this.group.add(this.drillIMesh);
+    this.junkIMesh.count = 0;
+    this.junkIMesh.castShadow = true;
+    this.junkIMesh.receiveShadow = true;
+    this.junkIMesh.frustumCulled = false;
+    this.group.add(this.junkIMesh);
     this.guideIMesh.count = 0;
     this.guideIMesh.frustumCulled = false;
     this.guideIMesh.renderOrder = 6;
@@ -215,6 +224,29 @@ export class BoardRenderer {
     }
     this.drillIMesh.instanceMatrix.needsUpdate = true;
   }
+  private rebuildJunk(): void {
+    this.junkIMesh.count = 0;
+    for (const k of this.junkState) {
+      const col = k % COLS;
+      const row = Math.floor(k / COLS);
+      const p = cellToWorld(col, row);
+      scratchMatrix.makeTranslation(p.x, p.y, 0.46);
+      this.junkIMesh.setMatrixAt(this.junkIMesh.count, scratchMatrix);
+      this.junkIMesh.count++;
+    }
+    this.junkIMesh.instanceMatrix.needsUpdate = true;
+    this.shadowDirty = true;
+  }
+  private makeJunkBlock(): THREE.Group {
+    const g = new THREE.Group();
+    const mesh = new THREE.Mesh(this.geo, this.junkBlockMaterial);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    const outline = new THREE.Mesh(this.geo, outlineMaterial());
+    outline.scale.setScalar(1.07);
+    g.add(mesh, outline);
+    g.userData.kind = 'J';
+    return g;
+  }
   private makeBlock(kind: PieceKind): THREE.Group {
     let g = this.pullFree.pop();
     // Recycled blocks carry the previous kind/material: always re-colorize.
@@ -311,13 +343,19 @@ export class BoardRenderer {
     let hailChanged = false;
     const seenDrill = new Set<number>();
     let drillChanged = false;
+    const seenJunk = new Set<number>();
+    let junkChanged = false;
     for (let r = 0; r < VISIBLE_ROWS; r++) {
       const row = grid[r];
       if (!row) continue;
       for (let c = 0; c < row.length; c++) {
-        const v = row[c] as PieceKind | 'G' | 'R' | 0;
+        const v = row[c] as PieceKind | 'G' | 'R' | 'J' | 0;
         const k = this.key(c, r);
-        if (v === 0 || v === undefined || v === 'G' || v === 'R') {
+        if (v === 0 || v === undefined || v === 'G' || v === 'R' || v === 'J') {
+          if (v === 'J') {
+            seenJunk.add(k);
+            if (!this.junkState.has(k)) { this.junkState.add(k); junkChanged = true; }
+          }
           if (v === 'G') {
             seenHail.add(k);
             if (!this.hailState.has(k)) { this.hailState.add(k); this.hailFall.set(k, 0); hailChanged = true; }
@@ -351,9 +389,13 @@ export class BoardRenderer {
         hailChanged = true;
       }
     }
+    for (const k of this.junkState) {
+      if (!seenJunk.has(k)) { this.junkState.delete(k); junkChanged = true; }
+    }
     if (changed) this.rebuildLocked();
     if (hailChanged) this.rebuildHail();
     if (drillChanged) this.rebuildDrill();
+    if (junkChanged) this.rebuildJunk();
   }
 
   setActive(kind: PieceKind, cells: Vec2[], instant = false, special: string | null = null): void {
@@ -531,7 +573,7 @@ export class BoardRenderer {
       return;
     }
     const mat = this.guideIMesh.material as THREE.MeshBasicMaterial;
-    const color = guide.kind === 'bomb' ? 0xff7a2a : guide.kind === 'bolt' ? 0xffd21e : 0xff4d3d;
+    const color = guide.kind === 'bomb' ? 0xff7a2a : guide.kind === 'bolt' ? 0xffd21e : guide.kind === 'chatarra' ? 0xb08a5a : 0xff4d3d;
     mat.color.setHex(color);
     this.guideIMesh.count = 0;
     if (guide.kind === 'bomb' && guide.rows.length > 0) {
@@ -581,6 +623,18 @@ export class BoardRenderer {
       // Materialize the row's instances as regular blocks so they can fly away.
       for (let c = 0; c < COLS; c++) {
         const k = this.key(c, r);
+        if (this.junkState.has(k)) {
+          const p = cellToWorld(c, r);
+          cleared.push({ kind: 'J', x: p.x, y: p.y });
+          if (launch) {
+            const g = this.makeJunkBlock();
+            g.position.set(p.x, p.y, 0);
+            this.group.add(g);
+            meshes.push(g);
+          }
+          this.junkState.delete(k);
+          continue;
+        }
         const cell = this.lockedState.get(k);
         if (!cell) continue;
         cleared.push({ kind: cell.kind, x: cell.x, y: cell.y });
@@ -619,13 +673,14 @@ export class BoardRenderer {
       // grid has already collapsed when this runs, so it cannot be trusted.
       if (spawnParticles) {
         for (const m of meshes) {
-          const kind = m.userData.kind as PieceKind | undefined;
-          const hex = kind ? PIECE_COLORS[kind] : 0xffffff;
+          const kind = m.userData.kind as PieceKind | 'J' | undefined;
+          const hex = kind === 'J' ? JUNK_COLOR : kind ? PIECE_COLORS[kind] : 0xffffff;
           this.particles.burst(new THREE.Vector3(m.position.x, m.position.y, 0.6), hex, 7, 3.2, 3.4);
         }
       }
     }
     this.rebuildLocked();
+    this.rebuildJunk();
     return cleared;
   }
   /** Advances animations; returns true when shadow-casting geometry moved. */
@@ -723,6 +778,8 @@ export class BoardRenderer {
     this.rebuildHail();
     this.drillState.clear();
     this.rebuildDrill();
+    this.junkState.clear();
+    this.rebuildJunk();
     this.guideOn = false;
     this.guideIMesh.count = 0;
     this.hailFall.clear();

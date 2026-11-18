@@ -24,16 +24,16 @@ export interface DebrisPhysicsProfile {
  */
 export const DEBRIS_CONFIG = {
   /** Lado del cubo, en unidades de celda. */
-  size: 0.42,
+  size: 0.5,
   /** Superficie de la plataforma del tablero donde rebotan (tapa del cartón). */
   floorY: -BOARD_H / 2 - 0.62,
   /** z de nacimiento: delante del tablero, para no tapar la pila. */
   spawnZ: 0.7,
-  spreadX: 2.6,
-  impulseUpMin: 2.4,
-  impulseUpMax: 5.2,
-  driftZMin: 0.15,
-  driftZMax: 0.7,
+  spreadX: 3.4,
+  impulseUpMin: 4.2,
+  impulseUpMax: 7.8,
+  driftZMin: 0.25,
+  driftZMax: 1.1,
   /** Paso fijo de la simulación: rebotes estables con cualquier framerate. */
   fixedStep: 1 / 60,
   /** Nunca simular más de este delta por frame (evita saltos tras un tirón). */
@@ -57,7 +57,7 @@ export const DEBRIS_QUALITY: Record<FxQuality, DebrisPhysicsProfile> = {
     gravity: 24,
     restitution: 0.42,
     friction: 0.72,
-    spin: 7,
+    spin: 9,
     fadeDelay: 0.25,
     fadeDurationMin: 1,
     fadeDurationMax: 1.6

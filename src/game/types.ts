@@ -13,7 +13,7 @@ export const VISIBLE_ROWS = 20;
 export const HIDDEN_ROWS = 2;
 export const TOTAL_ROWS = VISIBLE_ROWS + HIDDEN_ROWS;
 
-export type CellValue = PieceKind | 'G' | 'R' | 0;
+export type CellValue = PieceKind | 'G' | 'R' | 'J' | 0;
 export type Grid = CellValue[][]; // grid[row][col], row 0 = bottom
 
 export interface ActivePiece {
@@ -49,6 +49,7 @@ export type GameEventType =
   | 'bomb'
   | 'bolt'
   | 'drill'
+  | 'junk'
   | 'lightning'
   | 'hail'
   | 'drill-strike';
@@ -114,6 +115,10 @@ export const BOMB_ROWS = 2;
 export const BOLT_BREAKS = 4;
 /** Taladro: filas que se hunde destruyendo los bloques bajo su base. */
 export const DRILL_DEPTH = 2;
+/** Chatarra: bloques de basura que deja la pieza desventajosa al bloquearse. */
+export const JUNK_CELLS = 4;
+/** Color gris-marrón de los bloques de chatarra. */
+export const JUNK_COLOR = 0x9d8a6b;
 /** Gránido: columnas de basura simultáneas por descarga. */
 export const HAIL_COLUMNS = 2;
 /** Altura máxima de montículo antes de que el gránido colapse (límites de la cuadrícula). */

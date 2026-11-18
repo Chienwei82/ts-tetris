@@ -1,7 +1,7 @@
 import './styles.css';
 import * as THREE from 'three';
 import { TetrisEngine } from './game/engine.js';
-import { LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL, TOTAL_ROWS, VISIBLE_ROWS } from './game/types.js';
+import { JUNK_COLOR, LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL, TOTAL_ROWS, VISIBLE_ROWS } from './game/types.js';
 import type { GameEvent, GameMode, LevelProgress, PieceKind } from './game/types.js';
 import type { IntensitySignals } from './audio/intensityTracker.js';
 import { BoardRenderer } from './render/boardRenderer.js';
@@ -20,7 +20,7 @@ import { refreshPointScales } from './render/particles.js';
 import { createScene } from './render/scene.js';
 import type { SceneOptions } from './render/scene.js';
 import { createStage } from './render/stage.js';
-import { THEMES, themeIndexForLevel } from './render/themes.js';
+import { THEMES } from './render/themes.js';
 import { ScenarioManager } from './render/scenarios/scenarioManager.js';
 // Importar el índice registra todos los escenarios en el ScenarioRegistry.
 import './render/scenarios/index.js';
@@ -41,7 +41,10 @@ import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, loadFxQuality, lo
 import { randomSeed } from './game/rng.js';
 import { MusicMenu } from './ui/musicMenu.js';
 import { Scoreboard } from './ui/scoreboard.js';
+import { LeaderboardStatus } from './ui/leaderboardStatus.js';
+import { bannerStageForLevel } from './ui/levelBannerTheme.js';
 import { LeaderboardError, submitScore } from './leaderboard/client.js';
+import { checkLeaderboardAvailability, describeLeaderboardError, OFFLINE_MESSAGE } from './leaderboard/availability.js';
 import { nicknameProblem, sanitizeNickname } from './leaderboard/rules.js';
 import { ensurePlayerId, loadPlayerName, randomUuid, savePlayerName } from './leaderboard/player.js';
 import { MAX_DURATION_MS, MIN_DURATION_MS } from './leaderboard/types.js';
@@ -70,8 +73,8 @@ function fmtClock(seconds: number): string {
 }
 
 function stageLabelFor(lv: number): string {
-  const t = THEMES[themeIndexForLevel(lv)];
-  return t ? t.icon + ' ' + t.name : '';
+  const stage = bannerStageForLevel(lv);
+  return stage.icon + ' ' + stage.name;
 }
 
 export class GameApp {
@@ -113,7 +116,7 @@ export class GameApp {
   private engine: TetrisEngine;
   private activeMutator: MutatorId | null = null;
   private windArrowLeft = 0;
-  private lastThemeIdx = 0;
+  private lastStageId = '';
   private lastGridV = -1;
   private lastPieceV = -1;
   private lastSpecialV = -1;
@@ -131,7 +134,14 @@ export class GameApp {
   private readonly musicMenu: MusicMenu;
   private readonly modeSelect: ModeSelect;
   private readonly scoreboard: Scoreboard;
+  private readonly leaderboardStatus: LeaderboardStatus;
   private readonly playerId: string;
+
+  /** Disponibilidad conocida del API (null = aún sin comprobar). */
+  private leaderboardAvailable: boolean | null = null;
+  private leaderboardMessage = '';
+  private overlayView: 'start' | 'pause' | 'gameover' | 'none' = 'start';
+  private lastDebrisSoundAt = 0;
 
   private runId = '';
   private runStartLevel = 1;
@@ -262,12 +272,18 @@ export class GameApp {
       onOpenChange: (open) => {
         this.input.setEnabled(!open);
         if (open) this.input.releaseAll();
-      }
+      },
+      onAvailabilityChange: (available, message) => this.applyLeaderboardAvailability(available, message)
+    });
+    this.leaderboardStatus = new LeaderboardStatus({
+      warning: el<HTMLElement>('lb-warning'),
+      buttons: [el<HTMLButtonElement>('btn-scoreboard'), el<HTMLButtonElement>('btn-overlay-scoreboard')]
     });
 
     this.setupDOMListeners();
     this.setupAudioUnlock();
     this.setupVisibilityChange();
+    this.setupConnectivity();
 
     this.applyEffects(loadEffectsEnabled(), true, false);
     this.applyMusic(loadMusicEnabled(), false);
@@ -277,6 +293,7 @@ export class GameApp {
     this.toggleHelp();
     this.refreshLevelOut();
     this.hud.setStats(0, 1, 0);
+    void this.refreshLeaderboardAvailability();
     this.refreshGauge();
     const firstTheme = THEMES[0];
     if (firstTheme) this.hud.setStageChip(firstTheme.icon + ' ' + firstTheme.name);
@@ -339,8 +356,10 @@ export class GameApp {
       if (this.engine.phase === 'playing') {
         this.engine.pause();
         this.input.releaseAll();
+        this.overlayView = 'pause';
         this.hud.showOverlay('PAUSA', 'Pulsa <span class="key">P</span> o <span class="key">Enter</span> para continuar', '');
         this.syncMusicPause();
+        this.syncLeaderboardWarning();
       }
       this.scoreboard.openAt(this.engine.phase === 'gameover' ? this.engine.mode : this.currentMode());
     };
@@ -385,6 +404,34 @@ export class GameApp {
       // Al volver de una pestaña oculta no debe contarse ese hueco como juego.
       if (document.hidden) this.lastFrameAt = 0;
     });
+  }
+
+  private setupConnectivity(): void {
+    window.addEventListener('online', () => { void this.refreshLeaderboardAvailability(); });
+    window.addEventListener('offline', () => this.applyLeaderboardAvailability(false, OFFLINE_MESSAGE));
+  }
+
+  /** La sonda nunca bloquea el juego; solo decide si se muestra el aviso. */
+  private async refreshLeaderboardAvailability(): Promise<void> {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.applyLeaderboardAvailability(false, OFFLINE_MESSAGE);
+      return;
+    }
+    const result = await checkLeaderboardAvailability(this.currentMode());
+    this.applyLeaderboardAvailability(result.available, result.message);
+  }
+
+  private applyLeaderboardAvailability(available: boolean, message: string): void {
+    this.leaderboardAvailable = available;
+    this.leaderboardMessage = available ? '' : message;
+    this.syncLeaderboardWarning();
+  }
+
+  /** El aviso solo se ve en inicio y pausa; nunca oculta el botón de puntajes. */
+  private syncLeaderboardWarning(): void {
+    const visible = this.overlayView === 'start' || this.overlayView === 'pause';
+    if (this.leaderboardAvailable === false && visible) this.leaderboardStatus.show(this.leaderboardMessage);
+    else this.leaderboardStatus.hide();
   }
 
   private showWindArrow(dir: -1 | 1, seconds: number): void {
@@ -624,15 +671,18 @@ export class GameApp {
   }
 
   private showStart(): void {
+    this.overlayView = 'start';
     this.syncModePicker();
     this.hud.setModeChip(this.gameMode === 'chaos' ? 'Caos' : 'Tradicional');
     this.hud.setChaosStatus('');
     this.hud.setMutatorChip('');
-    this.hud.showOverlay('TETRIS 3D', 'Pulsa <span class="key">Enter</span> o haz clic en Jugar', '', true);
+    this.hud.showOverlay('TETRIS 3D', 'Toca <span class="key">▶ Jugar</span> o pulsa <span class="key">Enter</span> para empezar', '', true);
     this.hideScoreSubmit();
+    this.syncLeaderboardWarning();
   }
 
   private showGameOver(): void {
+    this.overlayView = 'gameover';
     this.clearStormVisuals();
     this.board.setSpecialGuide(null);
     this.hud.setChaosStatus('');
@@ -646,6 +696,7 @@ export class GameApp {
         ' (' + theme.icon + ' ' + theme.name + ') · ' + this.engine.lines + ' líneas'
     );
     this.showScoreSubmit();
+    this.syncLeaderboardWarning();
   }
 
   private showScoreSubmit(): void {
@@ -735,6 +786,7 @@ export class GameApp {
 
     try {
       const result = await submitScore(payload);
+      this.applyLeaderboardAvailability(true, '');
       savePlayerName(nickname);
       status.classList.add('ok');
       status.textContent = result.ranked && result.rank !== null
@@ -747,6 +799,8 @@ export class GameApp {
         status.classList.add('ok');
         send.textContent = '✔ Ya enviado';
       } else {
+        const availability = describeLeaderboardError(error);
+        if (!availability.available) this.applyLeaderboardAvailability(false, availability.message);
         status.textContent = this.saveErrorMessage(error);
         status.classList.add('error');
         send.disabled = false;
@@ -768,6 +822,8 @@ export class GameApp {
   }
 
   private startGame(): void {
+    this.overlayView = 'none';
+    this.leaderboardStatus.hide();
     this.gameMode = this.currentMode();
     this.chaosSeed = randomSeed();
     this.lastSpecialV = -1;
@@ -800,7 +856,7 @@ export class GameApp {
     this.intensity.reset();
     this.music.startWithGenreSeed();
     console.info('[música] género:', this.music.getGenre(), '· semilla:', this.music.getSeed());
-    this.lastThemeIdx = themeIndexForLevel(lv);
+    this.lastStageId = bannerStageForLevel(lv).id;
     this.hud.setStageChip(this.activeScenarioLabel(lv));
     this.hud.hideOverlay();
     this.hud.setStats(0, lv, 0);
@@ -817,9 +873,13 @@ export class GameApp {
     if (this.helpOpen) return;
     if (this.engine.phase === 'playing') {
       this.engine.pause(); this.sound.play('pause'); this.input.releaseAll();
+      this.overlayView = 'pause';
       this.hud.showOverlay('PAUSA', 'Pulsa <span class="key">P</span> o <span class="key">Enter</span> para continuar', '');
+      this.syncLeaderboardWarning();
     } else if (this.engine.phase === 'paused') {
       this.engine.resume(); this.hud.hideOverlay();
+      this.overlayView = 'none';
+      this.syncLeaderboardWarning();
     }
     this.syncMusicPause();
   }
@@ -924,6 +984,25 @@ export class GameApp {
         this.hud.toast('🔩 Taladro — se hunde 2 filas', 1500);
         break;
       }
+      case 'junk': {
+        this.sound.play('junk');
+        this.shake.add(0.45);
+        const cells = e.cells ?? [];
+        let sx = 0;
+        let sy = 0;
+        for (const c of cells) {
+          sx += c.x; sy += c.y;
+          const q = cellToWorld(c.x, c.y);
+          this.board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), JUNK_COLOR, 9, 2.8, 2.4);
+          this.board.particles.burst(new THREE.Vector3(q.x, q.y, 0.6), 0x6f6252, 4, 1.8, 1.4);
+        }
+        if (cells.length > 0) {
+          const center = cellToWorld(sx / cells.length, sy / cells.length);
+          this.chaosFx.impact(center.x, center.y, JUNK_COLOR);
+        }
+        this.hud.toast('🧱 Chatarra — ' + cells.length + ' bloques de basura', 1700);
+        break;
+      }
       case 'drill-strike': {
         this.sound.play('drill');
         this.shake.add(0.7);
@@ -960,13 +1039,27 @@ export class GameApp {
         this.intensity.event(n >= 4 ? 'tetris' : 'clear');
         if (n >= 4) { this.sound.play('tetris'); this.hud.toast('¡TETRIS! +' + (e.scoreGained ?? 0)); }
         else { this.sound.play('clear', n); if (n > 1) this.hud.toast(n + ' líneas +' + (e.scoreGained ?? 0)); }
-        this.shake.add(0.12 + n * 0.09);
         const rows = e.rows ?? [];
+        if (this.debrisOn && rows.length > 0) {
+          // Terremoto: la limpieza se siente en la cámara y el suelo.
+          this.shake.quake(0.55 + n * 0.15, 0.55 + n * 0.08);
+          this.sound.play('quake');
+        } else {
+          this.shake.add(0.12 + n * 0.09);
+        }
         if (rows.length > 0) {
           const lo = Math.min(...rows); const hi = Math.max(...rows);
           this.flash.flash(lo, hi - lo + 1);
           const cleared = this.board.playClear(rows, { launch: !this.debrisOn, particles: !this.debrisOn });
-          if (this.debrisOn) this.debris.spawnCells(cleared);
+          if (this.debrisOn) {
+            this.debris.spawnCells(cleared, { impulse: 1.5, spread: 1.35, scale: 1.15, scaleJitter: 0.25 });
+            // Polvo de papel en cada fila: se lee de dónde salen los escombros.
+            for (const r of rows) {
+              const q = cellToWorld(4.5, r);
+              this.board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0xf4e8cf, 12, 3.0, 2.0);
+              this.chaosFx.impact(q.x, q.y, 0xd8c7a6);
+            }
+          }
         }
         break;
       }
@@ -980,15 +1073,16 @@ export class GameApp {
         this.intensity.event('levelup');
         this.shake.add(0.4);
         this.stage.setLevel(lv);
-        const idx = themeIndexForLevel(lv);
-        const label = stageLabelFor(lv);
-        if (idx !== this.lastThemeIdx) {
-          this.lastThemeIdx = idx;
+        const stage = bannerStageForLevel(lv);
+        const stageChanged = stage.id !== this.lastStageId;
+        this.lastStageId = stage.id;
+        if (stageChanged) {
+          const label = stage.icon + ' ' + stage.name;
           this.hud.toast('Nivel ' + lv + ' — ' + label, 2400);
-          this.hud.levelBanner('NIVEL ' + lv, label);
+          this.hud.levelBanner('NIVEL ' + lv, label, stage, true);
         } else {
           this.hud.toast('Nivel ' + lv + ' — ¡más velocidad!', 2200);
-          this.hud.levelBanner('NIVEL ' + lv, '¡más rápido!');
+          this.hud.levelBanner('NIVEL ' + lv, '¡más rápido!', stage, false);
         }
         this.hud.setStageChip(this.activeScenarioLabel(lv));
         break;
@@ -1007,6 +1101,27 @@ export class GameApp {
     const s = this.scenarioManager.activeScenario();
     if (s) return s.icon + ' ' + s.name;
     return stageLabelFor(lv);
+  }
+
+  /** Convierte los impactos de los cubos en polvo, micro-sacudidas y sonido. */
+  private handleDebrisImpacts(): void {
+    const total = this.debris.impactCount;
+    if (total === 0) return;
+    const visible = Math.min(total, this.debris.impacts.length);
+    let strongest = 0;
+    for (let i = 0; i < visible; i++) {
+      const hit = this.debris.impacts[i];
+      if (!hit) continue;
+      strongest = Math.max(strongest, hit.strength);
+      this.board.particles.burst(new THREE.Vector3(hit.x, hit.y + 0.12, hit.z), 0xe8dcc0, 3, 1.4, 0.8);
+    }
+    this.shake.add(Math.min(0.16, visible * 0.02 + strongest * 0.08));
+    const now = performance.now();
+    if (now - this.lastDebrisSoundAt > 90) {
+      this.lastDebrisSoundAt = now;
+      this.sound.play('debris');
+    }
+    this.debris.clearImpacts();
   }
 
   private animate = (now: number): void => {
@@ -1044,7 +1159,8 @@ export class GameApp {
           this.board.setActive(this.engine.active.kind, this.engine.activeCells(), false, sp);
           const label = sp === 'bomb' ? '💣 Bomba · revienta 2 filas'
             : sp === 'bolt' ? '⚡ Rayo · rompe 4 bloques'
-            : sp === 'drill' ? '🔩 Taladro · se hunde 2 filas' : '';
+            : sp === 'drill' ? '🔩 Taladro · se hunde 2 filas'
+            : sp === 'chatarra' ? '🧱 Chatarra · deja 4 de basura' : '';
           if (sp && this.engine.pieceVersion !== this.lastSpecialV) {
             this.lastSpecialV = this.engine.pieceVersion;
             this.hud.toast('Pieza especial: ' + label, 1600);
@@ -1076,6 +1192,7 @@ export class GameApp {
 
     this.debris.setPaused(this.engine.phase === 'paused' || this.helpOpen);
     this.debris.update(rawDt);
+    this.handleDebrisImpacts();
     this.stage.update(rawDt);
     this.flash.update(rawDt);
     const s = this.shake.update(rawDt);

@@ -3,6 +3,7 @@ import type { SceneParts } from '../scene.js';
 import type { Scenario, ScenarioLook, ScenarioResources } from './scenario.js';
 import { scenarioRegistry } from './scenarioRegistry.js';
 import { disposeResources } from './scenario.js';
+import { SCENARIO_META } from './scenarioCatalog.js';
 
 const SKY: [number, number, number, number] = [0x0a1a2a, 0x1a3a4a, 0x2a5a6a, 0x4a8a9a];
 const LOOK: ScenarioLook = {
@@ -40,10 +41,7 @@ function makeCoral(w: number, h: number, z: number, baseY: number, color: number
 }
 
 export const deepSea: Scenario = {
-  id: 'deepSea',
-  name: 'Fondo del mar',
-  icon: '🌊',
-  minLevel: 9,
+  ...SCENARIO_META.deepSea,
   look: LOOK,
 
   build(parts: SceneParts): void {

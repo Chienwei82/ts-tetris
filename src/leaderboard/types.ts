@@ -8,7 +8,7 @@ export type { GameMode };
  * puro (sin DOM ni Node) para poder importarlo desde ambos lados y testearlo.
  */
 
-/** Modos con clasificación independiente (requisito de producto). */
+/** Modos que acepta el API (compatibilidad histórica con Caos). */
 export const LEADERBOARD_MODES: readonly GameMode[] = ['classic', 'chaos'];
 
 /** Entradas que se conservan por modo en el almacén (las mejores). */

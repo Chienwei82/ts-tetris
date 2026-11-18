@@ -1,10 +1,13 @@
 import { fetchLeaderboard, LeaderboardError } from '../leaderboard/client.js';
+import { describeLeaderboardError } from '../leaderboard/availability.js';
 import type { GameMode, LeaderboardResponse, ScoreEntry } from '../leaderboard/types.js';
 
 export interface ScoreboardOptions {
   root: HTMLElement;
   playerId: string;
   onOpenChange?: (open: boolean) => void;
+  /** Avisa al resto de la UI si el API responde (para el aviso de inicio/pausa). */
+  onAvailabilityChange?: (available: boolean, message: string) => void;
 }
 
 function element<T extends HTMLElement>(root: HTMLElement, id: string): T {
@@ -36,15 +39,20 @@ function errorMessage(error: unknown): string {
   return 'No se pudo cargar la clasificación.';
 }
 
+function modeLabel(mode: GameMode): string {
+  return mode === 'chaos' ? 'Caos' : 'Tradicional';
+}
+
 /**
- * Overlay del ranking. Las pestañas Tradicional y Caos consultan tableros
- * distintos y nunca se mezclan. Los fallos de red se muestran en el propio
- * panel: jugar nunca depende de esta vista.
+ * Overlay del ranking. Tradicional y Caos tienen tableros independientes: las
+ * pestañas consultan modos distintos y nunca se mezclan. Las cargas también
+ * informan de la disponibilidad del API para que inicio/pausa puedan avisar.
  */
 export class Scoreboard {
   private readonly root: HTMLElement;
   private readonly playerId: string;
   private readonly onOpenChange: (open: boolean) => void;
+  private readonly onAvailabilityChange: (available: boolean, message: string) => void;
   private readonly tabClassic: HTMLButtonElement;
   private readonly tabChaos: HTMLButtonElement;
   private readonly list: HTMLOListElement;
@@ -62,6 +70,7 @@ export class Scoreboard {
     this.root = options.root;
     this.playerId = options.playerId;
     this.onOpenChange = options.onOpenChange ?? (() => {});
+    this.onAvailabilityChange = options.onAvailabilityChange ?? (() => {});
     this.tabClassic = element<HTMLButtonElement>(this.root, 'sb-tab-classic');
     this.tabChaos = element<HTMLButtonElement>(this.root, 'sb-tab-chaos');
     this.list = element<HTMLOListElement>(this.root, 'sb-list');
@@ -128,10 +137,15 @@ export class Scoreboard {
     this.statusEl.classList.remove('error');
     try {
       const data = await fetchLeaderboard(this.mode, { playerId: this.playerId });
-      if (seq !== this.requestSeq || !this.open) return;
+      if (seq !== this.requestSeq) return;
+      this.onAvailabilityChange(true, '');
+      if (!this.open) return;
       this.render(data);
     } catch (error) {
-      if (seq !== this.requestSeq || !this.open) return;
+      if (seq !== this.requestSeq) return;
+      const availability = describeLeaderboardError(error);
+      this.onAvailabilityChange(availability.available, availability.message);
+      if (!this.open) return;
       this.statusEl.textContent = errorMessage(error);
       this.statusEl.classList.add('error');
     }
@@ -141,7 +155,7 @@ export class Scoreboard {
     const rows = data.entries.map((entry, index) => this.renderRow(entry, index + 1, data));
     this.list.replaceChildren(...rows);
     if (data.entries.length === 0) {
-      this.statusEl.textContent = 'Aún no hay marcas en este modo. ¡Sé el primero!';
+      this.statusEl.textContent = 'Aún no hay marcas en ' + modeLabel(this.mode) + '. ¡Sé el primero!';
     } else {
       this.statusEl.textContent = data.total + (data.total === 1 ? ' partida guardada' : ' partidas guardadas');
     }

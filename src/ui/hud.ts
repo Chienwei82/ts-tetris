@@ -1,3 +1,5 @@
+import type { BannerStage } from './levelBannerTheme.js';
+
 export class HUD {
   private scoreEl: HTMLElement;
   private levelEl: HTMLElement;
@@ -20,6 +22,7 @@ export class HUD {
   private toastQueue: string[] = [];
   private toastBusy = false;
   private bannerSubEl: HTMLElement;
+  private bannerIconEl: HTMLElement;
   private toastTimer = 0;
   private bannerTimer = 0;
   /* Last written values: the HUD is polled every frame, so identical updates skip the DOM. */
@@ -40,7 +43,7 @@ export class HUD {
     this.titleEl = q('overlay-title'); this.subEl = q('overlay-sub'); this.statsEl = q('overlay-stats');
     this.startOptionsEl = q('start-options');
     this.gaugeFillEl = q('gauge-fill'); this.gaugeCaptionEl = q('gauge-caption'); this.stageChipEl = q('stage-chip');
-    this.bannerEl = q('level-banner'); this.bannerTitleEl = q('level-banner-title'); this.bannerSubEl = q('level-banner-sub');
+    this.bannerEl = q('level-banner'); this.bannerTitleEl = q('level-banner-title'); this.bannerSubEl = q('level-banner-sub'); this.bannerIconEl = q('level-banner-icon');
     const qc = (id: string): HTMLElement | null => document.getElementById(id);
     this.modeChipEl = qc('mode-chip'); this.chaosEl = qc('chaos-status');
     this.debrisChipEl = qc('debris-chip');
@@ -80,10 +83,13 @@ export class HUD {
   setStageChip(text: string): void {
     if (this.stageChipEl.textContent !== text) this.stageChipEl.textContent = text;
   }
-  /** Big paper banner shown on every level-up. */
-  levelBanner(title: string, sub: string): void {
+  /** Big paper banner shown on every level-up, themed to the next stage. */
+  levelBanner(title: string, sub: string, stage: BannerStage, stageChanged: boolean): void {
     this.bannerTitleEl.textContent = title;
     this.bannerSubEl.textContent = sub;
+    this.bannerIconEl.textContent = stage.icon;
+    this.bannerEl.dataset.stage = stage.id;
+    this.bannerEl.dataset.advance = stageChanged ? 'stage' : 'speed';
     this.bannerEl.classList.remove('hidden');
     this.bannerEl.classList.remove('show');
     void this.bannerEl.offsetWidth;
@@ -92,7 +98,7 @@ export class HUD {
     this.bannerTimer = window.setTimeout(() => {
       this.bannerEl.classList.add('hidden');
       this.bannerEl.classList.remove('show');
-    }, 2500);
+    }, 2800);
   }
   toast(msg: string, ms = 1600): void {
     this.toastQueue.push(msg);
@@ -125,7 +131,7 @@ export class HUD {
     if (!this.chaosEl) return;
     if (this.chaosEl.textContent !== text) this.chaosEl.textContent = text;
     this.chaosEl.classList.toggle('hidden', text === '');
-    this.chaosEl.classList.remove('bomb', 'bolt', 'drill');
+    this.chaosEl.classList.remove('bomb', 'bolt', 'drill', 'chatarra');
     if (text !== '' && tone !== '') this.chaosEl.classList.add(tone);
   }
   /** Tormenta activa del Caos (chip). '' oculta; `tone` colorea por tormenta. */
