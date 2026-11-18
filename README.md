@@ -396,11 +396,19 @@ paso previsto es un ticket de partida firmado con HMAC al empezar.
 - **Un solo proyecto**: el juego estático y el API conviven en el mismo deploy. Vercel
   detecta la carpeta `api/` y publica `api/scores.ts` como Vercel Function (Node 22),
   así que el navegador llama a `/api/scores` en el mismo origen (sin CORS).
-- **Base de datos**: crea una base gratuita en [Upstash Redis](https://console.upstash.com)
-  (plan Free: 500.000 comandos/mes, 250 MB, 1 base) y copia su **REST URL** y
-  **REST Token**. Añádelos en Vercel → *Project → Settings → Environment Variables*
-  como `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN` para Production, Preview
-  y Development; después redeploy.
+- **Base de datos**: el API habla con la **API REST de Upstash**, así que la base debe
+  ser *Upstash for Redis*. Dos caminos:
+  1. **Desde Vercel** (recomendado): *Storage → Marketplace Database Providers →
+     **Upstash for Redis*** → plan **Free** → región `us-east-1` → **Connect Project**
+     con Production, Preview y Development. La integración inyecta sola
+     `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN`.
+  2. **A mano**: crea la base en [console.upstash.com](https://console.upstash.com)
+     (Free: 500.000 comandos/mes, 250 MB, 1 base), copia su *REST URL* y *REST Token*
+     y pégalos en Vercel → *Project → Settings → Environment Variables* con esos dos
+     nombres para los tres entornos.
+  Después, **redeploy** (las variables solo se aplican a despliegues nuevos).
+  ⚠️ La integración **“Redis”** del Marketplace es **Redis Cloud (Redis Inc)**: da una
+  cadena TCP `REDIS_URL="rediss://…"`, que este cliente REST **no** puede usar.
 - **Coste esperado**: una partida enviada usa ~10 comandos y cada visita al ranking
   ~5; el plan gratuito de Vercel (1M invocaciones/mes) y el de Upstash sobran para un
   proyecto personal.
