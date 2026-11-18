@@ -40,6 +40,12 @@ import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
 import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, loadDebrisClassic, loadFxQuality, loadChaosLightning, loadChaosHail, prefersReducedMotion, saveEffectsEnabled, saveMusicEnabled, saveMusicGenre, saveDebrisClassic, saveFxQuality, saveChaosLightning, saveChaosHail } from './ui/settings.js';
 import { randomSeed } from './game/rng.js';
 import { MusicMenu } from './ui/musicMenu.js';
+import { Scoreboard } from './ui/scoreboard.js';
+import { LeaderboardError, submitScore } from './leaderboard/client.js';
+import { nicknameProblem, sanitizeNickname } from './leaderboard/rules.js';
+import { ensurePlayerId, loadPlayerName, randomUuid, savePlayerName } from './leaderboard/player.js';
+import { MAX_DURATION_MS, MIN_DURATION_MS } from './leaderboard/types.js';
+import type { ScoreSubmission } from './leaderboard/types.js';
 import { initAnalytics } from './analytics.js';
 
 const WIND_ARROW_MIN_SECONDS = 1;
@@ -125,6 +131,14 @@ export class GameApp {
   private readonly input: InputManager;
   private readonly musicMenu: MusicMenu;
   private readonly modeSelect: ModeSelect;
+  private readonly scoreboard: Scoreboard;
+  private readonly playerId: string;
+
+  private runId = '';
+  private runStartLevel = 1;
+  private runPlayedMs = 0;
+  private lastFrameAt = 0;
+  private scoreSubmitting = false;
 
   private lastNextKey = '';
   private lastHoldKey = '';
@@ -243,6 +257,16 @@ export class GameApp {
     });
     this.modeSelect.resolve();
 
+    this.playerId = ensurePlayerId();
+    this.scoreboard = new Scoreboard({
+      root: el<HTMLDivElement>('scoreboard-overlay'),
+      playerId: this.playerId,
+      onOpenChange: (open) => {
+        this.input.setEnabled(!open);
+        if (open) this.input.releaseAll();
+      }
+    });
+
     this.setupDOMListeners();
     this.setupAudioUnlock();
     this.setupVisibilityChange();
@@ -316,6 +340,23 @@ export class GameApp {
     const btnHelp = el<HTMLButtonElement>('btn-help');
     const btnHelpClose = el<HTMLButtonElement>('btn-help-close');
     const btnMode = el<HTMLButtonElement>('btn-mode');
+    const btnScoreboard = el<HTMLButtonElement>('btn-scoreboard');
+    const btnOverlayScoreboard = el<HTMLButtonElement>('btn-overlay-scoreboard');
+    const scoreForm = el<HTMLFormElement>('score-submit');
+
+    const openScoreboard = (): void => {
+      if (this.engine.phase === 'playing') {
+        this.engine.pause();
+        this.input.releaseAll();
+        this.hud.showOverlay('PAUSA', 'Pulsa <span class="key">P</span> o <span class="key">Enter</span> para continuar', '');
+        this.syncMusicPause();
+      }
+      this.scoreboard.openAt(this.engine.phase === 'gameover' ? this.engine.mode : this.currentMode());
+    };
+
+    btnScoreboard.addEventListener('click', () => { btnScoreboard.blur(); this.sound.unlock(); openScoreboard(); });
+    btnOverlayScoreboard.addEventListener('click', () => { btnOverlayScoreboard.blur(); this.sound.unlock(); openScoreboard(); });
+    scoreForm.addEventListener('submit', (event) => { event.preventDefault(); void this.submitRunScore(); });
 
     btnStart.addEventListener('click', () => {
       btnStart.blur();
@@ -348,7 +389,11 @@ export class GameApp {
   }
 
   private setupVisibilityChange(): void {
-    document.addEventListener('visibilitychange', () => { this.music.setHidden(document.hidden); });
+    document.addEventListener('visibilitychange', () => {
+      this.music.setHidden(document.hidden);
+      // Al volver de una pestaña oculta no debe contarse ese hueco como juego.
+      if (document.hidden) this.lastFrameAt = 0;
+    });
   }
 
   private showWindArrow(dir: -1 | 1, seconds: number): void {
@@ -594,6 +639,7 @@ export class GameApp {
     this.hud.setChaosStatus('');
     this.hud.setMutatorChip('');
     this.hud.showOverlay('TETRIS 3D', 'Pulsa <span class="key">Enter</span> o haz clic en Jugar', '', true);
+    this.hideScoreSubmit();
   }
 
   private showGameOver(): void {
@@ -609,6 +655,126 @@ export class GameApp {
       '<strong>' + this.engine.score.toLocaleString('es') + '</strong> pts · Nivel ' + this.engine.level + ' · Modo ' + (this.engine.mode === 'chaos' ? 'Caos' : 'Tradicional') +
         ' (' + theme.icon + ' ' + theme.name + ') · ' + this.engine.lines + ' líneas'
     );
+    this.showScoreSubmit();
+  }
+
+  private showScoreSubmit(): void {
+    const form = el<HTMLFormElement>('score-submit');
+    const note = el<HTMLElement>('score-submit-note');
+    const input = el<HTMLInputElement>('score-nickname');
+    const send = el<HTMLButtonElement>('btn-score-send');
+    const status = el<HTMLElement>('score-submit-status');
+    const tooShort = this.runPlayedMs < MIN_DURATION_MS;
+    const eligible = this.engine.score > 0 && this.runStartLevel === 1 && !tooShort;
+
+    form.classList.remove('hidden');
+    status.textContent = '';
+    status.classList.remove('ok', 'error');
+    send.textContent = '🏆 Guardar puntaje';
+    send.disabled = !eligible;
+    input.disabled = !eligible;
+    input.value = loadPlayerName();
+    this.scoreSubmitting = false;
+
+    if (this.runStartLevel !== 1) {
+      note.textContent = 'Solo las partidas empezadas en el nivel 1 entran en la clasificación. Reinicia desde el nivel 1 para competir.';
+    } else if (this.engine.score === 0) {
+      note.textContent = 'No has sumado puntos en esta partida: no hay marca que guardar.';
+    } else if (tooShort) {
+      note.textContent = 'La partida ha durado menos de 5 segundos: no entra en la clasificación.';
+    } else {
+      note.textContent = 'Se guardará en el tablero de ' + this.modeLabel(this.engine.mode) + '.';
+    }
+  }
+
+  private hideScoreSubmit(): void {
+    const form = el<HTMLFormElement>('score-submit');
+    const status = el<HTMLElement>('score-submit-status');
+    const send = el<HTMLButtonElement>('btn-score-send');
+    const input = el<HTMLInputElement>('score-nickname');
+    form.classList.add('hidden');
+    status.textContent = '';
+    status.classList.remove('ok', 'error');
+    send.textContent = '🏆 Guardar puntaje';
+    send.disabled = false;
+    input.disabled = false;
+    this.scoreSubmitting = false;
+  }
+
+  private modeLabel(mode: GameMode): string {
+    return mode === 'chaos' ? 'Caos' : 'Tradicional';
+  }
+
+  private async submitRunScore(): Promise<void> {
+    if (this.scoreSubmitting) return;
+    const input = el<HTMLInputElement>('score-nickname');
+    const send = el<HTMLButtonElement>('btn-score-send');
+    const status = el<HTMLElement>('score-submit-status');
+    const nickname = sanitizeNickname(input.value);
+    const problem = nicknameProblem(nickname);
+    if (problem !== null) {
+      status.textContent = problem === 'blocked'
+        ? 'Ese nombre no está permitido.'
+        : problem === 'chars'
+          ? 'Usa solo letras, números, espacios, punto, guion y punto medio.'
+          : 'El nombre debe tener entre 2 y 16 caracteres.';
+      status.classList.add('error');
+      status.classList.remove('ok');
+      input.focus();
+      return;
+    }
+    input.value = nickname;
+    this.scoreSubmitting = true;
+    send.disabled = true;
+    status.classList.remove('error', 'ok');
+    status.textContent = 'Guardando…';
+
+    const payload: ScoreSubmission = {
+      runId: this.runId,
+      playerId: this.playerId,
+      nickname,
+      mode: this.engine.mode,
+      score: this.engine.score,
+      level: this.engine.level,
+      lines: this.engine.lines,
+      startLevel: this.runStartLevel,
+      durationMs: Math.min(MAX_DURATION_MS, Math.max(MIN_DURATION_MS, Math.round(this.runPlayedMs)))
+    };
+    if (this.engine.seed !== undefined) payload.seed = this.engine.seed;
+    const mode = this.engine.mode;
+
+    try {
+      const result = await submitScore(payload);
+      savePlayerName(nickname);
+      status.classList.add('ok');
+      status.textContent = result.ranked && result.rank !== null
+        ? '¡Puesto #' + result.rank + ' en ' + this.modeLabel(mode) + '!'
+        : 'Puntaje guardado, pero fuera de la tabla.';
+      send.textContent = '✔ Guardado';
+    } catch (error) {
+      if (error instanceof LeaderboardError && error.code === 'duplicate_run') {
+        status.textContent = 'Esta partida ya estaba guardada.';
+        status.classList.add('ok');
+        send.textContent = '✔ Ya enviado';
+      } else {
+        status.textContent = this.saveErrorMessage(error);
+        status.classList.add('error');
+        send.disabled = false;
+        send.textContent = '🏆 Reintentar';
+      }
+    } finally {
+      this.scoreSubmitting = false;
+    }
+  }
+
+  private saveErrorMessage(error: unknown): string {
+    if (error instanceof LeaderboardError) {
+      if (error.code === 'network') return 'Sin conexión: el puntaje no se ha guardado.';
+      if (error.code === 'timeout') return 'El servidor tardó demasiado. Prueba a reintentar.';
+      if (error.code === 'implausible_score') return 'El servidor no aceptó el puntaje (datos incoherentes).';
+      return error.message;
+    }
+    return 'No se pudo guardar el puntaje.';
   }
 
   private startGame(): void {
@@ -618,6 +784,12 @@ export class GameApp {
     this.hud.setModeChip(this.gameMode === 'chaos' ? 'Caos' : 'Tradicional');
     this.hud.setChaosStatus('');
     const lv = this.startLevel();
+    this.runId = randomUuid();
+    this.runStartLevel = lv;
+    this.runPlayedMs = 0;
+    this.lastFrameAt = 0;
+    this.scoreSubmitting = false;
+    this.hideScoreSubmit();
     this.engine = new TetrisEngine({
       mode: this.gameMode,
       mutatorConfig: { pool: this.mutatorPool() },
@@ -854,6 +1026,10 @@ export class GameApp {
     const rawDt = Math.min(this.timer.getDelta(), MAX_DELTA_SECONDS);
     if (document.hidden) return;
     const t = this.timer.getElapsed();
+    // Tiempo real entre frames para la duración de la partida (el `rawDt` del
+    // motor va topado a 100 ms y subestimaría en equipos lentos).
+    const frameGapMs = this.lastFrameAt === 0 ? 0 : Math.min(1_000, Math.max(0, now - this.lastFrameAt));
+    this.lastFrameAt = now;
     this.input.update(rawDt);
 
     if (this.windArrowLeft > 0 && this.engine.phase === 'playing' && !this.helpOpen) {
@@ -864,6 +1040,7 @@ export class GameApp {
     let frameDirty = false;
     if (this.engine.phase === 'playing') {
       this.engine.update(rawDt);
+      if (frameGapMs > 0) this.runPlayedMs += frameGapMs;
       frameDirty = true;
 
       if (this.engine.gridVersion !== this.lastGridV || this.board.busyClearing) {

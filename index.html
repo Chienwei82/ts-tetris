@@ -67,6 +67,15 @@
         <h2 id="overlay-title">TETRIS 3D</h2>
         <p id="overlay-sub">Pulsa <span class="key">Enter</span> o haz clic para jugar</p>
         <p id="overlay-stats"></p>
+        <form id="score-submit" class="score-submit hidden" autocomplete="off" novalidate>
+          <p id="score-submit-note" class="score-submit-note"></p>
+          <label for="score-nickname">Tu nombre</label>
+          <div class="score-submit-row">
+            <input id="score-nickname" type="text" maxlength="16" placeholder="Jugador" spellcheck="false" />
+            <button id="btn-score-send" type="submit">🏆 Guardar puntaje</button>
+          </div>
+          <p id="score-submit-status" class="score-submit-status" role="status" aria-live="polite"></p>
+        </form>
         <div id="mode-picker" role="radiogroup" aria-label="Modo de juego">
           <label><input type="radio" name="game-mode" value="classic" checked /> Tradicional</label>
           <label><input type="radio" name="game-mode" value="chaos" /> Caos</label>
@@ -103,6 +112,7 @@
         <div class="btn-row">
           <button id="btn-start">▶ Jugar</button>
           <button id="btn-restart" class="ghost">↻ Reiniciar</button>
+          <button id="btn-overlay-scoreboard" class="ghost" type="button">🏆 Clasificación</button>
         </div>
         <p class="hint">Sube de nivel cada 10 líneas o 45 s. Cada 2 niveles cambia el escenario y el clima.<br>Pulsa <span class="key">H</span> para ver la ayuda completa.</p>
       </div>
@@ -176,6 +186,7 @@
     <div id="bottom-bar">
       <button id="btn-help" title="Ayuda (H)" aria-label="Ayuda">❓<span class="bb-label"> Ayuda</span></button>
       <button id="btn-pause" title="Pausa (P)" aria-label="Pausa">⏸<span class="bb-label"> Pausa</span></button>
+      <button id="btn-scoreboard" title="Clasificación" aria-label="Clasificación">🏆<span class="bb-label"> Clasificación</span></button>
       <button id="btn-effects" title="Efectos del fondo (E)" aria-pressed="true" aria-label="Efectos del fondo">✨<span class="bb-label"> Efectos: ON</span></button>
       <button id="btn-music" title="Música (M)" aria-pressed="true" aria-label="Música procedural">🎵<span class="bb-label"> Música: ON</span></button>
       <button id="btn-mode" title="Modo de controles (teclado o táctil)" aria-label="Modo de controles">⚙️<span class="bb-label"> Controles</span></button>
@@ -197,6 +208,30 @@
       <div id="tc-buttons">
         <button id="tc-hold" type="button" class="tc-btn tc-small" aria-label="Reserva">HOLD</button>
         <button id="tc-drop" type="button" class="tc-btn" aria-label="Caída instantánea">⇊</button>
+      </div>
+    </div>
+
+    <!-- Clasificación global, separada por modo (Tradicional / Caos) -->
+    <div id="scoreboard-overlay" class="hidden-overlay" role="dialog" aria-modal="true" aria-labelledby="scoreboard-title">
+      <div class="card scoreboard-card">
+        <h2 id="scoreboard-title">CLASIFICACIÓN</h2>
+        <p class="sb-sub">Mejores partidas · solo nivel inicial 1</p>
+        <div id="sb-tabs" role="tablist" aria-label="Modo de juego">
+          <button id="sb-tab-classic" type="button" class="sb-tab active" role="tab" aria-selected="true">Tradicional</button>
+          <button id="sb-tab-chaos" type="button" class="sb-tab" role="tab" aria-selected="false">Caos</button>
+        </div>
+        <div id="sb-board" role="tabpanel" aria-live="polite">
+          <div class="sb-head" aria-hidden="true">
+            <span>#</span><span>Jugador</span><span>Puntos</span><span>Nivel</span><span>Líneas</span><span>Fecha</span>
+          </div>
+          <ol id="sb-list"></ol>
+          <p id="sb-status" class="sb-status" role="status" aria-live="polite"></p>
+          <p id="sb-me" class="sb-me"></p>
+        </div>
+        <div class="btn-row">
+          <button id="btn-sb-refresh" class="ghost" type="button">↻ Actualizar</button>
+          <button id="btn-sb-close" type="button">✔ Cerrar</button>
+        </div>
       </div>
     </div>
 

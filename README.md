@@ -26,9 +26,22 @@ npm install
 npm run dev      # local: http://localhost:5173 · LAN: http://<tu-IP>:5173
 ```
 
+La clasificación necesita el API (Vercel Function) y una base Upstash: en local se
+levantan en dos terminales y Vite hace proxy de `/api` al puerto 3000.
+
 ```bash
-npm test         # tests de lógica (vitest 5, 167 tests)
-npm run build    # type-check (tsc 7 nativo) + bundle Rolldown/Oxc
+npx vercel link          # una sola vez, para leer el proyecto y las env vars
+cp .env.example .env.local   # o `npx vercel env pull .env.local`
+npm run dev:api          # API en http://localhost:3000
+npm run dev              # juego en http://localhost:5173 (proxy /api)
+```
+
+Sin el API levantado el juego funciona igual: el ranking muestra un aviso de
+conexión y el envío de puntaje se puede reintentar.
+
+```bash
+npm test         # tests de lógica (vitest 5, 195 tests)
+npm run build    # type-check (tsc 7 nativo) + type-check del API + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
 npm run shots    # (opcional) regenera las capturas del README (ver tools/screenshots.mjs)
@@ -293,6 +306,65 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
 - **Analítica en Vercel**: `@vercel/analytics` + `@vercel/speed-insights` inyectados
   desde `src/analytics.ts` (`mode: 'auto'`: solo envía datos en producción; en local
   loguea en consola).
+- **Clasificación sin dependencias extra**: las reglas de validación viven en
+  `src/leaderboard/rules.ts` y son la MISMA función en el navegador y en el servidor;
+  el almacén habla con Upstash por su API REST con `fetch` (sin SDK) y un único
+  handler `api/scores.ts` atiende `GET` y `POST`. Los tableros de Tradicional y Caos
+  son ZSET independientes: nunca se mezclan.
+
+## Clasificación (scoreboard + API)
+
+La tabla guarda las **mejores partidas del modo Tradicional y del modo Caos por
+separado**. El panel muestra las 50 primeras (el almacén conserva 200 por modo) e
+incluye tu mejor puesto. El apodo se recuerda en `localStorage`; no hay cuentas,
+emails ni cookies.
+
+### Reglas de entrada
+
+- **Solo partidas empezadas en el nivel 1.** El puntaje se multiplica por el nivel
+  (`LINE_POINTS[n] * level`), así que mezclar niveles iniciales haría el ranking
+  injusto; al terminar se explica y se ofrece reiniciar desde el nivel 1.
+- Se envían de forma **explícita** al pulsar `🏆 Guardar puntaje` (nunca solas).
+- Duración mínima 5 s y máxima 6 h; el apodo admite 2–16 caracteres (letras,
+  números, espacios, `. _ - ·`) y pasa un filtro básico de nombres.
+- El servidor valida de nuevo todo (esquema, coherencia puntos/duración, modo,
+  nivel) y aplica **rate limit por IP hasheada**: 12 envíos/hora y 60 lecturas/minuto.
+  Cada `runId` se acepta una sola vez (idempotencia ante reintentos).
+
+### API
+
+Base: `/api/scores` (mismo origen que el juego; JSON, `Cache-Control: no-store`).
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/scores?mode=classic\|chaos&limit=20&playerId=<uuid>` | Tablero del modo + `me` opcional |
+| `POST` | `/api/scores` | Guarda una partida terminada |
+
+```json
+{
+  "runId": "uuid-v4",
+  "playerId": "uuid-v4",
+  "nickname": "David",
+  "mode": "classic",
+  "score": 152340,
+  "level": 12,
+  "lines": 84,
+  "startLevel": 1,
+  "durationMs": 512000,
+  "seed": 123456789
+}
+```
+
+Respuesta `201`: `{ ranked, rank, entry, personalBest: { score, rank, improved }, total }`.
+Errores con código estable: `invalid_field`, `invalid_nickname`, `nickname_blocked`,
+`start_level_not_ranked`, `implausible_score`, `duplicate_run` (409),
+`rate_limited` (429) y `storage_unavailable` (503).
+
+**Límite honesto**: la puntuación se calcula en el cliente y se puede falsificar con
+DevTools. La validación y el rate limit frenan abusos triviales, no a un tramposo
+decidido; la verificación real exigiría reejecutar la partida en el servidor (el modo
+Tradicional usa `Math.random`, no es reproducible). Si el abuso aparece, el siguiente
+paso previsto es un ticket de partida firmado con HMAC al empezar.
 
 ## Decisiones visuales
 
@@ -321,6 +393,17 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
 
 - **Framework preset**: Vite (auto-detectado). Build `npm run build`, output `dist/`.
 - **Node 22.x** en el proyecto (ver `engines` en `package.json`).
+- **Un solo proyecto**: el juego estático y el API conviven en el mismo deploy. Vercel
+  detecta la carpeta `api/` y publica `api/scores.ts` como Vercel Function (Node 22),
+  así que el navegador llama a `/api/scores` en el mismo origen (sin CORS).
+- **Base de datos**: crea una base gratuita en [Upstash Redis](https://console.upstash.com)
+  (plan Free: 500.000 comandos/mes, 250 MB, 1 base) y copia su **REST URL** y
+  **REST Token**. Añádelos en Vercel → *Project → Settings → Environment Variables*
+  como `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN` para Production, Preview
+  y Development; después redeploy.
+- **Coste esperado**: una partida enviada usa ~10 comandos y cada visita al ranking
+  ~5; el plan gratuito de Vercel (1M invocaciones/mes) y el de Upstash sobran para un
+  proyecto personal.
 - No hace falta `vercel.json`; si despliegas por CLI, basta `vercel` desde la raíz.
 - **Web Analytics + Speed Insights** se inyectan automáticamente al cargar la app.
   Actívalos en el dashboard del proyecto en Vercel (Analytics → *Enable*) para

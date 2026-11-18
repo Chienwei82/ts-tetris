@@ -19,7 +19,9 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "dev:api": "npx vercel dev --listen 3000",
+    "build": "tsc --noEmit && tsc -p tsconfig.api.json --noEmit && vite build",
+    "typecheck:api": "tsc -p tsconfig.api.json --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -32,7 +34,9 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@types/node": "^24.19.2",
     "@types/three": "^0.186.0",
+    "@vercel/node": "^5.10.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"
