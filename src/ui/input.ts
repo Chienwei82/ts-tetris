@@ -52,12 +52,10 @@ export class InputController {
   }
   private onKeyDown(e: KeyboardEvent): void {
     if (!this.enabled) return;
-    // Let focused form controls (start-level slider) keep their own arrow/space handling.
+    // Los controles de formulario (nivel inicial, apodo…) conservan TODO el
+    // teclado: escribir un nombre no debe mover piezas ni reiniciar la partida.
     const target = e.target;
-    if ((target instanceof HTMLInputElement || target instanceof HTMLSelectElement) &&
-        (e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'ArrowDown' || e.code === 'ArrowUp' || e.code === 'Space')) {
-      return;
-    }
+    if (target instanceof HTMLElement && target.closest('input, select, textarea, [contenteditable="true"]') !== null) return;
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight' || e.code === 'ArrowDown' || e.code === 'Space') e.preventDefault();
     const a = this.actions;
     switch (e.code) {
