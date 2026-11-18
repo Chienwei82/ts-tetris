@@ -29,6 +29,9 @@ lerna-debug.log*
 .env.*
 !.env.example
 
+# Enlace local al proyecto de Vercel (lo crea `vercel link`)
+.vercel/
+
 # Editor / sistema operativo
 .DS_Store
 Thumbs.db
