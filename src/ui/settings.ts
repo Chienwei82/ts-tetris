@@ -4,7 +4,6 @@ import type { FxQuality } from '../render/fx/fxQuality.js';
 const STORAGE_KEY = 'tetris-3d:fx';
 const MODE_KEY = 'tetris-3d:controls';
 const MUSIC_KEY = 'tetris-3d:music';
-const DEBRIS_CLASSIC_KEY = 'tetris-3d:debris-classic';
 const FX_QUALITY_KEY = 'tetris-3d:fx-quality';
 const CHAOS_LIGHTNING_KEY = 'tetris-3d:chaos-lightning';
 const CHAOS_HAIL_KEY = 'tetris-3d:chaos-hail';
@@ -74,14 +73,6 @@ export function saveMusicGenre(genre: MusicGenre): void {
 
 /* El modo de juego NO se persiste: cada arranque usa Tradicional por defecto y
  * el jugador elige Caos solo para la partida que está a punto de empezar. */
-
-/** Escombros también en Tradicional (por defecto solo en Caos). */
-export function loadDebrisClassic(): boolean {
-  try { return window.localStorage.getItem(DEBRIS_CLASSIC_KEY) === '1'; } catch { return false; }
-}
-export function saveDebrisClassic(on: boolean): void {
-  try { window.localStorage.setItem(DEBRIS_CLASSIC_KEY, on ? '1' : '0'); } catch { /* ignore */ }
-}
 
 /** Calidad de efectos guardada; usa la del dispositivo como fallback. */
 export function loadFxQuality(fallback: FxQuality): FxQuality {

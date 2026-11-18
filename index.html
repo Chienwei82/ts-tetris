@@ -65,6 +65,8 @@
     <div id="overlay">
       <div class="card">
         <h2 id="overlay-title">TETRIS 3D</h2>
+        <!-- Acceso destacado al ranking, justo bajo el título -->
+        <button id="btn-overlay-scoreboard" class="cta-top" type="button">🏆 Top de Puntajes</button>
         <p id="overlay-sub">Pulsa <span class="key">Enter</span> o haz clic para jugar</p>
         <p id="overlay-stats"></p>
         <form id="score-submit" class="score-submit hidden" autocomplete="off" novalidate>
@@ -87,10 +89,6 @@
             <input id="level-range" type="range" min="1" max="20" step="1" value="1" />
             <output id="level-range-out">1 · ☀️ Pradera</output>
           </div>
-          <label class="check-row" for="debris-classic">
-            <input type="checkbox" id="debris-classic" />
-            <span>🧱 Escombros también en Tradicional</span>
-          </label>
           <label class="check-row" for="chaos-lightning">
             <input type="checkbox" id="chaos-lightning" />
             <span>⚡ Relámpagos en Caos</span>
@@ -99,7 +97,7 @@
             <input type="checkbox" id="chaos-hail" />
             <span>🌨️ Granizo en Caos</span>
           </label>
-          <p class="option-hint">En Caos están activos por defecto y además caen tormentas (viento, lluvia, relámpagos y granizo). La calidad se puede ajustar abajo.</p>
+          <p class="option-hint">Los relámpagos, el granizo y los escombros son exclusivos del modo Caos, donde además caen tormentas de viento y lluvia. La calidad se puede ajustar abajo.</p>
           <div class="quality-row">
             <label for="fx-quality">Calidad de efectos</label>
             <select id="fx-quality">
@@ -112,7 +110,6 @@
         <div class="btn-row">
           <button id="btn-start">▶ Jugar</button>
           <button id="btn-restart" class="ghost">↻ Reiniciar</button>
-          <button id="btn-overlay-scoreboard" class="ghost" type="button">🏆 Clasificación</button>
         </div>
         <p class="hint">Sube de nivel cada 10 líneas o 45 s. Cada 2 niveles cambia el escenario y el clima.<br>Pulsa <span class="key">H</span> para ver la ayuda completa.</p>
       </div>
@@ -186,7 +183,7 @@
     <div id="bottom-bar">
       <button id="btn-help" title="Ayuda (H)" aria-label="Ayuda">❓<span class="bb-label"> Ayuda</span></button>
       <button id="btn-pause" title="Pausa (P)" aria-label="Pausa">⏸<span class="bb-label"> Pausa</span></button>
-      <button id="btn-scoreboard" title="Clasificación" aria-label="Clasificación">🏆<span class="bb-label"> Clasificación</span></button>
+      <button id="btn-scoreboard" title="Top de Puntajes" aria-label="Top de Puntajes">🏆<span class="bb-label"> Top</span></button>
       <button id="btn-effects" title="Efectos del fondo (E)" aria-pressed="true" aria-label="Efectos del fondo">✨<span class="bb-label"> Efectos: ON</span></button>
       <button id="btn-music" title="Música (M)" aria-pressed="true" aria-label="Música procedural">🎵<span class="bb-label"> Música: ON</span></button>
       <button id="btn-mode" title="Modo de controles (teclado o táctil)" aria-label="Modo de controles">⚙️<span class="bb-label"> Controles</span></button>
@@ -214,7 +211,7 @@
     <!-- Clasificación global, separada por modo (Tradicional / Caos) -->
     <div id="scoreboard-overlay" class="hidden-overlay" role="dialog" aria-modal="true" aria-labelledby="scoreboard-title">
       <div class="card scoreboard-card">
-        <h2 id="scoreboard-title">CLASIFICACIÓN</h2>
+        <h2 id="scoreboard-title">TOP DE PUNTAJES</h2>
         <p class="sb-sub">Mejores partidas · solo nivel inicial 1</p>
         <div id="sb-tabs" role="tablist" aria-label="Modo de juego">
           <button id="sb-tab-classic" type="button" class="sb-tab active" role="tab" aria-selected="true">Tradicional</button>

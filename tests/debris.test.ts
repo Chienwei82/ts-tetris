@@ -21,21 +21,24 @@ function newSim(capacity: number, maxActive: number): DebrisSimulation {
 }
 
 describe('debrisActive', () => {
-  const base = { effectsOn: true, reducedMotion: false, classicOptIn: false };
+  const base = { effectsOn: true, reducedMotion: false };
 
-  it('activa los escombros por defecto solo en Caos', () => {
+  it('activa los escombros solo en Caos', () => {
     expect(debrisActive({ ...base, mode: 'chaos' })).toBe(true);
     expect(debrisActive({ ...base, mode: 'classic' })).toBe(false);
-  });
-
-  it('permite activarlos en Tradicional con opt-in', () => {
-    expect(debrisActive({ ...base, mode: 'classic', classicOptIn: true })).toBe(true);
   });
 
   it('nunca los activa con efectos apagados o movimiento reducido', () => {
     expect(debrisActive({ ...base, mode: 'chaos', effectsOn: false })).toBe(false);
     expect(debrisActive({ ...base, mode: 'chaos', reducedMotion: true })).toBe(false);
-    expect(debrisActive({ ...base, mode: 'classic', classicOptIn: true, reducedMotion: true })).toBe(false);
+  });
+
+  it('Tradicional nunca lanza escombros aunque los efectos estén activos', () => {
+    for (const effectsOn of [true, false]) {
+      for (const reducedMotion of [true, false]) {
+        expect(debrisActive({ mode: 'classic', effectsOn, reducedMotion })).toBe(false);
+      }
+    }
   });
 });
 

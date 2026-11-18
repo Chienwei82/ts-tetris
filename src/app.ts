@@ -37,7 +37,7 @@ import { InputManager } from './ui/inputManager.js';
 import { ModeSelect } from './ui/modeSelect.js';
 import { HUD } from './ui/hud.js';
 import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
-import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, loadDebrisClassic, loadFxQuality, loadChaosLightning, loadChaosHail, prefersReducedMotion, saveEffectsEnabled, saveMusicEnabled, saveMusicGenre, saveDebrisClassic, saveFxQuality, saveChaosLightning, saveChaosHail } from './ui/settings.js';
+import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, loadFxQuality, loadChaosLightning, loadChaosHail, prefersReducedMotion, saveEffectsEnabled, saveMusicEnabled, saveMusicGenre, saveFxQuality, saveChaosLightning, saveChaosHail } from './ui/settings.js';
 import { randomSeed } from './game/rng.js';
 import { MusicMenu } from './ui/musicMenu.js';
 import { Scoreboard } from './ui/scoreboard.js';
@@ -101,7 +101,6 @@ export class GameApp {
   private gameMode: GameMode;
   private chaosSeed: number;
   private fxQuality: FxQuality;
-  private debrisInClassic: boolean;
   private chaosLightningOn: boolean;
   private chaosHailOn: boolean;
   private debrisOn = false;
@@ -180,7 +179,6 @@ export class GameApp {
     this.fxQuality = loadFxQuality(fallbackQuality);
     this.debris = new DebrisSystem(scene, { quality: this.fxQuality });
 
-    this.debrisInClassic = loadDebrisClassic();
     this.chaosLightningOn = loadChaosLightning();
     this.chaosHailOn = loadChaosHail();
 
@@ -284,21 +282,14 @@ export class GameApp {
     if (firstTheme) this.hud.setStageChip(firstTheme.icon + ' ' + firstTheme.name);
     this.refreshPreviews();
 
-    const debrisClassicCheck = el<HTMLInputElement>('debris-classic');
     const chaosLightningCheck = el<HTMLInputElement>('chaos-lightning');
     const chaosHailCheck = el<HTMLInputElement>('chaos-hail');
     const fxQualitySelect = el<HTMLSelectElement>('fx-quality');
 
-    debrisClassicCheck.checked = this.debrisInClassic;
     chaosLightningCheck.checked = this.chaosLightningOn;
     chaosHailCheck.checked = this.chaosHailOn;
     fxQualitySelect.value = this.fxQuality;
 
-    debrisClassicCheck.addEventListener('change', () => {
-      this.debrisInClassic = debrisClassicCheck.checked;
-      saveDebrisClassic(this.debrisInClassic);
-      this.applyDebrisSettings();
-    });
     chaosLightningCheck.addEventListener('change', () => {
       this.chaosLightningOn = chaosLightningCheck.checked;
       saveChaosLightning(this.chaosLightningOn);
@@ -584,7 +575,6 @@ export class GameApp {
     const inRun = this.engine.phase === 'playing' || this.engine.phase === 'paused' || this.engine.phase === 'gameover';
     const active = debrisActive({
       mode: inRun ? this.gameMode : this.currentMode(),
-      classicOptIn: this.debrisInClassic,
       effectsOn: this.effectsOn,
       reducedMotion: prefersReducedMotion()
     });
