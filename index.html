@@ -220,7 +220,11 @@
     <div id="scoreboard-overlay" class="hidden-overlay" role="dialog" aria-modal="true" aria-labelledby="scoreboard-title">
       <div class="card scoreboard-card">
         <h2 id="scoreboard-title">TOP DE PUNTAJES</h2>
-        <p class="sb-sub">Mejores partidas en Tradicional · solo nivel inicial 1</p>
+        <p class="sb-sub">Mejores partidas por modo · solo nivel inicial 1</p>
+        <div id="sb-tabs" role="tablist" aria-label="Modo de juego">
+          <button id="sb-tab-classic" type="button" class="sb-tab active" role="tab" aria-selected="true">Tradicional</button>
+          <button id="sb-tab-chaos" type="button" class="sb-tab" role="tab" aria-selected="false">Caos</button>
+        </div>
         <div id="sb-board" role="region" aria-label="Tabla de puntajes" aria-live="polite">
           <div class="sb-head" aria-hidden="true">
             <span>#</span><span>Jugador</span><span>Puntos</span><span>Nivel</span><span>Líneas</span><span>Fecha</span>

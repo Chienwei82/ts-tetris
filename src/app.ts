@@ -47,7 +47,7 @@ import { LeaderboardError, submitScore } from './leaderboard/client.js';
 import { checkLeaderboardAvailability, describeLeaderboardError, OFFLINE_MESSAGE } from './leaderboard/availability.js';
 import { nicknameProblem, sanitizeNickname } from './leaderboard/rules.js';
 import { ensurePlayerId, loadPlayerName, randomUuid, savePlayerName } from './leaderboard/player.js';
-import { isRankedMode, MAX_DURATION_MS, MIN_DURATION_MS, RANKED_MODE } from './leaderboard/types.js';
+import { MAX_DURATION_MS, MIN_DURATION_MS } from './leaderboard/types.js';
 import type { ScoreSubmission } from './leaderboard/types.js';
 import { initAnalytics } from './analytics.js';
 
@@ -361,7 +361,7 @@ export class GameApp {
         this.syncMusicPause();
         this.syncLeaderboardWarning();
       }
-      this.scoreboard.openAt();
+      this.scoreboard.openAt(this.engine.phase === 'gameover' ? this.engine.mode : this.currentMode());
     };
 
     btnScoreboard.addEventListener('click', () => { btnScoreboard.blur(); this.sound.unlock(); openScoreboard(); });
@@ -417,7 +417,7 @@ export class GameApp {
       this.applyLeaderboardAvailability(false, OFFLINE_MESSAGE);
       return;
     }
-    const result = await checkLeaderboardAvailability(RANKED_MODE);
+    const result = await checkLeaderboardAvailability(this.currentMode());
     this.applyLeaderboardAvailability(result.available, result.message);
   }
 
@@ -706,8 +706,7 @@ export class GameApp {
     const send = el<HTMLButtonElement>('btn-score-send');
     const status = el<HTMLElement>('score-submit-status');
     const tooShort = this.runPlayedMs < MIN_DURATION_MS;
-    const rankedMode = isRankedMode(this.engine.mode);
-    const eligible = rankedMode && this.engine.score > 0 && this.runStartLevel === 1 && !tooShort;
+    const eligible = this.engine.score > 0 && this.runStartLevel === 1 && !tooShort;
 
     form.classList.remove('hidden');
     status.textContent = '';
@@ -718,9 +717,7 @@ export class GameApp {
     input.value = loadPlayerName();
     this.scoreSubmitting = false;
 
-    if (!rankedMode) {
-      note.textContent = 'El modo Caos no entra en la clasificación: el Top de Puntajes es solo de Tradicional.';
-    } else if (this.runStartLevel !== 1) {
+    if (this.runStartLevel !== 1) {
       note.textContent = 'Solo las partidas empezadas en el nivel 1 entran en la clasificación. Reinicia desde el nivel 1 para competir.';
     } else if (this.engine.score === 0) {
       note.textContent = 'No has sumado puntos en esta partida: no hay marca que guardar.';
@@ -750,7 +747,7 @@ export class GameApp {
   }
 
   private async submitRunScore(): Promise<void> {
-    if (this.scoreSubmitting || !isRankedMode(this.engine.mode)) return;
+    if (this.scoreSubmitting) return;
     const input = el<HTMLInputElement>('score-nickname');
     const send = el<HTMLButtonElement>('btn-score-send');
     const status = el<HTMLElement>('score-submit-status');

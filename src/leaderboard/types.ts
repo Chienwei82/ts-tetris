@@ -10,9 +10,6 @@ export type { GameMode };
 
 /** Modos que acepta el API (compatibilidad histórica con Caos). */
 export const LEADERBOARD_MODES: readonly GameMode[] = ['classic', 'chaos'];
-/** Único modo visible y enviable desde el juego (el Top es solo Tradicional). */
-export const RANKED_MODE: GameMode = 'classic';
-export function isRankedMode(mode: GameMode): boolean { return mode === RANKED_MODE; }
 
 /** Entradas que se conservan por modo en el almacén (las mejores). */
 export const MAX_ENTRIES_KEPT = 200;

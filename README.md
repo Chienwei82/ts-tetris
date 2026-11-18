@@ -244,11 +244,11 @@ src/
       forest.ts · cityNight.ts · space.ts · deepSea.ts  Escenografías y looks de cada escenario
     materials.ts    Texturas procedurales (papel, cartón, cuadrícula, cinta) + toon + tinta
   ui/         Entrada con DAS/ARR, gestos de arrastre de la pieza, HUD, previews 2D, preferencias
-    scoreboard.ts      Overlay del Top (solo Tradicional), estados de carga/error/vacío
+    scoreboard.ts      Overlay del Top con pestañas Tradicional/Caos, estados de carga/error/vacío
     leaderboardStatus.ts Aviso de API caída en inicio/pausa (nunca oculta el botón)
     levelBannerTheme.ts Fondo/animación del cartel para cada nivel (puro)
   leaderboard/ Compartido cliente/servidor (sin DOM ni Node):
-    types.ts      DTOs, cotas, RANKED_MODE/isRankedMode
+    types.ts      DTOs, cotas y LEADERBOARD_MODES (classic/chaos)
     rules.ts      Sanitizado y validación del envío (solo nivel 1)
     client.ts     fetch con timeout, errores tipados y validación de respuesta
     availability.ts Sonda de disponibilidad y mensajes de caída
@@ -339,24 +339,23 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
 - **Clasificación sin dependencias extra**: las reglas de validación viven en
   `src/leaderboard/rules.ts` y son la MISMA función en el navegador y en el servidor;
   el almacén habla con Upstash por su API REST con `fetch` (sin SDK) y un único
-  handler `api/scores.ts` atiende `GET` y `POST`. El juego consulta y envía **solo
-  Tradicional** (`RANKED_MODE='classic'`); el API conserva el ZSET de Caos por
-  compatibilidad, pero la UI no lo muestra.
+  handler `api/scores.ts` atiende `GET` y `POST`. **Tradicional y Caos tienen
+  tableros independientes** (un ZSET por modo): el panel muestra una pestaña para
+  cada uno y el envío va al tablero del modo jugado.
 
 ## Top de Puntajes (clasificación + API)
 
 El botón **🏆 Top de Puntajes**, destacado justo bajo el título de la pantalla de
-inicio, abre la tabla. Desde esta versión la tabla es **solo de Tradicional**: el
-modo Caos se excluye de la vista y del envío (el API conserva compatibilidad con
-`mode=chaos` por si se quiere reactivar). El panel muestra las 50 primeras (el
-almacén conserva 200) e incluye tu mejor puesto. El apodo se recuerda en
+inicio, abre la tabla. Tiene **pestañas independientes para Tradicional y Caos**:
+cada modo guarda y consulta su propio tablero y nunca se mezclan. El panel muestra
+las 50 primeras de cada modo (el almacén conserva 200) e incluye tu mejor puesto. El apodo se recuerda en
 `localStorage`; no hay cuentas, emails ni cookies. Si el API no responde, en la
 pantalla de inicio y en pausa aparece un **aviso** bajo el botón; el botón nunca
 se oculta y el juego sigue funcionando igual.
 
 ### Reglas de entrada
 
-- **Solo Tradicional y partidas empezadas en el nivel 1.** El puntaje se multiplica por el nivel
+- **Partidas empezadas en el nivel 1, en Tradicional o Caos.** El puntaje se multiplica por el nivel
   (`LINE_POINTS[n] * level`), así que mezclar niveles iniciales haría el ranking
   injusto; al terminar se explica y se ofrece reiniciar desde el nivel 1.
 - Se envían de forma **explícita** al pulsar `🏆 Guardar puntaje` (nunca solas).
@@ -375,8 +374,8 @@ Base: `/api/scores` (mismo origen que el juego; JSON, `Cache-Control: no-store`)
 | `GET` | `/api/scores?mode=classic\|chaos&limit=20&playerId=<uuid>` | Tablero del modo + `me` opcional |
 | `POST` | `/api/scores` | Guarda una partida terminada |
 
-El juego solo usa `mode=classic`; `mode=chaos` sigue aceptado por el API para no
-romper datos antiguos, pero no se muestra en el Top ni se envía desde la UI actual.
+`mode` selecciona el tablero (Tradicional o Caos); el juego consulta y envía el
+modo que se está jugando.
 
 ```json
 {
