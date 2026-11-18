@@ -11,3 +11,5 @@ export { scenarioForLevel } from './levelMapping.js';
 export type { ScenarioLevelInfo } from './levelMapping.js';
 export type { ScenarioManagerOptions } from './scenarioManager.js';
 export { ScenarioManager } from './scenarioManager.js';
+export { LEVELS_PER_SCENARIO, SCENARIO_CATALOG, SCENARIO_META, scenarioMetaForLevel } from './scenarioCatalog.js';
+export type { ScenarioId, ScenarioMeta } from './scenarioCatalog.js';

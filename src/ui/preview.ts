@@ -81,9 +81,10 @@ function drawPieceIn(ctx: CanvasRenderingContext2D, kind: PieceKind | null, rect
 const SPECIAL_BADGE: Record<string, { color: string; label: string }> = {
   bomb: { color: '#e04e39', label: '💣 BOMBA · 2 FILAS' },
   bolt: { color: '#ffd23f', label: '⚡ RAYO · 4 BLOQUES' },
-  drill: { color: '#f2953a', label: '🔩 TALADRO · 2 FILAS' }
+  drill: { color: '#f2953a', label: '🔩 TALADRO · 2 FILAS' },
+  chatarra: { color: '#9d8a6b', label: '🧱 CHATARRA · 4 BLOQUES' }
 };
-const SPECIAL_EMOJI: Record<string, string> = { bomb: '💣', bolt: '⚡', drill: '🔩' };
+const SPECIAL_EMOJI: Record<string, string> = { bomb: '💣', bolt: '⚡', drill: '🔩', chatarra: '🧱' };
 /** Chip con el nombre/emoji del especial sobre la primera ranura del preview. */
 function drawSpecialBadge(ctx: CanvasRenderingContext2D, rect: Rect, special: SpecialKind): void {
   const info = SPECIAL_BADGE[special];

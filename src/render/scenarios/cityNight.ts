@@ -3,6 +3,7 @@ import type { SceneParts } from '../scene.js';
 import type { Scenario, ScenarioLook, ScenarioResources } from './scenario.js';
 import { scenarioRegistry } from './scenarioRegistry.js';
 import { disposeResources } from './scenario.js';
+import { SCENARIO_META } from './scenarioCatalog.js';
 
 const SKY: [number, number, number, number] = [0x050a14, 0x141e30, 0x2a3a5c, 0x4a6a8a];
 const LOOK: ScenarioLook = {
@@ -40,10 +41,7 @@ function makeBuilding(w: number, h: number, z: number, baseY: number, color: num
 }
 
 export const cityNight: Scenario = {
-  id: 'cityNight',
-  name: 'Ciudad nocturna',
-  icon: '🌃',
-  minLevel: 5,
+  ...SCENARIO_META.cityNight,
   look: LOOK,
 
   build(parts: SceneParts): void {

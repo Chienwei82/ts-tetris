@@ -49,6 +49,10 @@ npm run shots    # (opcional) regenera las capturas del README (ver tools/screen
 
 ## Controles
 
+La **ayuda inicial** (la que se abre al arrancar) y el panel lateral están centrados en **móvil**; el teclado sigue funcionando igual y sus atajos viven en un apartado plegable de la propia ayuda.
+
+### Teclado (escritorio)
+
 | Tecla | Acción |
 |---|---|
 | ← / → | Mover pieza (con auto-repetición DAS/ARR) |
@@ -108,18 +112,23 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
 - **Selector de nivel inicial (1–20)** en la pantalla de inicio; el nivel
   elegido también fija el escenario de arranque.
 - **Modo Caos** (se elige en la pantalla de inicio, junto al nivel): el juego
-  clásico con **powerups literales**. Cada cierto tiempo cae un objeto 💣 ⚡ 🔩
+  clásico con **powerups literales**. Cada cierto tiempo cae un objeto 💣 ⚡ 🔩 🧱
   en vez de una pieza (se anuncia con badge en el preview y con un chip
-  coloreado por tipo en el HUD) y, al bloquearse, aplica su efecto y desaparece
-  sin dejar bloques:
+  coloreado por tipo en el HUD). Al bloquearse aplica su efecto: los powerups
+  ventajosos desaparecen sin dejar bloques y la chatarra deja basura:
   - 💣 **Bomba**: revienta 2 filas (la de aterrizaje y la contigua).
   - ⚡ **Rayo**: rompe los 4 bloques más altos bajo su base.
   - 🔩 **Taladro**: se hunde 2 filas destruyendo lo que tiene debajo (una sola
     vez por pieza; viaja con la reserva).
+  - 🧱 **Chatarra** (desventaja): no da ventaja; al bloquearse deja sus 4 celdas
+    convertidas en **bloques de basura gris** que ocupan tablero hasta que se
+    limpie su línea. También viaja con la reserva y tiene su propia guía de
+    impacto y badge en el preview.
   La secuencia es **determinista por semilla** (misma semilla ⇒ mismos
   powerups). Al sostener un powerup el tablero muestra su **zona de impacto**
-  (las 2 filas de la bomba, los bloques del rayo, las celdas del taladro) con
-  una guía pulsante, y el objeto flota y gira sobre la pieza fantasma.
+  (las 2 filas de la bomba, los bloques del rayo, las celdas del taladro o la
+  huella de la chatarra) con una guía pulsante, y el objeto flota y gira sobre
+  la pieza fantasma.
   **Tradicional es siempre el modo por defecto al arrancar**: elegir Caos vale
   solo para la partida que se empieza y no se recuerda entre sesiones.
 - **Tormentas del Caos** (solo en Caos): a los 18 s llega la primera, avisada
@@ -157,17 +166,21 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   tiñen a juego, el chip del HUD muestra el escenario actual y al cambiar se
   libera su memoria de GPU. El clima procedural (hojas, lluvia, nieve,
   estrellas, luciérnagas, fugaces) y las tormentas del Caos se dibujan por
-  encima.
+  encima. Cada subida de nivel muestra un **cartel temático** con animación
+  propia del escenario que llega (sol de pradera, hojas de bosque, luces de
+  ciudad, órbita espacial o burbujas marinas).
 - **Toggle de efectos** (botón o tecla E): apaga clima, personajes, confeti y
   cambios de tema, dejando el fondo clásico congelado. Con efectos el panel del
   tablero es **translúcido** (el escenario se ve detrás de las piezas y las
   sombras se recortan contra él); sin ellos vuelve a ser sólido para ahorrar
   render. La preferencia se guarda en `localStorage` y arranca apagada si el
   sistema pide movimiento reducido.
-- **Escombros cosméticos** (exclusivos del modo Caos): cada celda eliminada se
-  convierte en un cubito con gravedad, rebote y giro propios que se desvanece en 1–2 s. El
-  sistema tiene pool fijo, recicla los cuerpos más antiguos al superar el
-  límite, usa un RNG de efectos independiente del motor y respeta la calidad
+- **Escombros cosméticos con terremoto** (exclusivos del modo Caos): cada celda
+  eliminada se convierte en un cubo de papel más grande, con más impulso, giro y
+  dispersión, que cae, rebota y se desvanece. Al limpiar líneas la cámara hace un
+  **terremoto** corto, el suelo levanta polvo y cada impacto de un cubo añade una
+  micro-sacudida, polvo y sonido. El sistema tiene pool fijo, recicla los cuerpos
+  más antiguos, usa un RNG de efectos independiente del motor y respeta la calidad
   baja/media/alta y `prefers-reduced-motion`. No altera el tablero ni las reglas.
 - **Música procedural adaptativa** (botón o tecla M): generada en vivo con la
   Web Audio API, sin ficheros. Escala dórica de La; cada semilla fija una
@@ -314,14 +327,17 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
 ## Top de Puntajes (clasificación + API)
 
 El botón **🏆 Top de Puntajes**, destacado justo bajo el título de la pantalla de
-inicio, abre la tabla. Guarda las **mejores partidas del modo Tradicional y del
-modo Caos por separado**. El panel muestra las 50 primeras (el almacén conserva
-200 por modo) e incluye tu mejor puesto. El apodo se recuerda en `localStorage`; no hay cuentas,
-emails ni cookies.
+inicio, abre la tabla. Desde esta versión la tabla es **solo de Tradicional**: el
+modo Caos se excluye de la vista y del envío (el API conserva compatibilidad con
+`mode=chaos` por si se quiere reactivar). El panel muestra las 50 primeras (el
+almacén conserva 200) e incluye tu mejor puesto. El apodo se recuerda en
+`localStorage`; no hay cuentas, emails ni cookies. Si el API no responde, en la
+pantalla de inicio y en pausa aparece un **aviso** bajo el botón; el botón nunca
+se oculta y el juego sigue funcionando igual.
 
 ### Reglas de entrada
 
-- **Solo partidas empezadas en el nivel 1.** El puntaje se multiplica por el nivel
+- **Solo Tradicional y partidas empezadas en el nivel 1.** El puntaje se multiplica por el nivel
   (`LINE_POINTS[n] * level`), así que mezclar niveles iniciales haría el ranking
   injusto; al terminar se explica y se ofrece reiniciar desde el nivel 1.
 - Se envían de forma **explícita** al pulsar `🏆 Guardar puntaje` (nunca solas).

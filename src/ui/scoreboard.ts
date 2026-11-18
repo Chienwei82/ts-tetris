@@ -1,10 +1,14 @@
 import { fetchLeaderboard, LeaderboardError } from '../leaderboard/client.js';
-import type { GameMode, LeaderboardResponse, ScoreEntry } from '../leaderboard/types.js';
+import { describeLeaderboardError } from '../leaderboard/availability.js';
+import { RANKED_MODE } from '../leaderboard/types.js';
+import type { LeaderboardResponse, ScoreEntry } from '../leaderboard/types.js';
 
 export interface ScoreboardOptions {
   root: HTMLElement;
   playerId: string;
   onOpenChange?: (open: boolean) => void;
+  /** Avisa al resto de la UI si el API responde (para el cartel de inicio/pausa). */
+  onAvailabilityChange?: (available: boolean, message: string) => void;
 }
 
 function element<T extends HTMLElement>(root: HTMLElement, id: string): T {
@@ -37,16 +41,15 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * Overlay del ranking. Las pestañas Tradicional y Caos consultan tableros
- * distintos y nunca se mezclan. Los fallos de red se muestran en el propio
- * panel: jugar nunca depende de esta vista.
+ * Overlay del ranking. Desde esta versión el Top es SOLO de Tradicional (el
+ * modo Caos se excluye de la tabla); las cargas del panel también informan de
+ * la disponibilidad del API para que inicio/pausa puedan avisar.
  */
 export class Scoreboard {
   private readonly root: HTMLElement;
   private readonly playerId: string;
   private readonly onOpenChange: (open: boolean) => void;
-  private readonly tabClassic: HTMLButtonElement;
-  private readonly tabChaos: HTMLButtonElement;
+  private readonly onAvailabilityChange: (available: boolean, message: string) => void;
   private readonly list: HTMLOListElement;
   private readonly statusEl: HTMLElement;
   private readonly meEl: HTMLElement;
@@ -54,7 +57,6 @@ export class Scoreboard {
   private readonly closeBtn: HTMLButtonElement;
   private readonly onKeyDown: (event: KeyboardEvent) => void;
 
-  private mode: GameMode = 'classic';
   private open = false;
   private requestSeq = 0;
 
@@ -62,16 +64,13 @@ export class Scoreboard {
     this.root = options.root;
     this.playerId = options.playerId;
     this.onOpenChange = options.onOpenChange ?? (() => {});
-    this.tabClassic = element<HTMLButtonElement>(this.root, 'sb-tab-classic');
-    this.tabChaos = element<HTMLButtonElement>(this.root, 'sb-tab-chaos');
+    this.onAvailabilityChange = options.onAvailabilityChange ?? (() => {});
     this.list = element<HTMLOListElement>(this.root, 'sb-list');
     this.statusEl = element<HTMLElement>(this.root, 'sb-status');
     this.meEl = element<HTMLElement>(this.root, 'sb-me');
     this.refreshBtn = element<HTMLButtonElement>(this.root, 'btn-sb-refresh');
     this.closeBtn = element<HTMLButtonElement>(this.root, 'btn-sb-close');
 
-    this.tabClassic.addEventListener('click', () => this.choose('classic'));
-    this.tabChaos.addEventListener('click', () => this.choose('chaos'));
     this.refreshBtn.addEventListener('click', () => { void this.load(); });
     this.closeBtn.addEventListener('click', () => this.close());
 
@@ -85,11 +84,9 @@ export class Scoreboard {
 
   isOpen(): boolean { return this.open; }
 
-  openAt(mode?: GameMode): void {
-    if (mode) this.mode = mode;
+  openAt(): void {
     this.open = true;
     this.root.classList.remove('hidden-overlay');
-    this.syncTabs();
     this.onOpenChange(true);
     void this.load();
   }
@@ -106,20 +103,6 @@ export class Scoreboard {
     window.removeEventListener('keydown', this.onKeyDown);
   }
 
-  private choose(mode: GameMode): void {
-    this.mode = mode;
-    this.syncTabs();
-    void this.load();
-  }
-
-  private syncTabs(): void {
-    const classic = this.mode === 'classic';
-    this.tabClassic.setAttribute('aria-selected', String(classic));
-    this.tabChaos.setAttribute('aria-selected', String(!classic));
-    this.tabClassic.classList.toggle('active', classic);
-    this.tabChaos.classList.toggle('active', !classic);
-  }
-
   private async load(): Promise<void> {
     const seq = ++this.requestSeq;
     this.list.replaceChildren();
@@ -127,11 +110,16 @@ export class Scoreboard {
     this.statusEl.textContent = 'Cargando clasificación…';
     this.statusEl.classList.remove('error');
     try {
-      const data = await fetchLeaderboard(this.mode, { playerId: this.playerId });
-      if (seq !== this.requestSeq || !this.open) return;
+      const data = await fetchLeaderboard(RANKED_MODE, { playerId: this.playerId });
+      if (seq !== this.requestSeq) return;
+      this.onAvailabilityChange(true, '');
+      if (!this.open) return;
       this.render(data);
     } catch (error) {
-      if (seq !== this.requestSeq || !this.open) return;
+      if (seq !== this.requestSeq) return;
+      const availability = describeLeaderboardError(error);
+      this.onAvailabilityChange(availability.available, availability.message);
+      if (!this.open) return;
       this.statusEl.textContent = errorMessage(error);
       this.statusEl.classList.add('error');
     }
@@ -141,7 +129,7 @@ export class Scoreboard {
     const rows = data.entries.map((entry, index) => this.renderRow(entry, index + 1, data));
     this.list.replaceChildren(...rows);
     if (data.entries.length === 0) {
-      this.statusEl.textContent = 'Aún no hay marcas en este modo. ¡Sé el primero!';
+      this.statusEl.textContent = 'Aún no hay marcas en Tradicional. ¡Sé el primero!';
     } else {
       this.statusEl.textContent = data.total + (data.total === 1 ? ' partida guardada' : ' partidas guardadas');
     }

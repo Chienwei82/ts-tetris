@@ -1,17 +1,17 @@
 import * as THREE from 'three';
-import { PIECE_COLORS } from '../../game/types.js';
+import { JUNK_COLOR, PIECE_COLORS } from '../../game/types.js';
 import type { PieceKind } from '../../game/types.js';
 import { toonGradient } from '../materials.js';
 import { DEBRIS_CAPACITY, DEBRIS_CONFIG, DEBRIS_QUALITY } from './debrisConfig.js';
 import { DebrisSimulation } from './debrisSimulation.js';
-import type { DebrisBody, DebrisOrigin, DebrisSpawnOptions } from './debrisSimulation.js';
+import type { DebrisBody, DebrisImpact, DebrisOrigin, DebrisSpawnOptions } from './debrisSimulation.js';
 import { createFxRandom } from './fxRandom.js';
 import type { FxRandom } from './fxRandom.js';
 import type { FxQuality } from './fxQuality.js';
 
 /** Celda eliminada del tablero, en coordenadas de mundo. */
 export interface DebrisCell {
-  kind: PieceKind;
+  kind: PieceKind | 'J';
   x: number;
   y: number;
 }
@@ -130,7 +130,7 @@ export class DebrisSystem {
     for (const cell of cells) {
       origin.x = cell.x;
       origin.y = cell.y;
-      origin.color = PIECE_COLORS[cell.kind];
+      origin.color = cell.kind === 'J' ? JUNK_COLOR : PIECE_COLORS[cell.kind];
       this.spawnOne(origin, options);
     }
     this.colorAttr.needsUpdate = true;
@@ -164,6 +164,11 @@ export class DebrisSystem {
     this.mesh.visible = false;
     this.wasActive = false;
   }
+
+  /** Impactos del último frame (posiciones reutilizadas, sin asignaciones). */
+  get impactCount(): number { return this.simulation.pendingImpacts; }
+  get impacts(): readonly DebrisImpact[] { return this.simulation.impacts; }
+  clearImpacts(): void { this.simulation.clearImpacts(); }
 
   update(dt: number): void {
     if (!this.enabled || this.paused) return;

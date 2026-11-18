@@ -19,6 +19,16 @@ export interface DebrisSpawnOptions {
   spread?: number;
   /** Escala visual del cubo (1 = tamaño configurado). */
   scale?: number;
+  /** Variación aleatoria de la escala (±valor) para que no parezcan clones. */
+  scaleJitter?: number;
+}
+
+/** Golpe de un escombro contra la plataforma (para polvo, sonido y micro-sacudida). */
+export interface DebrisImpact {
+  x: number;
+  y: number;
+  z: number;
+  strength: number;
 }
 
 /** Estado mutable de un cuerpo del pool. Nunca se asigna fuera de `spawn`. */
@@ -79,6 +89,9 @@ export class DebrisSimulation {
   private serial = 0;
   private accumulator = 0;
   private evicted = 0;
+  /** Impactos del último frame, reutilizados (sin asignaciones en el game loop). */
+  readonly impacts: DebrisImpact[] = Array.from({ length: 8 }, () => ({ x: 0, y: 0, z: 0, strength: 0 }));
+  private impactCount = 0;
 
   constructor(opts: DebrisSimulationOptions) {
     this.profile = opts.profile;
@@ -90,6 +103,10 @@ export class DebrisSimulation {
   get activeCount(): number { return this.active; }
   get evictedCount(): number { return this.evicted; }
   get currentProfile(): DebrisPhysicsProfile { return this.profile; }
+  get pendingImpacts(): number { return this.impactCount; }
+
+  /** El consumidor (app) llama después de leer `impacts`. */
+  clearImpacts(): void { this.impactCount = 0; }
 
   /** Cambia el preset de calidad y recorta los cuerpos que sobren. */
   setProfile(profile: DebrisPhysicsProfile): void {
@@ -129,6 +146,7 @@ export class DebrisSimulation {
   }
 
   clear(): void {
+    this.impactCount = 0;
     for (const body of this.bodies) {
       body.active = false;
       body.alpha = 0;
@@ -210,7 +228,8 @@ export class DebrisSimulation {
     body.sx = r.range(-p.spin, p.spin);
     body.sy = r.range(-p.spin, p.spin);
     body.sz = r.range(-p.spin, p.spin);
-    body.scale = options.scale ?? 1;
+    const jitter = Math.max(0, options.scaleJitter ?? 0);
+    body.scale = Math.max(0.2, (options.scale ?? 1) * (1 + (jitter > 0 ? r.range(-jitter, jitter) : 0)));
     body.alpha = 1;
     body.color = origin.color;
   }
@@ -233,6 +252,15 @@ export class DebrisSimulation {
       if (body.y <= restY) {
         body.y = restY;
         if (body.vy < 0) {
+          const hitSpeed = -body.vy;
+          if (hitSpeed >= DEBRIS_CONFIG.minBounceSpeed) {
+            const slot = this.impacts[this.impactCount % this.impacts.length];
+            if (slot) {
+              slot.x = body.x; slot.y = body.y; slot.z = body.z;
+              slot.strength = Math.min(1, hitSpeed / 8);
+              this.impactCount++;
+            }
+          }
           const bounce = -body.vy * p.restitution;
           body.vy = bounce >= DEBRIS_CONFIG.minBounceSpeed ? bounce : 0;
           body.vx *= p.friction;

@@ -3,6 +3,7 @@ import type { SceneParts } from '../scene.js';
 import type { Scenario, ScenarioLook, ScenarioResources } from './scenario.js';
 import { scenarioRegistry } from './scenarioRegistry.js';
 import { disposeResources } from './scenario.js';
+import { SCENARIO_META } from './scenarioCatalog.js';
 
 const SKY: [number, number, number, number] = [0x05050a, 0x1a1a40, 0x2a1f5e, 0x453a80];
 const LOOK: ScenarioLook = {
@@ -26,10 +27,7 @@ function makePlanet(radius: number, z: number, baseY: number, color: number): TH
 }
 
 export const space: Scenario = {
-  id: 'space',
-  name: 'Espacio',
-  icon: '🚀',
-  minLevel: 7,
+  ...SCENARIO_META.space,
   look: LOOK,
 
   build(parts: SceneParts): void {
