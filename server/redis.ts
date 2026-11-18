@@ -74,12 +74,19 @@ export function createRedisClient(options: RedisClientOptions): RedisClient {
   };
 }
 
-/** Lee la configuración del entorno y falla con un mensaje accionable. */
+/**
+ * Lee la configuración del entorno y falla con un mensaje accionable.
+ * Acepta los nombres propios de Upstash y los que inyecta la integración de
+ * Vercel KV (`KV_REST_API_*`), que apuntan a la misma base Upstash. Se exige el
+ * token de ESCRITURA: el de solo lectura no sirve para guardar puntajes.
+ */
 export function redisOptionsFromEnv(): { url: string; token: string } {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
   if (!url || !token) {
-    throw new RedisError('Faltan UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN.');
+    throw new RedisError(
+      'Faltan UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN (o KV_REST_API_URL / KV_REST_API_TOKEN).'
+    );
   }
   return { url, token };
 }

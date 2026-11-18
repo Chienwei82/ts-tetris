@@ -400,12 +400,16 @@ paso previsto es un ticket de partida firmado con HMAC al empezar.
   ser *Upstash for Redis*. Dos caminos:
   1. **Desde Vercel** (recomendado): *Storage → Marketplace Database Providers →
      **Upstash for Redis*** → plan **Free** → región `us-east-1` → **Connect Project**
-     con Production, Preview y Development. La integración inyecta sola
-     `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN`.
+     con Production, Preview y Development. Según la integración, inyecta
+     `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` o los nombres de Vercel KV
+     `KV_REST_API_URL`/`KV_REST_API_TOKEN`; el cliente de `server/redis.ts` acepta
+     **ambos** y usa siempre el token de escritura (`KV_REST_API_READ_ONLY_TOKEN`
+     no sirve para guardar).
   2. **A mano**: crea la base en [console.upstash.com](https://console.upstash.com)
      (Free: 500.000 comandos/mes, 250 MB, 1 base), copia su *REST URL* y *REST Token*
-     y pégalos en Vercel → *Project → Settings → Environment Variables* con esos dos
-     nombres para los tres entornos.
+     y pégalos en Vercel → *Project → Settings → Environment Variables* con los
+     nombres `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` (o los `KV_REST_API_*`)
+     para los tres entornos.
   Después, **redeploy** (las variables solo se aplican a despliegues nuevos).
   ⚠️ La integración **“Redis”** del Marketplace es **Redis Cloud (Redis Inc)**: da una
   cadena TCP `REDIS_URL="rediss://…"`, que este cliente REST **no** puede usar.
