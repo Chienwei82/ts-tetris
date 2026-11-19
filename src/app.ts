@@ -1036,6 +1036,9 @@ export class GameApp {
         this.sound.play('lock');
         this.shake.add(0.08);
         this.board.playLock(e.cells ?? [], kind);
+        // Evitar que matchByProximity empareje muelles de la pieza bloqueada
+        // con la nueva pieza al aparecer (causaba bloques desalineados).
+        this.board.resetActiveSprings();
         break;
       case 'clear': {
         const n = e.lines ?? 0;

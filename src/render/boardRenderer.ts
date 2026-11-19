@@ -485,6 +485,16 @@ export class BoardRenderer {
       if (!seenJunk.has(k)) { this.junkState.delete(k); junkChanged = true; }
     }
     if (changed) this.rebuildLocked();
+    // Reciclar meshes temporales de playLock: las celdas ya viven en
+    // lockedState (InstancedMesh). Evita z-fighting y dobles dibujos.
+    if (this.lockAnims.length > 0) {
+      for (const a of this.lockAnims) {
+        this.group.remove(a.mesh);
+        this.pullFree.push(a.mesh);
+        a.mesh.visible = false;
+      }
+      this.lockAnims.length = 0;
+    }
     if (hailChanged) this.rebuildHail();
     if (drillChanged) this.rebuildDrill();
     if (junkChanged) this.rebuildJunk();
@@ -573,6 +583,16 @@ export class BoardRenderer {
     this.activeTargets.length = next.length;
   }
 
+  /** Recicla todos los muelles activos (llamar tras un lock para evitar que
+   *  matchByProximity empareje muelles de la pieza bloqueada con la nueva pieza). */
+  resetActiveSprings(): void {
+    for (const s of this.activeSprings) {
+      this.recycleActiveSpring(s);
+    }
+    this.activeSprings.length = 0;
+    this.activeTargets.length = 0;
+    this.activeGliding = false;
+  }
   /** Saca un muelle del pool (o lo crea) ya situado en su objetivo. */
   private takeActiveSpring(x: number, y: number): ActiveSpring {
     const s = this.activePool.pop();
