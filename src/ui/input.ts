@@ -16,6 +16,12 @@ export interface InputActions {
   onToggleMusic: () => void;
   onHelp: () => void;
   setSoftDrop: (v: boolean) => void;
+  /**
+   * Multiplicador del ARR (repetición mantenida) para la lluvia del Caos:
+   * 1 = ritmo normal; <1 = repetición más rápida (cada paso sigue siendo
+   * una celda). El DAS no cambia.
+   */
+  repeatRate?: () => number;
 }
 const DAS = 0.15;
 const ARR = 0.045;
@@ -109,10 +115,11 @@ export class InputController {
   }
   /** Call each frame for auto-shift. */
   update(dt: number): void {
+    const rate = this.actions.repeatRate?.() ?? 1;
     const left = this.leftShift.isHeld();
     const right = this.rightShift.isHeld();
-    if (left && !right) this.leftShift.update(dt, this.stepLeft);
-    if (right && !left) this.rightShift.update(dt, this.stepRight);
+    if (left && !right) this.leftShift.update(dt, this.stepLeft, rate);
+    if (right && !left) this.rightShift.update(dt, this.stepRight, rate);
   }
   releaseAll(): void {
     this.leftShift.release();

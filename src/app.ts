@@ -243,7 +243,10 @@ export class GameApp {
         else if (this.engine.phase === 'paused') this.togglePause();
       },
       onHelp: () => this.toggleHelp(),
-      setSoftDrop: (v) => { this.engine.softDrop = v; }
+      setSoftDrop: (v) => { this.engine.softDrop = v; },
+      // La lluvia del Caos acelera la repetición mantenida (ARR) sin cambiar
+      // el tamaño del paso: cada pulsación sigue moviendo exactamente 1 celda.
+      repeatRate: () => this.engine.slipperyRepeatBoost,
     }, el<HTMLDivElement>('touch-controls'), this.canvas, () => pxPerCell(this.camera, this.canvas));
 
     this.musicMenu = new MusicMenu({

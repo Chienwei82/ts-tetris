@@ -139,12 +139,10 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
     **1,2 s antes** de cada empuje; la pieza activa se mueve 1 celda si cabe
     (contra la pared el golpe se pierde). Los personajes se inclinan y vuelan
     papeles de fondo.
-  - 🌧️ **Lluvia**: durante 18 s el suelo resbala. Cada movimiento lateral del
-    jugador (pulsación, repetición DAS o arrastre táctil) desplaza 1 celda y,
-    si la siguiente está libre, **desliza 1 más** en la misma dirección. Cuenta
-    como una sola acción (un reset de lock delay y un sonido); el viento no
-    provoca deslizamiento. El ambiente se oscurece y los personajes se cubren
-    con paraguas.
+  - 🌧️ **Lluvia**: durante 18 s el suelo resbala. Cada pulsación lateral
+    (tecla, botón táctil o arrastre) mueve exactamente **1 celda**; mantener
+    pulsado acelera la repetición DAS/ARR sin saltos dobles. El ambiente se
+    oscurece y los personajes se cubren con paraguas.
   - ⚡ **Relámpago**: cada 5 s un rayo rompe el bloque más alto de 3 columnas
     ocupadas. El tablero dibuja el rayo dentado y el cielo destella aunque el
     escenario no sea tormentoso.

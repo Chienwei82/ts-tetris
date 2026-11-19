@@ -117,7 +117,7 @@ describe('motor: tormentas del Caos', () => {
 });
 
 describe('motor: lluvia resbaladiza', () => {
-  it('tras mover lateralmente desliza una celda extra (misma acción)', () => {
+  it('cada pulsación mueve exactamente 1 celda (sin salto doble)', () => {
     const e = new TetrisEngine({
       rng: seqRng(), mode: 'chaos', seed: 11,
       mutatorConfig: { pool: ['rain'], firstDelaySec: 0, warnSec: 0, activeSec: 60 }
@@ -130,11 +130,24 @@ describe('motor: lluvia resbaladiza', () => {
     expect(e.slippery).toBe(true);
     const v = e.pieceVersion;
     expect(e.move(1)).toBe(true);
-    expect(e.active?.x).toBe(4);
+    expect(e.active?.x).toBe(3);
     expect(e.pieceVersion).toBe(v + 1); // un solo evento/versión por acción
   });
 
-  it('si la celda extra está bloqueada solo avanza una', () => {
+  it('con lluvia la repetición acelera pero el paso sigue siendo 1 celda', () => {
+    const e = new TetrisEngine({
+      rng: seqRng(), mode: 'chaos', seed: 11,
+      mutatorConfig: { pool: ['rain'], firstDelaySec: 0, warnSec: 0, activeSec: 60 }
+    });
+    e.start();
+    e.update(0.01); e.update(0.01);
+    expect(e.slippery).toBe(true);
+    expect(e.slipperyRepeatBoost).toBeCloseTo(0.55);
+    e.slippery = false;
+    expect(e.slipperyRepeatBoost).toBe(1);
+  });
+
+  it('contra el muro no avanza (sin deslizamiento extra)', () => {
     const e = new TetrisEngine({
       rng: seqRng(), mode: 'chaos', seed: 12,
       mutatorConfig: { pool: ['rain'], firstDelaySec: 0, warnSec: 0, activeSec: 60 }
@@ -145,7 +158,7 @@ describe('motor: lluvia resbaladiza', () => {
     e.update(0.01);
     e.update(0.01);
     expect(e.move(1)).toBe(true);
-    expect(e.active?.x).toBe(8); // 7→8 y el deslizamiento a 9 está fuera
+    expect(e.active?.x).toBe(8); // 7→8 y se acabó: ya no hay deslizamiento
     expect(e.move(1)).toBe(false); // ya pegada al muro
   });
 
