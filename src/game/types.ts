@@ -54,6 +54,36 @@ export type GameEventType =
   | 'hail'
   | 'drill-strike';
 
+export type ClearType = 'single' | 'double' | 'triple' | 'tetris';
+
+export interface GameEventClear {
+  type: 'clear';
+  /** Número de líneas limpiadas (1-4). */
+  lines: number;
+  /** Tipo de clear: single/double/triple/tetris. */
+  clearType: ClearType;
+  /** Filas limpiadas (índices base-abajo). */
+  rows: number[];
+  /** Celdas afectadas. */
+  cells: Vec2[];
+  /** Puntos ganados en esta jugada (ya incluye bonus de tipo y combo). */
+  scoreGained: number;
+  /** Nivel tras el clear. */
+  level: number;
+  /** Racha de combo actual (0 si no hay racha activa). */
+  comboCount: number;
+}
+
+export interface GameEventCombo {
+  type: 'combo';
+  /** Racha de combo actual. */
+  comboCount: number;
+  /** Puntos de bono de combo otorgados en esta jugada. */
+  comboBonus: number;
+  /** Nivel actual. */
+  level?: number;
+}
+
 export interface GameEventLightning {
   type: 'lightning';
   /** Celdas destruidas por el relámpago. */
@@ -83,6 +113,53 @@ export interface GameEvent {
   column?: number;
   scoreGained?: number;
   level?: number;
+  /** Tipo de clear (solo en eventos 'clear'). */
+  clearType?: ClearType;
+  /** Racha de combo actual (solo en eventos 'clear' y 'combo'). */
+  comboCount?: number;
+  /** Puntos de bono de combo (solo en eventos 'combo'). */
+  comboBonus?: number;
+}
+
+/** Bonus adicional por tipo de clear (sumado a LINE_POINTS antes de multiplicar por nivel). */
+export const CLEAR_TYPE_BONUS: Record<ClearType, number> = {
+  single: 0,
+  double: 50,
+  triple: 150,
+  tetris: 400,
+};
+
+/** Nombres legibles para cada tipo de clear (usado en UI y toasts). */
+export const CLEAR_TYPE_LABEL: Record<ClearType, string> = {
+  single: 'Single',
+  double: 'Doble',
+  triple: 'Triple',
+  tetris: 'TETRIS',
+};
+
+/** Colores temáticos para cada tipo de clear (estilo papercraft). */
+export const CLEAR_TYPE_COLOR: Record<ClearType, number> = {
+  single: 0xffffff,   // blanco papel
+  double: 0xffcb3d,   // amarillo papel (pieza O)
+  triple: 0xb477e6,   // púrpura papel (pieza T)
+  tetris: 0x46c6d4,   // cian papel (pieza I)
+};
+
+/**
+ * Calcula el bono de combo escalonado según la racha y el nivel.
+ * - Racha 1: solo bono base (50 × combo × nivel)
+ * - Racha 2-4: +25 × nivel adicional
+ * - Racha 5-9: +50 × nivel adicional
+ * - Racha 10+: +100 × nivel adicional
+ */
+export function comboBonusFor(combo: number, level: number): number {
+  if (combo <= 0) return 0;
+  const base = 50 * combo * level;
+  let extra = 0;
+  if (combo >= 10) extra = 100 * level;
+  else if (combo >= 5) extra = 50 * level;
+  else if (combo >= 2) extra = 25 * level;
+  return base + extra;
 }
 
 export const ALL_KINDS: PieceKind[] = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];

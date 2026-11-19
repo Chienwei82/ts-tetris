@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { ALL_KINDS, COLS, DRILL_COLOR, JUNK_COLOR, PIECE_COLORS, VISIBLE_ROWS } from '../game/types.js';
-import type { Grid, PieceKind, Vec2 } from '../game/types.js';
+import { ALL_KINDS, CLEAR_TYPE_COLOR, CLEAR_TYPE_LABEL, COLS, DRILL_COLOR, JUNK_COLOR, PIECE_COLORS, VISIBLE_ROWS } from '../game/types.js';
+import type { ClearType, Grid, PieceKind, Vec2 } from '../game/types.js';
 import { BOARD_D, BOARD_H, BOARD_W, cellToWorld } from './constants.js';
 import { INK, blockMaterial, cardboardMaterial, graphPaperMaterial, outlineMaterial, tapeMaterial } from './materials.js';
 import { ParticleSystem } from './particles.js';
@@ -61,6 +61,44 @@ const scratchPos = new THREE.Vector3();
 const scratchScale = new THREE.Vector3();
 /** Distancia² a partir de la cual un bloque se teletransporta (pieza nueva). */
 const TELEPORT_DIST_SQ = 9;
+/** Un texto flotante de bonificación animado en 3D. */
+interface ClearTextSprite {
+  mesh: THREE.Sprite;
+  life: number;      // 0 = recién nacido, 1 = terminado
+  maxLife: number;
+  vy: number;        // velocidad vertical de ascenso
+  startScale: number;
+}
+
+/** Crea una CanvasTexture con texto estilizado (papercraft, contorno de tinta). */
+function clearTextTexture(text: string, colorHex: number): THREE.CanvasTexture {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 128;
+  const ctx = cv.getContext('2d');
+  if (ctx) {
+    // Fondo transparente; el texto pega sobre el mundo 3D.
+    ctx.clearRect(0, 0, 512, 128);
+    // Contorno de tinta (estilo cómic/papercraft).
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 10;
+    ctx.lineJoin = 'round';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 92px system-ui, sans-serif';
+    ctx.strokeText(text, 256, 64);
+    // Relleno de color.
+    const c = new THREE.Color(colorHex);
+    ctx.fillStyle = `#${c.getHexString()}`;
+    ctx.fillText(text, 256, 64);
+    // Brillo superior para dar volumen al papel.
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = 'bold 92px system-ui, sans-serif';
+    ctx.fillText(text, 256, 60);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 /** Un muelle de la pieza activa: física 2D + el mesh que dibuja. */
 interface ActiveSpring {
   x: number;
@@ -130,6 +168,9 @@ export class BoardRenderer {
   private ghostSpecial: THREE.Sprite | null = null;
   private iconTex = new Map<string, THREE.CanvasTexture>();
   private fogOn = false;
+  /** Textos flotantes de bonificación ("DOBLE", "TRIPLE", "TETRIS", "COMBO xN"). */
+  private clearTexts: ClearTextSprite[] = [];
+  private readonly clearTextMats = new Map<ClearType, THREE.SpriteMaterial>();
   /** Pieza activa animada por muelle: un muelle por bloque + sus objetivos. */
   private activeSprings: ActiveSpring[] = [];
   private activeTargets: Array<{ x: number; y: number }> = [];
@@ -169,6 +210,13 @@ export class BoardRenderer {
     this.group.add(this.guideIMesh);
     this.group.add(this.activeGroup, this.ghostGroup);
     this.group.add(this.particles.points);
+    // Materiales de sprite por tipo de clear (texto dibujado en canvas).
+    for (const ct of ['single', 'double', 'triple', 'tetris'] as ClearType[]) {
+      const tex = clearTextTexture(CLEAR_TYPE_LABEL[ct], CLEAR_TYPE_COLOR[ct]);
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
+      mat.color.setHex(CLEAR_TYPE_COLOR[ct]);
+      this.clearTextMats.set(ct, mat);
+    }
     scene.add(this.group);
   }
   /**
@@ -437,6 +485,16 @@ export class BoardRenderer {
       if (!seenJunk.has(k)) { this.junkState.delete(k); junkChanged = true; }
     }
     if (changed) this.rebuildLocked();
+    // Reciclar meshes temporales de playLock: las celdas ya viven en
+    // lockedState (InstancedMesh). Evita z-fighting y dobles dibujos.
+    if (this.lockAnims.length > 0) {
+      for (const a of this.lockAnims) {
+        this.group.remove(a.mesh);
+        this.pullFree.push(a.mesh);
+        a.mesh.visible = false;
+      }
+      this.lockAnims.length = 0;
+    }
     if (hailChanged) this.rebuildHail();
     if (drillChanged) this.rebuildDrill();
     if (junkChanged) this.rebuildJunk();
@@ -525,6 +583,16 @@ export class BoardRenderer {
     this.activeTargets.length = next.length;
   }
 
+  /** Recicla todos los muelles activos (llamar tras un lock para evitar que
+   *  matchByProximity empareje muelles de la pieza bloqueada con la nueva pieza). */
+  resetActiveSprings(): void {
+    for (const s of this.activeSprings) {
+      this.recycleActiveSpring(s);
+    }
+    this.activeSprings.length = 0;
+    this.activeTargets.length = 0;
+    this.activeGliding = false;
+  }
   /** Saca un muelle del pool (o lo crea) ya situado en su objetivo. */
   private takeActiveSpring(x: number, y: number): ActiveSpring {
     const s = this.activePool.pop();
@@ -825,6 +893,52 @@ export class BoardRenderer {
     this.rebuildJunk();
     return cleared;
   }
+  /**
+   * Muestra un texto flotante 3D sobre las filas limpiadas ("DOBLE", "TRIPLE",
+   * "TETRIS") y opcionalmente "COMBO xN". El texto asciende y se desvanece.
+   */
+  showClearText(clearType: ClearType, rows: number[], comboCount: number): void {
+    if (rows.length === 0) return;
+    const cx = COLS / 2 - 0.5;
+    const cy = Math.min(...rows) + rows.length / 2 - 0.5;
+    const mat = this.clearTextMats.get(clearType);
+    if (!mat) return;
+    const sprite = new THREE.Sprite(mat);
+    sprite.position.set(cx, cy - VISIBLE_ROWS / 2 + 0.5, 1.2);
+    // Tamaño mayor para TETRIS y COMBO.
+    const baseScale = clearType === 'tetris' || comboCount >= 2 ? 1.1 : 0.9;
+    sprite.scale.set(baseScale * 1.6, baseScale * 0.4, 1);
+    sprite.visible = false; // se activa en el primer frame de update
+    this.group.add(sprite);
+    this.clearTexts.push({
+      mesh: sprite,
+      life: 0,
+      maxLife: 1.4,
+      vy: 1.6,
+      startScale: baseScale,
+    });
+    // Si hay combo activo, añade un segundo texto "COMBO xN" un poco más arriba.
+    if (comboCount >= 2) {
+      const comboMat = this.clearTextMats.get('tetris'); // reusa color tetris para combo
+      if (comboMat) {
+        const csprite = new THREE.Sprite(comboMat);
+        // Re-textura el canvas con "COMBO xN".
+        const tex = clearTextTexture(`COMBO x${comboCount}`, CLEAR_TYPE_COLOR.tetris);
+        (csprite.material as THREE.SpriteMaterial).map = tex;
+        csprite.position.set(cx, cy - VISIBLE_ROWS / 2 + 1.6, 1.2);
+        csprite.scale.set(1.3 * 1.6, 1.3 * 0.4, 1);
+        csprite.visible = false;
+        this.group.add(csprite);
+        this.clearTexts.push({
+          mesh: csprite,
+          life: 0,
+          maxLife: 1.4,
+          vy: 1.6,
+          startScale: 1.3,
+        });
+      }
+    }
+  }
   /** Advances animations; returns true when shadow-casting geometry moved. */
   update(dt: number): boolean {
     let moved = this.shadowDirty;
@@ -898,6 +1012,33 @@ export class BoardRenderer {
         this.clearingRows.delete(r);
       }
     }
+    // Textos flotantes de bonificación: ascienden, hacen pop inicial y se desvanecen.
+    if (this.clearTexts.length > 0) {
+      moved = true;
+      let alive = 0;
+      for (let i = 0; i < this.clearTexts.length; i++) {
+        const t = this.clearTexts[i];
+        if (!t) continue;
+        const m = t.mesh;
+        if (!m) continue;
+        t.life += dt / t.maxLife;
+        const k = Math.min(1, t.life);
+        // Pop inicial: 0 → 1.25 → 1 en el primer 20 % de la vida.
+        const pop = k < 0.2 ? (k / 0.2) * 1.25 : 1.25 - (k - 0.2) / 0.8 * 0.25;
+        m.scale.setScalar(t.startScale * pop * 1.6);
+        m.position.y += t.vy * dt;
+        const a = (t.mesh.material as THREE.SpriteMaterial);
+        a.opacity = Math.max(0, 1 - k);
+        m.visible = k < 1;
+        if (k < 1) {
+          this.clearTexts[alive++] = t;
+        } else {
+          this.group.remove(m);
+          m.visible = false;
+        }
+      }
+      this.clearTexts.length = alive;
+    }
     this.fxClock += dt;
     // Guía del powerup: pulso lento de opacidad (avisa de la zona del efecto).
     if (this.guideOn) {
@@ -944,7 +1085,8 @@ export class BoardRenderer {
   /** Animaciones de deslizamiento activas: la app fuerza un render aunque no haya cambio lógico. */
   get animating(): boolean {
     return this.activeGliding || this.ghostGliding || this.guideOn || this.hailFall.size > 0 || this.hailState.size > 0
-      || (this.specialIcon?.visible ?? false) || (this.ghostSpecial?.visible ?? false);
+      || (this.specialIcon?.visible ?? false) || (this.ghostSpecial?.visible ?? false)
+      || this.clearTexts.length > 0;
   }
   reset(): void {
     const recycle = (g: THREE.Group): void => {
@@ -984,6 +1126,9 @@ export class BoardRenderer {
     this.ghostPool.length = 0;
     this.activeGroup.clear();
     this.ghostGroup.clear();
+    // Reciclar textos flotantes pendientes.
+    for (const t of this.clearTexts) { this.group.remove(t.mesh); t.mesh.visible = false; }
+    this.clearTexts.length = 0;
     this.shadowDirty = true;
   }
 }

@@ -4,8 +4,8 @@ import { cellsForPiece, getKicks, shuffledBag } from './pieces.js';
 import { MutatorDirector } from './mutators/director.js';
 import type { MutatorConfig } from './mutators/config.js';
 import type { MutatorEvent, MutatorHost, WindDir } from './mutators/types.js';
-import { BOLT_BREAKS, COLS, DRILL_CONE_WIDTH, DRILL_DEPTH, LINES_PER_LEVEL, LINE_POINTS, MAX_LEVEL, SECONDS_PER_LEVEL, SPECIAL_PROBABILITY, TOTAL_ROWS, VISIBLE_ROWS } from './types.js';
-import type { ActivePiece, GameEvent, GameMode, GamePhase, Grid, LevelProgress, PieceKind, RotationState, Vec2 } from './types.js';
+import { BOLT_BREAKS, CLEAR_TYPE_BONUS, COLS, DRILL_CONE_WIDTH, DRILL_DEPTH, LINES_PER_LEVEL, LINE_POINTS, MAX_LEVEL, SECONDS_PER_LEVEL, SPECIAL_PROBABILITY, TOTAL_ROWS, VISIBLE_ROWS, comboBonusFor } from './types.js';
+import type { ActivePiece, ClearType, GameEvent, GameMode, GamePhase, Grid, LevelProgress, PieceKind, RotationState, Vec2 } from './types.js';
 
 export type SpecialKind = 'bomb' | 'bolt' | 'drill' | 'chatarra';
 /** Especiales que pueden salir en Caos (misma probabilidad para todos). */
@@ -543,16 +543,27 @@ export class TetrisEngine implements MutatorHost {
       const cleared: number[] = clearFullRows(this.grid);
       if (cleared.length > 0) {
         const n = Math.min(4, cleared.length);
+        const clearType = (n === 1 ? 'single' : n === 2 ? 'double' : n === 3 ? 'triple' : 'tetris') as ClearType;
         const base = LINE_POINTS[n as 1 | 2 | 3 | 4] ?? 0;
+        const typeBonus = CLEAR_TYPE_BONUS[clearType];
         this.combo += 1;
-        const comboBonus = this.combo > 0 ? 50 * this.combo * this.level : 0;
-        const gained = base * this.level + comboBonus;
+        const comboBonus = comboBonusFor(this.combo, this.level);
+        const gained = (base + typeBonus) * this.level + comboBonus;
         this.score += gained;
         this.lines += cleared.length;
         const newLevel = Math.min(MAX_LEVEL, Math.floor(this.lines / LINES_PER_LEVEL) + 1);
-        this.emit({ type: 'clear', lines: cleared.length, rows: cleared, cells, scoreGained: gained, level: newLevel });
+        this.emit({
+          type: 'clear',
+          lines: cleared.length,
+          clearType,
+          rows: cleared,
+          cells,
+          scoreGained: gained,
+          level: newLevel,
+          comboCount: this.combo > 0 ? this.combo : 0,
+        });
         if (newLevel > this.level) { this.level = newLevel; this.levelTime = 0; this.emit({ type: 'levelup', level: newLevel }); }
-        if (this.combo > 0) this.emit({ type: 'combo', scoreGained: this.combo });
+        if (this.combo > 0) this.emit({ type: 'combo', comboCount: this.combo, comboBonus, level: this.level });
       } else { this.combo = -1; }
     }
     this.special = null;

@@ -1,7 +1,7 @@
 import './styles.css';
 import * as THREE from 'three';
 import { TetrisEngine } from './game/engine.js';
-import { JUNK_COLOR, LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL, TOTAL_ROWS, VISIBLE_ROWS } from './game/types.js';
+import { CLEAR_TYPE_COLOR, CLEAR_TYPE_LABEL, COLS, JUNK_COLOR, LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL, TOTAL_ROWS, VISIBLE_ROWS } from './game/types.js';
 import type { GameEvent, GameMode, LevelProgress, PieceKind } from './game/types.js';
 import type { IntensitySignals } from './audio/intensityTracker.js';
 import { BoardRenderer } from './render/boardRenderer.js';
@@ -1036,13 +1036,43 @@ export class GameApp {
         this.sound.play('lock');
         this.shake.add(0.08);
         this.board.playLock(e.cells ?? [], kind);
+        // Evitar que matchByProximity empareje muelles de la pieza bloqueada
+        // con la nueva pieza al aparecer (causaba bloques desalineados).
+        this.board.resetActiveSprings();
         break;
       case 'clear': {
         const n = e.lines ?? 0;
-        this.intensity.event(n >= 4 ? 'tetris' : 'clear');
-        if (n >= 4) { this.sound.play('tetris'); this.hud.toast('¡TETRIS! +' + (e.scoreGained ?? 0)); }
-        else { this.sound.play('clear', n); if (n > 1) this.hud.toast(n + ' líneas +' + (e.scoreGained ?? 0)); }
         const rows = e.rows ?? [];
+        const clearType = e.clearType ?? (n >= 4 ? 'tetris' : n === 3 ? 'triple' : n === 2 ? 'double' : 'single');
+        const comboCount = e.comboCount ?? 0;
+        this.intensity.event(n >= 4 ? 'tetris' : 'clear');
+        // Texto flotante 3D sobre el tablero.
+        if (rows.length > 0) this.board.showClearText(clearType, rows, comboCount);
+        // Partículas temáticas por tipo de clear.
+        const rowsArr = e.rows ?? [];
+        const ctColor = CLEAR_TYPE_COLOR[clearType as keyof typeof CLEAR_TYPE_COLOR] ?? 0xffffff;
+        if (rowsArr.length > 0) {
+          const cx = COLS / 2 - 0.5;
+          const cy = Math.min(...rowsArr) + rowsArr.length / 2 - 0.5;
+          const p = cellToWorld(cx, cy);
+          this.board.particles.burst(new THREE.Vector3(p.x, p.y, 1.0), ctColor, 18, 4.0, 4.5);
+          if (clearType === 'tetris') {
+            // Destello extra para el Tetris.
+            this.board.particles.burst(new THREE.Vector3(p.x, p.y, 1.2), 0xffffff, 24, 5.0, 5.0);
+          }
+        }
+        if (n >= 4) {
+          this.sound.play('tetris');
+          this.hud.toast('¡TETRIS! +' + (e.scoreGained ?? 0));
+        } else {
+          this.sound.play('clear', n);
+          if (n > 1) {
+            const label = CLEAR_TYPE_LABEL[clearType as keyof typeof CLEAR_TYPE_LABEL] ?? n + ' líneas';
+            this.hud.toast('¡' + label + '! +' + (e.scoreGained ?? 0));
+          } else {
+            this.hud.toast('+' + (e.scoreGained ?? 0));
+          }
+        }
         if (this.debrisOn && rows.length > 0) {
           // Terremoto: la limpieza se siente en la cámara y el suelo.
           this.shake.quake(0.55 + n * 0.15, 0.55 + n * 0.08);
@@ -1068,7 +1098,9 @@ export class GameApp {
       }
       case 'combo':
         this.intensity.event('combo');
-        if ((e.scoreGained ?? 0) > 1) this.hud.toast('Combo x' + e.scoreGained);
+        const cc = e.comboCount ?? 0;
+        const cb = e.comboBonus ?? 0;
+        if (cc >= 2) this.hud.toast('🔥 Combo x' + cc + ' +' + cb);
         break;
       case 'levelup': {
         const lv = e.level ?? this.engine.level;
