@@ -4,6 +4,7 @@ import type { Grid, PieceKind, Vec2 } from '../game/types.js';
 import { BOARD_D, BOARD_H, BOARD_W, cellToWorld } from './constants.js';
 import { INK, blockMaterial, cardboardMaterial, graphPaperMaterial, outlineMaterial, tapeMaterial } from './materials.js';
 import { ParticleSystem } from './particles.js';
+import { ACTIVE_STIFFNESS, GHOST_STIFFNESS, criticalDamping, isSettled, matchByProximity, stepSpring } from './motionSpring.js';
 // Materiales del tablero: `fog: false` en todos — la niebla del fondo es para el
 // horizonte y no debe teñir el plano de juego (piezas, panel, fantasmas, guías).
 const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false, fog: false });
@@ -58,6 +59,31 @@ const scratchMatrix = new THREE.Matrix4();
 const scratchQuat = new THREE.Quaternion();
 const scratchPos = new THREE.Vector3();
 const scratchScale = new THREE.Vector3();
+/** Distancia² a partir de la cual un bloque se teletransporta (pieza nueva). */
+const TELEPORT_DIST_SQ = 9;
+/** Un muelle de la pieza activa: física 2D + el mesh que dibuja. */
+interface ActiveSpring {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  mesh: THREE.Group;
+}
+/** Estado físico guardado de un muelle reciclado (el mesh ya volvió al pool). */
+interface PooledSpring {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+}
+/** Un muelle fantasma: física 2D + el mesh translúcido que dibuja. */
+interface GhostSpring {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  mesh: THREE.Group;
+}
 export class BoardRenderer {
   group = new THREE.Group();
   particles = new ParticleSystem();
@@ -104,8 +130,18 @@ export class BoardRenderer {
   private ghostSpecial: THREE.Sprite | null = null;
   private iconTex = new Map<string, THREE.CanvasTexture>();
   private fogOn = false;
-  private activeMeshes = new Map<number, THREE.Group>();
-  private activeTarget = new Map<number, THREE.Vector3>();
+  /** Pieza activa animada por muelle: un muelle por bloque + sus objetivos. */
+  private activeSprings: ActiveSpring[] = [];
+  private activeTargets: Array<{ x: number; y: number }> = [];
+  /** Pool de estados físicos (el mesh vuelve al pool ciego `pullFree`). */
+  private activePool: PooledSpring[] = [];
+  /** true mientras algún bloque de la pieza aún viaja a su celda. */
+  private activeGliding = false;
+  /** Fantasma del tetromino: mismos muelles, más rígidos, con su pool. */
+  private ghostSprings: GhostSpring[] = [];
+  private ghostTargets: Array<{ x: number; y: number }> = [];
+  private ghostPool: THREE.Group[] = [];
+  private ghostGliding = false;
   private pullFree: THREE.Group[] = [];
   /** True when shadow-casting geometry changed since the last `update()`. */
   private shadowDirty = true;
@@ -245,6 +281,14 @@ export class BoardRenderer {
     outline.scale.setScalar(1.07);
     g.add(mesh, outline);
     g.userData.kind = 'J';
+    return g;
+  }
+  /** Bloque fantasma: caja translúcida con borde de tinta (se recicla en `ghostPool`). */
+  private makeGhostBlock(): THREE.Group {
+    const g = new THREE.Group();
+    const mesh = new THREE.Mesh(this.ghostGeo, ghostMat);
+    const edge = new THREE.LineSegments(this.ghostEdgeGeo, ghostEdgeMat);
+    g.add(mesh, edge);
     return g;
   }
   private makeBlock(kind: PieceKind): THREE.Group {
@@ -402,63 +446,101 @@ export class BoardRenderer {
     // Powerup: es un objeto literal (💣/⚡/🔩), no una pieza. Sin bloques: solo
     // el sprite grande sobre su huella (el fantasma marca donde caera).
     if (special) {
-      for (const [k, m] of this.activeMeshes) {
-        this.activeGroup.remove(m);
-        this.pullFree.push(m);
-        m.visible = false;
-        this.activeMeshes.delete(k);
-        this.activeTarget.delete(k);
-      }
+      for (const s of this.activeSprings) this.recycleActiveSpring(s);
+      this.activeSprings.length = 0;
+      this.activeTargets.length = 0;
+      this.activeGliding = false;
       this.updateSpecialIcon(special, cells);
       this.shadowDirty = true;
       return;
     }
     this.updateSpecialIcon(null, cells);
-    const wanted = new Map<number, Vec2>();
-    for (const c of cells) wanted.set(this.key(c.x, c.y), c);
-    // Remove meshes whose cell no longer exists (Map iteration tolerates deletes).
-    // La pieza se sigue por HUELLA (índice de bloque), no por clave de celda:
-    // así un paso lateral mueve los mismos meshes hacia su nuevo objetivo y la
-    // interpolación de `update()` produce el deslizamiento visible.
-    const sorted = [...wanted.values()].sort((a, b) => (a.y - b.y) !== 0 ? a.y - b.y : a.x - b.x);
-    const meshes = [...this.activeMeshes.values()];
-    while (meshes.length > sorted.length) {
-      const m = meshes.pop();
-      if (!m) break;
-      this.activeGroup.remove(m);
-      this.pullFree.push(m);
-      m.visible = false;
-    }
-    while (meshes.length < sorted.length) {
-      const m = this.makeBlock(kind);
-      this.activeGroup.add(m);
-      meshes.push(m);
-      const c = sorted[meshes.length - 1];
-      if (c) {
-        const p0 = cellToWorld(c.x, c.y);
-        m.position.set(p0.x, p0.y, 0.15);
-      }
-    }
-    this.activeMeshes.clear();
-    this.activeTarget.clear();
-    for (let i = 0; i < sorted.length; i++) {
-      const c = sorted[i];
-      const m = meshes[i];
-      if (!c || !m) continue;
-      this.colorize(m, kind);
-      if (!m.visible) m.visible = true;
-      const k = this.key(c.x, c.y);
-      this.activeMeshes.set(k, m);
-      const p = cellToWorld(c.x, c.y);
-      const target = new THREE.Vector3(p.x, p.y, 0.15);
-      this.activeTarget.set(k, target);
-      // Teletransporte (spawn, hold, pieza nueva tras fijar): aparece en su
-      // celda. Movimientos continuos (lateral, rotación, viento, gravedad)
-      // quedan cerca y se deslizan vía la interpolación de `update()`.
-      if (instant || m.position.distanceToSquared(target) > 9) m.position.copy(target);
-      else if (m.position.lengthSq() === 0) m.position.copy(target);
-    }
+    // La pieza se sigue por BLOQUE (muelles con identidad estable), no por
+    // clave de celda: `update()` integra los muelles y produce el
+    // deslizamiento visible. El emparejamiento por cercanía evita que los
+    // bloques se crucen al rotar.
+    this.reconcileActive(cells, kind, instant);
+    this.activeGliding = this.activeSprings.length > 0;
     this.shadowDirty = true;
+  }
+
+  /**
+   * Núcleo de la animación fluida: mantiene un muelle por bloque de la pieza,
+   * emparejado con su objetivo por cercanía (`matchByProximity`), con meshes
+   * de un pool ciego al orden. Cada muelle HEREDA su velocidad: una ráfaga
+   * DAS/ARR encadena el movimiento sin pararse en cada celda.
+   * Teletransporte (spawn, hold, pieza nueva: objetivo a >3 celdas) = snap
+   * exacto, sin vuelo; lo cercano desliza con el muelle.
+   */
+  private reconcileActive(cells: Vec2[], kind: PieceKind, instant: boolean): void {
+    const targets = cells.map((c) => cellToWorld(c.x, c.y));
+    const fromX = this.activeSprings.map((s) => s.x);
+    const fromY = this.activeSprings.map((s) => s.y);
+    const assign = matchByProximity(fromX, fromY, targets.map((t) => t.x), targets.map((t) => t.y));
+    const owned = this.activeSprings.splice(0, this.activeSprings.length);
+    const claimed = new Set<number>();
+    const next: ActiveSpring[] = [];
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i] ?? { x: 0, y: 0 };
+      // El muelle más cercano al destino, con desempate a favor del greedy:
+      // el deslizamiento encadenado (DAS/ARR) no se frena en cada celda.
+      let best: ActiveSpring | null = null;
+      let bestD = Number.POSITIVE_INFINITY;
+      let bestIdx = -1;
+      for (let o = 0; o < owned.length; o++) {
+        if (claimed.has(o)) continue;
+        const m = owned[o];
+        if (!m) continue;
+        const pref = assign[o] === i ? -0.0001 : 0;
+        const dx = m.x - t.x;
+        const dy = m.y - t.y;
+        const d = dx * dx + dy * dy + pref;
+        if (d < bestD) { bestD = d; best = m; bestIdx = o; }
+      }
+      const s: ActiveSpring = best ?? this.takeActiveSpring(t.x, t.y);
+      if (bestIdx >= 0) claimed.add(bestIdx);
+      this.colorize(s.mesh, kind);
+      if (!s.mesh.visible) s.mesh.visible = true;
+      if (instant) {
+        s.x = t.x; s.y = t.y; s.vx = 0; s.vy = 0;
+      } else {
+        const dx = s.x - t.x; const dy = s.y - t.y;
+        if (dx * dx + dy * dy > TELEPORT_DIST_SQ) {
+          // Teletransporte: la pieza nueva aparece en su celda, no vuela.
+          s.x = t.x; s.y = t.y; s.vx = 0; s.vy = 0;
+        }
+      }
+      s.mesh.position.set(s.x, s.y, 0.15);
+      if (!this.activeGroup.children.includes(s.mesh)) this.activeGroup.add(s.mesh);
+      this.activeTargets[i] = t;
+      next.push(s);
+    }
+    // Sobrantes al pool (apagados pero con su velocidad guardada).
+    for (let o = 0; o < owned.length; o++) {
+      if (claimed.has(o)) continue;
+      const m = owned[o];
+      if (m) this.recycleActiveSpring(m);
+    }
+    this.activeSprings.push(...next);
+    this.activeTargets.length = next.length;
+  }
+
+  /** Saca un muelle del pool (o lo crea) ya situado en su objetivo. */
+  private takeActiveSpring(x: number, y: number): ActiveSpring {
+    const s = this.activePool.pop();
+    const mesh = this.makeBlock('I');
+    this.activeGroup.add(mesh);
+    mesh.position.set(x, y, 0.15);
+    if (s) return { x, y, vx: 0, vy: 0, mesh };
+    return { x, y, vx: 0, vy: 0, mesh };
+  }
+
+  /** Devuelve un muelle al pool: apaga el mesh pero conserva su velocidad. */
+  private recycleActiveSpring(s: ActiveSpring): void {
+    this.activeGroup.remove(s.mesh);
+    this.pullFree.push(s.mesh);
+    s.mesh.visible = false;
+    this.activePool.push({ x: s.x, y: s.y, vx: s.vx, vy: s.vy });
   }
   /** El objeto literal del powerup: sprite grande centrado en su huella. */
   private updateSpecialIcon(special: string | null, cells: Vec2[]): void {
@@ -552,31 +634,74 @@ export class BoardRenderer {
     // Powerup: su guía es el icono translúcido sobre la huella, NO las cajas del
     // tetromino — así el fantasma corresponde al objeto que realmente cae.
     if (special) {
-      while (this.ghostGroup.children.length > 0) {
-        const m = this.ghostGroup.children.pop();
-        if (m) this.ghostGroup.remove(m);
-      }
+      for (const s of this.ghostSprings) this.recycleGhostSpring(s);
+      this.ghostSprings.length = 0;
+      this.ghostTargets.length = 0;
+      this.ghostGliding = false;
       this.updateGhostSpecial(special, cells);
       return;
     }
     this.updateGhostSpecial(null, cells);
-    while (this.ghostGroup.children.length > cells.length) {
-      const m = this.ghostGroup.children.pop() as THREE.Group;
-      if (m) this.ghostGroup.remove(m);
-    }
-    for (let i = 0; i < cells.length; i++) {
-      const c = cells[i] as Vec2;
-      let m = this.ghostGroup.children[i] as THREE.Group | undefined;
-      if (!m) {
-        m = new THREE.Group();
-        const mesh = new THREE.Mesh(this.ghostGeo, ghostMat);
-        const edge = new THREE.LineSegments(this.ghostEdgeGeo, ghostEdgeMat);
-        m.add(mesh, edge);
-        this.ghostGroup.add(m);
+    // El fantasma también desliza: mismos muelles que la pieza (más rígidos),
+    // emparejados por cercanía para que no se crucen al rotar.
+    const targets = cells.map((c) => cellToWorld(c.x, c.y));
+    const fromX = this.ghostSprings.map((s) => s.x);
+    const fromY = this.ghostSprings.map((s) => s.y);
+    const assign = matchByProximity(fromX, fromY, targets.map((t) => t.x), targets.map((t) => t.y));
+    const owned = this.ghostSprings.splice(0, this.ghostSprings.length);
+    const claimed = new Set<number>();
+    const next: GhostSpring[] = [];
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i] ?? { x: 0, y: 0 };
+      let best: GhostSpring | null = null;
+      let bestD = Number.POSITIVE_INFINITY;
+      let bestIdx = -1;
+      for (let o = 0; o < owned.length; o++) {
+        if (claimed.has(o)) continue;
+        const m = owned[o];
+        if (!m) continue;
+        const pref = assign[o] === i ? -0.0001 : 0;
+        const dx = m.x - t.x;
+        const dy = m.y - t.y;
+        const d = dx * dx + dy * dy + pref;
+        if (d < bestD) { bestD = d; best = m; bestIdx = o; }
       }
-      const p = cellToWorld(c.x, c.y);
-      m.position.set(p.x, p.y, -0.05);
+      const s: GhostSpring = best ?? this.takeGhostSpring(t.x, t.y);
+      if (bestIdx >= 0) claimed.add(bestIdx);
+      if (!s.mesh.visible) s.mesh.visible = true;
+      const dx = s.x - t.x; const dy = s.y - t.y;
+      if (dx * dx + dy * dy > TELEPORT_DIST_SQ) {
+        s.x = t.x; s.y = t.y; s.vx = 0; s.vy = 0;
+      }
+      s.mesh.position.set(s.x, s.y, -0.05);
+      if (!this.ghostGroup.children.includes(s.mesh)) this.ghostGroup.add(s.mesh);
+      this.ghostTargets[i] = t;
+      next.push(s);
     }
+    for (let o = 0; o < owned.length; o++) {
+      if (claimed.has(o)) continue;
+      const m = owned[o];
+      if (m) this.recycleGhostSpring(m);
+    }
+    this.ghostSprings.push(...next);
+    this.ghostTargets.length = next.length;
+    this.ghostGliding = next.length > 0;
+  }
+
+  /** Saca un muelle fantasma del pool (o lo crea) ya situado en su objetivo. */
+  private takeGhostSpring(x: number, y: number): GhostSpring {
+    const mesh = this.ghostPool.pop() ?? this.makeGhostBlock();
+    if (!this.ghostGroup.children.includes(mesh)) this.ghostGroup.add(mesh);
+    mesh.visible = true;
+    mesh.position.set(x, y, -0.05);
+    return { x, y, vx: 0, vy: 0, mesh };
+  }
+
+  /** Devuelve un muelle fantasma al pool. */
+  private recycleGhostSpring(s: GhostSpring): void {
+    this.ghostGroup.remove(s.mesh);
+    s.mesh.visible = false;
+    this.ghostPool.push(s.mesh);
   }
   /**
    * Guía de la zona de impacto del powerup activo. `rows` (bomba) se pinta como
@@ -704,15 +829,48 @@ export class BoardRenderer {
   update(dt: number): boolean {
     let moved = this.shadowDirty;
     this.shadowDirty = false;
-    // Interpolación de la pieza activa: converge en ~70 ms para que los pasos
-    // DAS/ARR se sientan continuos sin "teletransporte" entre celdas. En
-    // `setActive(..., instant)` (hard drop, spawn, rotación) se salta.
-    const converge = 1 - Math.pow(0.0001, dt);
-    for (const [k, g] of this.activeMeshes) {
-      const t = this.activeTarget.get(k);
-      if (!t) continue;
-      g.position.lerp(t, Math.min(1, converge));
-      if (g.position.distanceToSquared(t) > 1e-6) moved = true;
+    // Pieza activa: muelle crítico con velocidad heredada. Los pasos laterales
+    // encadenados (DAS/ARR) fluyen como un deslizamiento tenso y continuo, sin
+    // "teletransporte" entre celdas y sin sobrepasar el objetivo.
+    if (this.activeSprings.length > 0) {
+      const stiffness = ACTIVE_STIFFNESS;
+      const damping = criticalDamping(stiffness);
+      let gliding = false;
+      for (let i = 0; i < this.activeSprings.length; i++) {
+        const s = this.activeSprings[i];
+        const t = this.activeTargets[i];
+        if (!s || !t) continue;
+        const px = s.x; const py = s.y;
+        stepSpring(s, t.x, t.y, dt, stiffness, damping);
+        s.mesh.position.set(s.x, s.y, 0.15);
+        if (!isSettled(s, t.x, t.y)) {
+          gliding = true;
+          moved = true; // el bloque viaja: la sombra debe actualizarse
+        } else {
+          s.x = t.x; s.y = t.y; s.vx = 0; s.vy = 0;
+          s.mesh.position.set(t.x, t.y, 0.15);
+          // El snap final también mueve geometría con sombra (una vez).
+          if (px !== t.x || py !== t.y) moved = true;
+        }
+      }
+      this.activeGliding = gliding;
+    }
+    // Fantasma: mismos muelles, algo más rígidos (sigue a la pieza de cerca).
+    if (this.ghostSprings.length > 0) {
+      const stiffness = GHOST_STIFFNESS;
+      const damping = criticalDamping(stiffness);
+      let gliding = false;
+      for (let i = 0; i < this.ghostSprings.length; i++) {
+        const s = this.ghostSprings[i];
+        const t = this.ghostTargets[i];
+        if (!s || !t) continue;
+        stepSpring(s, t.x, t.y, dt, stiffness, damping);
+        s.mesh.position.set(s.x, s.y, -0.05);
+        if (!isSettled(s, t.x, t.y)) gliding = true;
+        else { s.x = t.x; s.y = t.y; s.vx = 0; s.vy = 0; s.mesh.position.set(t.x, t.y, -0.05); }
+      }
+      this.ghostGliding = gliding;
+      if (gliding) moved = true;
     }
     if (this.lockAnims.length > 0) moved = true;
     for (let i = this.lockAnims.length - 1; i >= 0; i--) {
@@ -783,9 +941,9 @@ export class BoardRenderer {
     return moved;
   }
   get busyClearing(): boolean { return this.clearingRows.size > 0; }
-  /** Animaciones cosméticas activas: la app fuerza un render aunque no haya movimiento. */
+  /** Animaciones de deslizamiento activas: la app fuerza un render aunque no haya cambio lógico. */
   get animating(): boolean {
-    return this.guideOn || this.hailFall.size > 0 || this.hailState.size > 0
+    return this.activeGliding || this.ghostGliding || this.guideOn || this.hailFall.size > 0 || this.hailState.size > 0
       || (this.specialIcon?.visible ?? false) || (this.ghostSpecial?.visible ?? false);
   }
   reset(): void {
@@ -814,9 +972,16 @@ export class BoardRenderer {
     if (this.specialIcon) this.specialIcon.visible = false;
     if (this.ghostSpecial) this.ghostSpecial.visible = false;
     this.setFog(false);
-    this.activeTarget.clear();
-    for (const [, m] of this.activeMeshes) recycle(m);
-    this.activeMeshes.clear();
+    this.activePool.length = 0;
+    for (const s of this.activeSprings) this.recycleActiveSpring(s);
+    this.activeSprings.length = 0;
+    this.activeTargets.length = 0;
+    this.activeGliding = false;
+    for (const s of this.ghostSprings) this.recycleGhostSpring(s);
+    this.ghostSprings.length = 0;
+    this.ghostTargets.length = 0;
+    this.ghostGliding = false;
+    this.ghostPool.length = 0;
     this.activeGroup.clear();
     this.ghostGroup.clear();
     this.shadowDirty = true;
