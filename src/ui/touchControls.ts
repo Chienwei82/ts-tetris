@@ -46,8 +46,9 @@ export class TouchControls {
 
   /** Call each frame for button auto-shift. */
   update(dt: number): void {
-    this.leftShift.update(dt, this.stepLeft);
-    this.rightShift.update(dt, this.stepRight);
+    const rate = this.actions.repeatRate?.() ?? 1;
+    this.leftShift.update(dt, this.stepLeft, rate);
+    this.rightShift.update(dt, this.stepRight, rate);
   }
 
   releaseAll(): void {

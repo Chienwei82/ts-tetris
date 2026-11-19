@@ -65,7 +65,7 @@ export class TetrisEngine implements MutatorHost {
   readonly mode: GameMode;
   readonly seed?: number;
   special: SpecialKind | null = null;
-  /** Lluvia activa: cada movimiento lateral desliza una celda extra. */
+  /** Lluvia activa: la repetición mantenida acelera (el paso sigue siendo 1 celda). */
   slippery = false;
   /** Ciclo de tormentas del modo Caos (inactivo en Tradicional). */
   readonly mutators: MutatorDirector;
@@ -228,10 +228,10 @@ export class TetrisEngine implements MutatorHost {
   }
   move(dx: -1 | 1): boolean {
     if (this.phase !== 'playing' || !this.active) return false;
+    // Un toque = una celda: la lluvia ya no añade un desplazamiento extra dentro
+    // de la misma acción (era el salto de 2 cuadros del modo Caos). La tormenta
+    // conserva su efecto en el ritmo de repetición (ver `slipperyRepeatBoost`).
     if (!this.shiftLateral(dx)) return false;
-    // Lluvia: si la celda extra está libre, la pieza se desliza una más. Es
-    // parte de la misma acción (un solo reset de lock delay, un solo evento).
-    if (this.slippery) this.shiftLateral(dx);
     this.pieceVersion++;
     this.emit({ type: 'move' });
     this.resetLockDelay();
@@ -245,7 +245,7 @@ export class TetrisEngine implements MutatorHost {
     this.active.x += dx;
     return true;
   }
-  /** Empuje del viento: una celda, sin el deslizamiento extra de la lluvia. */
+  /** Empuje del viento: una celda (la lluvia solo acelera la repetición manual). */
   pushWind(dir: WindDir): boolean {
     if (this.phase !== 'playing' || !this.active) return false;
     if (!this.shiftLateral(dir)) return false;
@@ -255,6 +255,12 @@ export class TetrisEngine implements MutatorHost {
   }
   /** La lluvia activa/desactiva el suelo resbaladizo (lo llama el director). */
   setSlippery(on: boolean): void { this.slippery = on; }
+  /**
+   * Con lluvia, la repetición mantenida acelera: cada paso sigue siendo una
+   * celda, pero el ARR se acorta (efecto "resbaladizo" sin saltos dobles).
+   * Tradicional siempre devuelve 1 (sin tormentas).
+   */
+  get slipperyRepeatBoost(): number { return this.slippery ? 0.55 : 1; }
   moveDown(): boolean {
     if (this.phase !== 'playing' || !this.active) return false;
     const ok = this.stepDown(1);

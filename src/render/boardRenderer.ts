@@ -417,28 +417,45 @@ export class BoardRenderer {
     const wanted = new Map<number, Vec2>();
     for (const c of cells) wanted.set(this.key(c.x, c.y), c);
     // Remove meshes whose cell no longer exists (Map iteration tolerates deletes).
-    for (const [k, m] of this.activeMeshes) {
-      if (!wanted.has(k)) {
-        this.activeGroup.remove(m);
-        this.pullFree.push(m);
-        m.visible = false;
-        this.activeMeshes.delete(k);
-        this.activeTarget.delete(k);
+    // La pieza se sigue por HUELLA (índice de bloque), no por clave de celda:
+    // así un paso lateral mueve los mismos meshes hacia su nuevo objetivo y la
+    // interpolación de `update()` produce el deslizamiento visible.
+    const sorted = [...wanted.values()].sort((a, b) => (a.y - b.y) !== 0 ? a.y - b.y : a.x - b.x);
+    const meshes = [...this.activeMeshes.values()];
+    while (meshes.length > sorted.length) {
+      const m = meshes.pop();
+      if (!m) break;
+      this.activeGroup.remove(m);
+      this.pullFree.push(m);
+      m.visible = false;
+    }
+    while (meshes.length < sorted.length) {
+      const m = this.makeBlock(kind);
+      this.activeGroup.add(m);
+      meshes.push(m);
+      const c = sorted[meshes.length - 1];
+      if (c) {
+        const p0 = cellToWorld(c.x, c.y);
+        m.position.set(p0.x, p0.y, 0.15);
       }
     }
-    // Add / update meshes keyed by cell so blocks track their own target.
-    for (const [k, c] of wanted) {
-      let m = this.activeMeshes.get(k);
-      if (!m) {
-        m = this.makeBlock(kind);
-        this.activeGroup.add(m);
-        this.activeMeshes.set(k, m);
-      }
+    this.activeMeshes.clear();
+    this.activeTarget.clear();
+    for (let i = 0; i < sorted.length; i++) {
+      const c = sorted[i];
+      const m = meshes[i];
+      if (!c || !m) continue;
       this.colorize(m, kind);
+      if (!m.visible) m.visible = true;
+      const k = this.key(c.x, c.y);
+      this.activeMeshes.set(k, m);
       const p = cellToWorld(c.x, c.y);
       const target = new THREE.Vector3(p.x, p.y, 0.15);
       this.activeTarget.set(k, target);
-      if (instant) m.position.copy(target);
+      // Teletransporte (spawn, hold, pieza nueva tras fijar): aparece en su
+      // celda. Movimientos continuos (lateral, rotación, viento, gravedad)
+      // quedan cerca y se deslizan vía la interpolación de `update()`.
+      if (instant || m.position.distanceToSquared(target) > 9) m.position.copy(target);
       else if (m.position.lengthSq() === 0) m.position.copy(target);
     }
     this.shadowDirty = true;
@@ -687,11 +704,14 @@ export class BoardRenderer {
   update(dt: number): boolean {
     let moved = this.shadowDirty;
     this.shadowDirty = false;
-    const speed = 1 - Math.pow(0.0001, dt);
+    // Interpolación de la pieza activa: converge en ~70 ms para que los pasos
+    // DAS/ARR se sientan continuos sin "teletransporte" entre celdas. En
+    // `setActive(..., instant)` (hard drop, spawn, rotación) se salta.
+    const converge = 1 - Math.pow(0.0001, dt);
     for (const [k, g] of this.activeMeshes) {
       const t = this.activeTarget.get(k);
       if (!t) continue;
-      g.position.lerp(t, Math.min(1, speed * 1.4));
+      g.position.lerp(t, Math.min(1, converge));
       if (g.position.distanceToSquared(t) > 1e-6) moved = true;
     }
     if (this.lockAnims.length > 0) moved = true;
