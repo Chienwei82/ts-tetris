@@ -260,8 +260,11 @@ src/
       scenarioCatalog.ts  Metadatos puros compartidos (id/nombre/icono/minLevel y periodo)
       forest.ts · cityNight.ts · space.ts · deepSea.ts  Escenografías y looks de cada escenario
     materials.ts    Texturas procedurales (papel, cartón, cuadrícula, cinta) + toon + tinta
+    pieceMotifs.ts  Motivos por pieza (datos 0..1 + dibujo) compartidos por 3D y previews
+    boardBackdrop.ts Opacidad de la hoja del tablero por escenario (puro, testeado)
   ui/         Entrada con DAS/ARR, gestos de arrastre de la pieza, HUD, previews 2D, preferencias
     feedbackDirector.ts Prioridad de avisos + presupuesto de cámara/fogonazos (puro, testeado)
+    clearSummary.ts    Título y desglose del aviso de clear (puro, testeado)
     scoreboard.ts      Overlay del Top con pestañas Tradicional/Caos, estados de carga/error/vacío
     leaderboardStatus.ts Aviso de API caída en inicio/pausa (nunca oculta el botón)
     levelBannerTheme.ts Fondo/animación del cartel para cada nivel (puro)
