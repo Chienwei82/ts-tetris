@@ -26,22 +26,30 @@
     </header>
 
     <aside id="hud-left" class="panel">
-      <div class="stat"><label>Puntuación</label><strong id="score">0</strong></div>
-      <div class="stat-row">
-        <div class="stat"><label>Nivel</label><strong id="level">1</strong></div>
-        <div class="stat"><label>Líneas</label><strong id="lines">0</strong></div>
+      <div id="hud-primary">
+        <div class="stat hud-score"><label>Puntos</label><strong id="score">0</strong></div>
+        <div class="stat-row">
+          <div class="stat"><label>Nivel</label><strong id="level">1</strong></div>
+          <div class="stat"><label>Líneas</label><strong id="lines">0</strong></div>
+        </div>
       </div>
-      <div class="stat">
+      <div id="hud-progress" class="stat">
         <label>Progreso</label>
         <div id="gauge"><div id="gauge-fill" class="lines"></div></div>
         <p id="gauge-caption">0/10 líneas · 0:00/0:45</p>
-        <span id="mode-chip">Tradicional</span>
-        <span id="stage-chip">☀️ Pradera</span>
-        <span id="debris-chip" class="hidden">🧱 Escombros</span>
-        <span id="mutator-chip" class="hidden"></span>
+        <div id="hud-chips">
+          <span id="mode-chip">Tradicional</span>
+          <span id="stage-chip">☀️ Pradera</span>
+          <span id="debris-chip" class="hidden">🧱 Escombros</span>
+          <span id="mutator-chip" class="hidden"></span>
+          <span id="combo-chip" class="hidden"></span>
+          <span id="danger-chip" class="hidden" role="status" aria-live="polite"></span>
+        </div>
       </div>
-      <div class="stat"><label>Siguiente</label><canvas id="next" width="160" height="190"></canvas></div>
-      <div class="stat"><label>Reserva <span class="key">HOLD</span></label><canvas id="hold" width="160" height="80"></canvas></div>
+      <div id="hud-previews">
+        <div class="stat hud-next"><label>Siguiente</label><canvas id="next" width="160" height="190"></canvas></div>
+        <div class="stat hud-hold"><label>Reserva <span class="key">HOLD</span></label><canvas id="hold" width="160" height="80"></canvas></div>
+      </div>
     </aside>
 
     <aside id="hud-right" class="panel">

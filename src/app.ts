@@ -643,6 +643,19 @@ export class GameApp {
     this.hud.setLevelGauge(p.ratio, this.gaugeCaption(p), p.atMax ? 'max' : p.source);
   }
 
+  private dangerLevel(): 'safe' | 'warn' | 'danger' {
+    const top = this.engine.stackHeight;
+    if (top >= VISIBLE_ROWS - 2) return 'danger';
+    if (top >= VISIBLE_ROWS - 4) return 'warn';
+    return 'safe';
+  }
+
+  private refreshDanger(): void {
+    const level = this.dangerLevel();
+    this.board.setDanger(level, this.effectsOn && !prefersReducedMotion());
+    this.hud.setDanger(level);
+  }
+
   private currentMode(): GameMode {
     const sel = document.querySelector<HTMLInputElement>('input[name="game-mode"]:checked');
     return sel && sel.value === 'chaos' ? 'chaos' : 'classic';
@@ -862,7 +875,10 @@ export class GameApp {
     this.hud.setStageChip(this.activeScenarioLabel(lv));
     this.hud.hideOverlay();
     this.hud.setStats(0, lv, 0);
+    this.hud.setCombo(0);
+    this.hud.setDanger('safe');
     this.refreshGauge();
+    this.refreshDanger();
     this.refreshPreviews();
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   }
@@ -1245,6 +1261,7 @@ export class GameApp {
       this.hudAcc = 0;
       this.hud.setStats(this.engine.score, this.engine.level, this.engine.lines);
       this.refreshGauge();
+      this.refreshDanger();
       this.refreshPreviews();
       frameDirty = true;
     }
@@ -1260,7 +1277,8 @@ export class GameApp {
     const h = window.innerHeight;
     const compact = window.innerWidth <= 720 || h <= 480;
     const touch = this.input.getMode() === 'touch';
-    const top = (compact ? 60 : 0) / h;
+    // La tira compacta conserva ahora score, nivel, líneas, gauge y previews.
+    const top = (compact ? 104 : 0) / h;
     const bottom = (touch && compact && this.camera.aspect < 1 ? 200 : 0) / h;
     const key = this.camera.aspect + ':' + top + ':' + bottom;
     if (key !== this.frameKey) {

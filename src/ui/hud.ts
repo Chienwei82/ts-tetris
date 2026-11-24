@@ -18,6 +18,8 @@ export class HUD {
   private modeChipEl: HTMLElement | null;
   private debrisChipEl: HTMLElement | null;
   private mutatorChipEl: HTMLElement | null;
+  private comboChipEl: HTMLElement | null;
+  private dangerChipEl: HTMLElement | null;
   private chaosEl: HTMLElement | null;
   private toastQueue: string[] = [];
   private toastBusy = false;
@@ -48,6 +50,8 @@ export class HUD {
     this.modeChipEl = qc('mode-chip'); this.chaosEl = qc('chaos-status');
     this.debrisChipEl = qc('debris-chip');
     this.mutatorChipEl = qc('mutator-chip');
+    this.comboChipEl = qc('combo-chip');
+    this.dangerChipEl = qc('danger-chip');
   }
   setStats(score: number, level: number, lines: number): void {
     if (score !== this.lastScore) {
@@ -82,6 +86,33 @@ export class HUD {
   }
   setStageChip(text: string): void {
     if (this.stageChipEl.textContent !== text) this.stageChipEl.textContent = text;
+  }
+  /** Feedback inmediato de puntos sin añadir otro toast a la cola. */
+  pulseScore(): void {
+    const stat = this.scoreEl.parentElement;
+    if (!stat) return;
+    stat.classList.remove('score-pop');
+    void stat.offsetWidth;
+    stat.classList.add('score-pop');
+  }
+  /** Racha visible mientras se encadenan líneas; 0 la oculta. */
+  setCombo(count: number): void {
+    if (!this.comboChipEl) return;
+    const visible = count >= 2;
+    this.comboChipEl.classList.toggle('hidden', !visible);
+    if (visible) this.comboChipEl.textContent = '🔥 Combo x' + count;
+  }
+  /** Aviso de pila alta: siempre visible, también con efectos y pulso reducidos. */
+  setDanger(level: 'safe' | 'warn' | 'danger'): void {
+    if (!this.dangerChipEl) return;
+    this.dangerChipEl.classList.toggle('hidden', level === 'safe');
+    this.dangerChipEl.classList.toggle('danger', level === 'danger');
+    this.dangerChipEl.classList.toggle('warn', level === 'warn');
+    if (level === 'safe') {
+      this.dangerChipEl.textContent = '';
+      return;
+    }
+    this.dangerChipEl.textContent = level === 'danger' ? '¡PELIGRO!' : '⚠ Zona alta';
   }
   /** Big paper banner shown on every level-up, themed to the next stage. */
   levelBanner(title: string, sub: string, stage: BannerStage, stageChanged: boolean): void {

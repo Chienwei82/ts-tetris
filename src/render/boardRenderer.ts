@@ -154,6 +154,14 @@ export class BoardRenderer {
     MAX_LOCKED
   );
   private guideOn = false;
+  /** Franja informativa de las cuatro filas superiores (detrás de los bloques). */
+  private dangerMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(BOARD_W - 0.25, 4),
+    new THREE.MeshBasicMaterial({ color: 0xe04e39, transparent: true, opacity: 0, depthWrite: false, fog: false })
+  );
+  private dangerLevel: 'safe' | 'warn' | 'danger' = 'safe';
+  private dangerPulse = true;
+  private dangerOpacity = 0;
   /** Reloj cosmético compartido por la guía, el icono y el granizo. */
   private fxClock = 0;
   /** Caída animada del granizo: clave de celda -> progreso 0..1. */
@@ -215,6 +223,9 @@ export class BoardRenderer {
     this.guideIMesh.frustumCulled = false;
     this.guideIMesh.renderOrder = 6;
     this.group.add(this.guideIMesh);
+    this.dangerMesh.position.set(0, BOARD_H / 2 - 2, -0.32);
+    this.dangerMesh.visible = false;
+    this.group.add(this.dangerMesh);
     this.group.add(this.activeGroup, this.ghostGroup);
     this.group.add(this.particles.points);
     // Las texturas se crean bajo demanda y quedan cacheadas; nunca se mutan.
@@ -815,6 +826,20 @@ export class BoardRenderer {
    * bandas completas; el resto, celda a celda. Es una capa aditiva sobre el
    * papel: comunica el efecto exacto antes de soltar la pieza.
    */
+  /**
+   * Zona de aviso superior. Es información de juego, no decoración: se mantiene
+   * visible con efectos OFF y con movimiento reducido (en ese caso, sin pulso).
+   */
+  setDanger(level: 'safe' | 'warn' | 'danger', pulse = true): void {
+    this.dangerLevel = level;
+    this.dangerPulse = pulse;
+    const visible = level !== 'safe';
+    this.dangerMesh.visible = visible;
+    const base = level === 'danger' ? 0.22 : level === 'warn' ? 0.12 : 0;
+    this.dangerOpacity = base;
+    (this.dangerMesh.material as THREE.MeshBasicMaterial).opacity = base;
+  }
+
   setSpecialGuide(guide: { kind: string; rows: number[]; cells: Vec2[] } | null): void {
     if (!guide) {
       this.guideOn = false;
@@ -1106,6 +1131,13 @@ export class BoardRenderer {
       const gmat = this.guideIMesh.material as THREE.MeshBasicMaterial;
       gmat.opacity = 0.34 + 0.16 * (0.5 + 0.5 * Math.sin(this.fxClock * 6));
     }
+    if (this.dangerMesh.visible) {
+      const mat = this.dangerMesh.material as THREE.MeshBasicMaterial;
+      const pulse = this.dangerPulse
+        ? 0.88 + 0.12 * Math.sin(this.fxClock * 3.2)
+        : 1;
+      mat.opacity = this.dangerOpacity * pulse;
+    }
     // Icono del powerup: flota, late y gira (el taladro rota como una broca).
     if (this.specialIcon?.visible) {
       this.specialClock += dt;
@@ -1147,7 +1179,7 @@ export class BoardRenderer {
   get animating(): boolean {
     return this.activeGliding || this.ghostGliding || this.guideOn || this.hailFall.size > 0 || this.hailState.size > 0
       || (this.specialIcon?.visible ?? false) || (this.ghostSpecial?.visible ?? false)
-      || this.clearTexts.length > 0;
+      || this.clearTexts.length > 0 || (this.dangerLevel !== 'safe' && this.dangerPulse);
   }
   reset(): void {
     const recycle = (g: THREE.Group): void => {
@@ -1163,6 +1195,7 @@ export class BoardRenderer {
     this.rebuildJunk();
     this.guideOn = false;
     this.guideIMesh.count = 0;
+    this.setDanger('safe');
     this.hailFall.clear();
     this.specialKind = null;
     // Meshes mid clear/lock animation are no longer in `lockedState`: without
