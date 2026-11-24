@@ -117,6 +117,40 @@ describe('engine', () => {
     expect(e.level).toBe(MAX_LEVEL);
     expect(e.levelProgress().atMax).toBe(true);
   });
+  it('la subida por tiempo reinicia el contador de líneas del nivel', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    e.lines = 9;
+    e.update(SECONDS_PER_LEVEL);
+    expect(e.level).toBe(2);
+    expect(e.linesAtLevelStart).toBe(9);
+    expect(e.levelProgress().linesIntoLevel).toBe(0);
+    for (let c = 0; c < 8; c++) e.grid[0]![c] = 'I';
+    e.active = { kind: 'O', rotation: 0, x: 8, y: 4 };
+    e.hardDrop();
+    // Las 9 líneas anteriores al cambio de nivel no cuentan en la nueva regla.
+    expect(e.level).toBe(2);
+    expect(e.levelProgress().linesIntoLevel).toBe(1);
+    // Otras 9 líneas completan las 10 del nivel actual (19 totales).
+    e.lines = 18;
+    for (let c = 0; c < 8; c++) e.grid[0]![c] = 'I';
+    e.active = { kind: 'O', rotation: 0, x: 8, y: 4 };
+    e.hardDrop();
+    expect(e.level).toBe(3);
+    expect(e.lines).toBe(19);
+  });
+  it('las líneas de un clear reinician el reloj del nivel', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    e.lines = 9;
+    e.update(SECONDS_PER_LEVEL * 0.5);
+    for (let c = 0; c < 8; c++) e.grid[0]![c] = 'I';
+    e.active = { kind: 'O', rotation: 0, x: 8, y: 4 };
+    e.hardDrop();
+    expect(e.level).toBe(2);
+    expect(e.levelTime).toBe(0);
+    expect(e.levelProgress().linesIntoLevel).toBe(0);
+  });
   it('reports gauge progress with the leading rule', () => {
     const e = new TetrisEngine({ rng: seqRng() });
     e.start();
@@ -130,13 +164,38 @@ describe('engine', () => {
     expect(byTime.source).toBe('time');
     expect(byTime.ratio).toBeCloseTo(0.5);
   });
-  it('clamps lines progress to the current level window', () => {
+  it('mide las líneas de forma relativa al nivel, también al empezar en uno alto', () => {
     const e = new TetrisEngine({ rng: seqRng() });
     e.start(5);
-    e.lines = 3; // below the level-5 window (40 lines)
+    e.lines = 3;
     const p = e.levelProgress();
-    expect(p.ratio).toBe(0);
+    expect(p.ratio).toBeCloseTo(0.3);
+    expect(p.linesIntoLevel).toBe(3);
     expect(p.source).toBe('lines');
+  });
+  it('aplica solo kicks de la tabla SRS (el primero válido)', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    e.active = { kind: 'T', rotation: 0, x: 5, y: 10 };
+    // Bloquea la rotación sin kick; (-1, 0) sí deja la T en un hueco válido.
+    e.grid[9]![5] = 'I';
+    expect(e.rotate(1)).toBe(true);
+    expect(e.active.rotation).toBe(1);
+    expect(e.active.x).toBe(4);
+  });
+  it('si ningún kick SRS cabe, la rotación falla sin desplazamientos arbitrarios', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    e.active = { kind: 'T', rotation: 0, x: 5, y: 10 };
+    const occupied = new Set(e.activeCells().map((c) => `${c.x},${c.y}`));
+    for (let y = 0; y < e.grid.length; y++) {
+      for (let x = 0; x < 10; x++) {
+        if (!occupied.has(`${x},${y}`)) e.grid[y]![x] = 'I';
+      }
+    }
+    const before = { ...e.active };
+    expect(e.rotate(1)).toBe(false);
+    expect(e.active).toEqual(before);
   });
 });
 

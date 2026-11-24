@@ -174,7 +174,9 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
   const hemi = new THREE.HemisphereLight(0xfff4dd, 0xd8c9a8, 0.95);
   scene.add(hemi);
   const key = new THREE.DirectionalLight(0xfff1d6, 1.5);
-  key.position.set(6, 12, 10);
+  // Luz más cenital: conserva volumen y sombras, pero acorta la proyección
+  // sobre la hoja para que los huecos del tablero sigan siendo legibles.
+  key.position.set(3.5, 17, 11);
   key.castShadow = true;
   const shadowSize = opts.shadowMapSize ?? 2048;
   key.shadow.mapSize.set(shadowSize, shadowSize);

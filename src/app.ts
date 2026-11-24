@@ -635,8 +635,7 @@ export class GameApp {
 
   private gaugeCaption(p: LevelProgress): string {
     if (p.atMax) return 'Nivel máximo alcanzado';
-    const into = Math.max(0, Math.min(LINES_PER_LEVEL, this.engine.lines - (this.engine.level - 1) * LINES_PER_LEVEL));
-    return into + '/' + LINES_PER_LEVEL + ' líneas · ' + fmtClock(this.engine.levelTime) + '/' + fmtClock(SECONDS_PER_LEVEL);
+    return p.linesIntoLevel + '/' + LINES_PER_LEVEL + ' líneas · ' + fmtClock(this.engine.levelTime) + '/' + fmtClock(SECONDS_PER_LEVEL);
   }
 
   private refreshGauge(): void {
@@ -1201,7 +1200,7 @@ export class GameApp {
             this.hud.toast('Pieza especial: ' + label, 1600);
           }
           this.hud.setChaosStatus(label, sp ?? '');
-          this.board.setGhost(this.engine.ghostCells(), sp);
+          this.board.setGhost(this.engine.ghostCells(), sp, this.engine.active.kind);
           // Guía de impacto: mismas celdas que tocará el efecto si se suelta.
           this.board.setSpecialGuide(this.engine.specialPreview());
         }

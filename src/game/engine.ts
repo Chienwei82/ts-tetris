@@ -59,6 +59,8 @@ export class TetrisEngine implements MutatorHost {
   canHold = true;
   phase: GamePhase = 'ready';
   score = 0; lines = 0; level = 1; combo = -1;
+  /** Líneas totales al empezar el nivel; la regla de líneas es relativa a esta marca. */
+  linesAtLevelStart = 0;
   /** Seconds of play accumulated inside the current level (drives the gauge). */
   levelTime = 0;
   softDrop = false;
@@ -114,6 +116,7 @@ export class TetrisEngine implements MutatorHost {
     this.grid = createGrid(); this.queue = [];
     this.holdKind = null; this.holdSpecial = null; this.holdDrillUsed = false; this.canHold = true;
     this.score = 0; this.lines = 0; this.level = firstLevel; this.combo = -1;
+    this.linesAtLevelStart = 0;
     this.levelTime = 0;
     this.fallAcc = 0; this.lockAcc = 0; this.lockResets = 0; this.softDrop = false;
     this.slippery = false;
@@ -204,18 +207,22 @@ export class TetrisEngine implements MutatorHost {
   private levelUp(): void {
     if (this.level >= MAX_LEVEL) { this.levelTime = SECONDS_PER_LEVEL; return; }
     this.level += 1;
+    // La subida por tiempo reinicia también el avance por líneas: ambas reglas
+    // compiten desde cero en cada nivel, sin ventanas absolutas heredadas.
+    this.linesAtLevelStart = this.lines;
     this.levelTime = 0;
     this.emit({ type: 'levelup', level: this.level });
   }
   /** Gauge data: progress toward the next level, whichever rule (lines/time) is ahead. */
   levelProgress(): LevelProgress {
-    if (this.level >= MAX_LEVEL) return { ratio: 1, source: 'lines', atMax: true };
-    const into = this.lines - (this.level - 1) * LINES_PER_LEVEL;
-    const lineRatio = Math.min(1, Math.max(0, into / LINES_PER_LEVEL));
+    const into = Math.max(0, this.lines - this.linesAtLevelStart);
+    const linesIntoLevel = Math.min(LINES_PER_LEVEL, into);
+    if (this.level >= MAX_LEVEL) return { ratio: 1, source: 'lines', linesIntoLevel, atMax: true };
+    const lineRatio = linesIntoLevel / LINES_PER_LEVEL;
     const timeRatio = Math.min(1, this.levelTime / SECONDS_PER_LEVEL);
     return lineRatio >= timeRatio
-      ? { ratio: lineRatio, source: 'lines', atMax: false }
-      : { ratio: timeRatio, source: 'time', atMax: false };
+      ? { ratio: lineRatio, source: 'lines', linesIntoLevel, atMax: false }
+      : { ratio: timeRatio, source: 'time', linesIntoLevel, atMax: false };
   }
   private stepDown(softPoints: number): boolean {
     if (!this.active) return false;
@@ -282,32 +289,9 @@ export class TetrisEngine implements MutatorHost {
         this.emit({ type: 'rotate' }); this.resetLockDelay(); return true;
       }
     }
-    // Fallback: la SRS no cubre todas las pegadas al borde (p. ej. I vertical
-    // contra el muro). Para que la pieza rote igual, buscamos el desplazamiento
-    // mínimo que la deje en una posición válida, priorizando el empuje
-    // horizontal hacia dentro del tablero.
-    const tried = new Set(kicks.map((k) => `${k.x},${k.y}`));
-    const candidates: Vec2[] = [];
-    for (let dx = -4; dx <= 4; dx++) {
-      for (let dy = -2; dy <= 3; dy++) {
-        const key = `${dx},${dy}`;
-        if (tried.has(key)) continue;
-        candidates.push({ x: dx, y: dy });
-      }
-    }
-    candidates.sort((a, b) =>
-      (Math.abs(a.x) + Math.abs(a.y)) - (Math.abs(b.x) + Math.abs(b.y)) ||
-      Math.abs(a.x) - Math.abs(b.x) ||
-      Math.abs(b.y) - Math.abs(a.y),
-    );
-    for (const k of candidates) {
-      const cells = cellsForPiece(this.active.kind, to, this.active.x + k.x, this.active.y + k.y);
-      if (!collides(this.grid, cells)) {
-        this.active.rotation = to; this.active.x += k.x; this.active.y += k.y;
-        this.pieceVersion++;
-        this.emit({ type: 'rotate' }); this.resetLockDelay(); return true;
-      }
-    }
+    // SRS estricto: si ningún kick de la tabla es válido, la rotación falla.
+    // Un desplazamiento arbitrario haría impredecible el control y rompería la
+    // clasificación de T-spins (que depende del último kick aplicado).
     return false;
   }
   private resetLockDelay(): void {
@@ -551,7 +535,15 @@ export class TetrisEngine implements MutatorHost {
         const gained = (base + typeBonus) * this.level + comboBonus;
         this.score += gained;
         this.lines += cleared.length;
-        const newLevel = Math.min(MAX_LEVEL, Math.floor(this.lines / LINES_PER_LEVEL) + 1);
+        const levelsGained = Math.floor((this.lines - this.linesAtLevelStart) / LINES_PER_LEVEL);
+        const appliedLevels = Math.max(0, Math.min(levelsGained, MAX_LEVEL - this.level));
+        if (appliedLevels > 0) {
+          this.level += appliedLevels;
+          // Las líneas sobrantes del clear pasan al siguiente nivel; las que ya
+          // habían avanzado el nivel actual no se reutilizan.
+          this.linesAtLevelStart += appliedLevels * LINES_PER_LEVEL;
+          this.levelTime = 0;
+        }
         this.emit({
           type: 'clear',
           lines: cleared.length,
@@ -559,10 +551,10 @@ export class TetrisEngine implements MutatorHost {
           rows: cleared,
           cells,
           scoreGained: gained,
-          level: newLevel,
+          level: this.level,
           comboCount: this.combo > 0 ? this.combo : 0,
         });
-        if (newLevel > this.level) { this.level = newLevel; this.levelTime = 0; this.emit({ type: 'levelup', level: newLevel }); }
+        if (appliedLevels > 0) this.emit({ type: 'levelup', level: this.level });
         if (this.combo > 0) this.emit({ type: 'combo', comboCount: this.combo, comboBonus, level: this.level });
       } else { this.combo = -1; }
     }

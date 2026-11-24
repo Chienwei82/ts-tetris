@@ -214,6 +214,8 @@ export interface LevelProgress {
   ratio: number;
   /** Which rule is currently ahead. */
   source: 'lines' | 'time';
+  /** Líneas limpiadas desde el inicio del nivel actual (0..LINES_PER_LEVEL). */
+  linesIntoLevel: number;
   /** True when the level cap has been reached. */
   atMax: boolean;
 }
