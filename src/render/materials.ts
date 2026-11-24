@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PIECE_COLORS } from '../game/types.js';
 import type { PieceKind } from '../game/types.js';
+import { drawPieceMotif } from './pieceMotifs.js';
 
 /** Ink-brown used for hand-drawn cut-out outlines. */
 export const INK = 0x3b2b20;
@@ -36,11 +37,10 @@ function speckle(ctx: CanvasRenderingContext2D, w: number, h: number, n: number)
 }
 
 /* Paper tile (block faces): lighter frame + halftone inner panel. */
-const tile = makeCanvas(256, 256);
-{
-  const { ctx } = tile;
+function paintPaperTile(ctx: CanvasRenderingContext2D): void {
+  const size = 256;
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, 256, 256);
+  ctx.fillRect(0, 0, size, size);
   // inner "pasted" panel -> leaves a lighter paper frame on every face
   ctx.fillStyle = '#ddd5c4';
   ctx.fillRect(20, 20, 216, 216);
@@ -59,8 +59,10 @@ const tile = makeCanvas(256, 256);
       ctx.fill();
     }
   }
-  speckle(ctx, 256, 256, 700);
+  speckle(ctx, size, size, 700);
 }
+const tile = makeCanvas(256, 256);
+paintPaperTile(tile.ctx);
 const paperTileTex = toTexture(tile.c);
 
 /* Cardboard (frame bars / stage platform). */
@@ -180,21 +182,65 @@ export const toonGradient = (() => {
   return tex;
 })();
 
-const blockCache = new Map<PieceKind, THREE.MeshToonMaterial>();
-export function blockMaterial(kind: PieceKind): THREE.MeshToonMaterial {
-  let m = blockCache.get(kind);
+const blockCache = new Map<string, THREE.MeshToonMaterial>();
+/** Texturas con motivo por pieza (se crean solo si el usuario activa el modo). */
+const patternTexCache = new Map<PieceKind, THREE.CanvasTexture>();
+let piecePatterns = false;
+
+/** Textura de papel + motivo de la pieza, cacheadas una vez por tipo. */
+function patternedTile(kind: PieceKind): THREE.CanvasTexture {
+  const cached = patternTexCache.get(kind);
+  if (cached) return cached;
+  const { c, ctx } = makeCanvas(256, 256);
+  paintPaperTile(ctx);
+  // Motivo tenue sobre el panel interior: se lee sin competir con el color.
+  drawPieceMotif(ctx, kind, { x: 20, y: 20, w: 216, h: 216 }, {
+    color: '#3b2b20',
+    lineWidth: 13,
+    alpha: 0.26,
+  });
+  const tex = toTexture(c);
+  patternTexCache.set(kind, tex);
+  return tex;
+}
+
+export function piecePatternsEnabled(): boolean {
+  return piecePatterns;
+}
+
+/**
+ * Activa/desactiva los motivos por pieza. Los materiales ya creados cambian de
+ * mapa (no se recrean), así los meshes en escena se actualizan al instante.
+ */
+export function setPiecePatterns(on: boolean): void {
+  if (piecePatterns === on) return;
+  piecePatterns = on;
+  for (const [key, material] of blockCache) {
+    const kind = key.slice(0, 1) as PieceKind;
+    material.map = on ? patternedTile(kind) : paperTileTex;
+    material.needsUpdate = true;
+  }
+}
+
+/**
+ * Material de bloque. `active` sube el brillo propio para separar la pieza en
+ * juego de las ya fijadas sin cambiar su color (el color identifica la pieza).
+ */
+export function blockMaterial(kind: PieceKind, active = false): THREE.MeshToonMaterial {
+  const cacheKey = active ? `${kind}:active` : kind;
+  let m = blockCache.get(cacheKey);
   if (!m) {
     m = new THREE.MeshToonMaterial({
       color: PIECE_COLORS[kind],
-      map: paperTileTex,
+      map: piecePatterns ? patternedTile(kind) : paperTileTex,
       gradientMap: toonGradient,
       emissive: PIECE_COLORS[kind],
-      emissiveIntensity: 0.13,
+      emissiveIntensity: active ? 0.3 : 0.13,
       // El tablero es el primer plano del diorama: la niebla del fondo (que
       // oscurece el horizonte) no debe teñir las piezas.
       fog: false
     });
-    blockCache.set(kind, m);
+    blockCache.set(cacheKey, m);
   }
   return m;
 }
@@ -203,6 +249,15 @@ export function blockMaterial(kind: PieceKind): THREE.MeshToonMaterial {
 const inkOutline = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide, fog: false });
 export function outlineMaterial(): THREE.MeshBasicMaterial {
   return inkOutline;
+}
+
+/**
+ * Contorno de la pieza activa: papel iluminado en vez de tinta oscura. Marca
+ * "esta pieza se mueve" a un vistazo, incluso con el tablero lleno.
+ */
+const activeOutline = new THREE.MeshBasicMaterial({ color: 0xfff3cf, side: THREE.BackSide, fog: false });
+export function activeOutlineMaterial(): THREE.MeshBasicMaterial {
+  return activeOutline;
 }
 
 const cardboardMat = new THREE.MeshStandardMaterial({ map: cardboardTex, color: 0xffffff, roughness: 1, metalness: 0, fog: false });

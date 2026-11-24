@@ -9,6 +9,7 @@ const CHAOS_LIGHTNING_KEY = 'tetris-3d:chaos-lightning';
 const CHAOS_HAIL_KEY = 'tetris-3d:chaos-hail';
 const SHAKE_KEY = 'tetris-3d:camera-shake';
 const FLASH_KEY = 'tetris-3d:clear-flash';
+const PATTERNS_KEY = 'tetris-3d:piece-patterns';
 
 /** Modo de control elegido por el usuario: teclado/ratón o táctil. */
 export type ControlMode = 'desktop' | 'touch';
@@ -126,6 +127,19 @@ export function loadFlashEnabled(): boolean {
 }
 export function saveFlashEnabled(on: boolean): void {
   try { window.localStorage.setItem(FLASH_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+}
+
+/**
+ * Motivos por pieza (accesibilidad). Apagado por defecto para no alterar el
+ * aspecto de papel troquelado; al activarlo cada pieza lleva un trazo propio.
+ */
+export function loadPiecePatterns(): boolean {
+  try {
+    return window.localStorage.getItem(PATTERNS_KEY) === '1';
+  } catch { return false; }
+}
+export function savePiecePatterns(on: boolean): void {
+  try { window.localStorage.setItem(PATTERNS_KEY, on ? '1' : '0'); } catch { /* ignore */ }
 }
 export function saveFxQuality(quality: FxQuality): void {
   try { window.localStorage.setItem(FX_QUALITY_KEY, quality); } catch { /* ignore */ }

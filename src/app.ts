@@ -1,7 +1,7 @@
 import './styles.css';
 import * as THREE from 'three';
 import { TetrisEngine } from './game/engine.js';
-import { CLEAR_TYPE_COLOR, CLEAR_TYPE_LABEL, COLS, JUNK_COLOR, LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL, TOTAL_ROWS, VISIBLE_ROWS } from './game/types.js';
+import { CLEAR_TYPE_COLOR, COLS, JUNK_COLOR, LINES_PER_LEVEL, MAX_LEVEL, PIECE_COLORS, SECONDS_PER_LEVEL, TOTAL_ROWS, VISIBLE_ROWS } from './game/types.js';
 import type { GameEvent, GameMode, LevelProgress, PieceKind } from './game/types.js';
 import type { IntensitySignals } from './audio/intensityTracker.js';
 import { BoardRenderer } from './render/boardRenderer.js';
@@ -37,9 +37,12 @@ import { InputManager } from './ui/inputManager.js';
 import { ModeSelect } from './ui/modeSelect.js';
 import { HUD } from './ui/hud.js';
 import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
-import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, loadFxQuality, loadChaosLightning, loadChaosHail, loadShakeEnabled, loadFlashEnabled, prefersReducedMotion, saveEffectsEnabled, saveMusicEnabled, saveMusicGenre, saveFxQuality, saveChaosLightning, saveChaosHail, saveShakeEnabled, saveFlashEnabled } from './ui/settings.js';
+import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, loadFxQuality, loadChaosLightning, loadChaosHail, loadShakeEnabled, loadFlashEnabled, loadPiecePatterns, prefersReducedMotion, saveEffectsEnabled, saveMusicEnabled, saveMusicGenre, saveFxQuality, saveChaosLightning, saveChaosHail, saveShakeEnabled, saveFlashEnabled, savePiecePatterns } from './ui/settings.js';
 import { FeedbackDirector } from './ui/feedbackDirector.js';
 import type { FeedbackPriority } from './ui/feedbackDirector.js';
+import { clearSummary } from './ui/clearSummary.js';
+import { panelOpacityFor } from './render/boardBackdrop.js';
+import { setPiecePatterns } from './render/materials.js';
 import { randomSeed } from './game/rng.js';
 import { MusicMenu } from './ui/musicMenu.js';
 import { Scoreboard } from './ui/scoreboard.js';
@@ -113,6 +116,7 @@ export class GameApp {
   private effectsOn = true;
   private shakeOn = true;
   private flashOn = true;
+  private patternsOn = false;
   private musicOn = true;
   private musicGenre: GenreId;
   private helpOpen = false;
@@ -190,8 +194,10 @@ export class GameApp {
     this.shake = new CameraShake();
     this.shakeOn = loadShakeEnabled();
     this.flashOn = loadFlashEnabled();
+    this.patternsOn = loadPiecePatterns();
     this.shake.setEnabled(this.shakeOn);
     this.flash.setEnabled(this.flashOn);
+    setPiecePatterns(this.patternsOn);
     this.chaosFx = new ChaosFx(scene);
 
     const fallbackQuality: FxQuality = this.device.kind === 'desktop' ? 'high' : this.device.kind === 'tablet' ? 'medium' : 'low';
@@ -315,12 +321,14 @@ export class GameApp {
     const chaosHailCheck = el<HTMLInputElement>('chaos-hail');
     const cameraShakeCheck = el<HTMLInputElement>('camera-shake');
     const clearFlashCheck = el<HTMLInputElement>('clear-flash');
+    const piecePatternsCheck = el<HTMLInputElement>('piece-patterns');
     const fxQualitySelect = el<HTMLSelectElement>('fx-quality');
 
     chaosLightningCheck.checked = this.chaosLightningOn;
     chaosHailCheck.checked = this.chaosHailOn;
     cameraShakeCheck.checked = this.shakeOn;
     clearFlashCheck.checked = this.flashOn;
+    piecePatternsCheck.checked = this.patternsOn;
     fxQualitySelect.value = this.fxQuality;
 
     chaosLightningCheck.addEventListener('change', () => {
@@ -341,6 +349,18 @@ export class GameApp {
       this.flash.setEnabled(this.flashOn);
       saveFlashEnabled(this.flashOn);
     });
+    piecePatternsCheck.addEventListener('change', () => {
+      this.patternsOn = piecePatternsCheck.checked;
+      setPiecePatterns(this.patternsOn);
+      savePiecePatterns(this.patternsOn);
+      // El cambio de textura no mueve geometría: basta con redibujar una vez y
+      // volver a pintar previews e iconos de ayuda con el nuevo estilo.
+      this.lastNextKey = '';
+      this.lastHoldKey = '';
+      this.refreshPreviews();
+      this.drawHelpIcons();
+      this.needsRender = true;
+    });
     fxQualitySelect.addEventListener('change', () => {
       const value = fxQualitySelect.value;
       if (!isFxQuality(value)) return;
@@ -352,12 +372,17 @@ export class GameApp {
       radio.addEventListener('change', () => { if (this.engine.phase === 'ready') this.applyDebrisSettings(); });
     }
 
-    for (const canvas of document.querySelectorAll<HTMLCanvasElement>('.piece-icon')) {
-      const kind = canvas.dataset.piece as PieceKind | undefined;
-      if (kind) drawPieceIcon(canvas, kind);
-    }
+    this.drawHelpIcons();
 
     requestAnimationFrame(this.animate);
+  }
+
+  /** Iconos de pieza de la ayuda; respetan el ajuste de motivos por pieza. */
+  private drawHelpIcons(): void {
+    for (const canvas of document.querySelectorAll<HTMLCanvasElement>('.piece-icon')) {
+      const kind = canvas.dataset.piece as PieceKind | undefined;
+      if (kind) drawPieceIcon(canvas, kind, this.patternsOn);
+    }
   }
 
   private setupDOMListeners(): void {
@@ -642,6 +667,7 @@ export class GameApp {
     btnEffects.setAttribute('aria-pressed', String(on));
     btnEffects.classList.toggle('off', !on);
     if (persist) saveEffectsEnabled(on);
+    this.refreshBackdrop();
   }
 
   private applyDebrisSettings(): void {
@@ -707,6 +733,23 @@ export class GameApp {
     const level = this.dangerLevel();
     this.board.setDanger(level, this.effectsOn && !prefersReducedMotion());
     this.hud.setDanger(level);
+  }
+
+  /** Escenario vigente (o el que toca por nivel si aún no hay escenario 3D). */
+  private activeStageId(): string {
+    const active = this.scenarioManager.activeScenario();
+    if (active) return active.id;
+    return bannerStageForLevel(this.engine.level).id;
+  }
+
+  /**
+   * Ajusta la transparencia de la hoja del tablero al escenario. Pradera admite
+   * más transparencia; ciudad, espacio y mar necesitan una hoja más opaca para
+   * que las piezas y los huecos sigan leyéndose.
+   */
+  private refreshBackdrop(): void {
+    this.board.setBackdropOpacity(panelOpacityFor(this.activeStageId(), this.effectsOn));
+    this.needsRender = true;
   }
 
   private currentMode(): GameMode {
@@ -934,6 +977,7 @@ export class GameApp {
     this.hud.setDanger('safe');
     this.refreshGauge();
     this.refreshDanger();
+    this.refreshBackdrop();
     this.refreshPreviews();
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   }
@@ -981,17 +1025,18 @@ export class GameApp {
 
   private refreshPreviews(): void {
     const count = this.previewCount();
+    const patterns = this.patternsOn ? 1 : 0;
     const next = this.engine.peekNext(count);
     const upcoming = this.engine.peekSpecial();
-    const nk = 'N:' + count + ':' + next.join('') + ':' + String(upcoming);
+    const nk = 'N:' + count + ':' + patterns + ':' + next.join('') + ':' + String(upcoming);
     if (nk !== this.lastNextKey) {
       this.lastNextKey = nk;
-      drawNext(this.nextCanvas, next, upcoming, count);
+      drawNext(this.nextCanvas, next, upcoming, count, this.patternsOn);
     }
-    const hk = String(this.engine.holdKind) + ':' + this.engine.canHold + ':' + String(this.engine.holdSpecial);
+    const hk = String(this.engine.holdKind) + ':' + this.engine.canHold + ':' + String(this.engine.holdSpecial) + ':' + patterns;
     if (hk !== this.lastHoldKey) {
       this.lastHoldKey = hk;
-      drawHold(this.holdCanvas, this.engine.holdKind, this.engine.canHold, this.engine.holdSpecial);
+      drawHold(this.holdCanvas, this.engine.holdKind, this.engine.canHold, this.engine.holdSpecial, this.patternsOn);
     }
   }
 
@@ -1167,11 +1212,13 @@ export class GameApp {
         if (n >= 4) this.sound.play('tetris');
         else this.sound.play('clear', n);
         if (n > 1 || comboCount >= 2) {
-          const clearLabel = CLEAR_TYPE_LABEL[clearType as keyof typeof CLEAR_TYPE_LABEL] ?? n + ' líneas';
-          const title = n >= 4 ? '¡TETRIS!' : '¡' + clearLabel + '!';
-          const comboText = comboCount >= 2 ? ' · Combo x' + comboCount : '';
-          this.announce(comboCount >= 2 ? 'combo' : 'clear', title + ' +' + (e.scoreGained ?? 0) + comboText, 1800);
+          // Un único aviso con desglose: tipo de clear · combo · puntos.
+          const summary = clearSummary({ clearType, lines: n, comboCount, scoreGained: e.scoreGained ?? 0 });
+          this.announce(comboCount >= 2 ? 'combo' : 'clear', summary.title + ' ' + summary.detail, 1800);
         }
+        // Logro excepcional: micro-congelación de la puesta en escena (nunca del
+        // motor, los controles ni el temporizador).
+        if (n >= 4 && motion) this.board.hitStop(0.045);
         if (this.debrisOn && rows.length > 0) {
           // Terremoto: la limpieza se siente en la cámara y el suelo.
           this.quake(0.55 + n * 0.15, 0.55 + n * 0.08);
@@ -1218,6 +1265,7 @@ export class GameApp {
           this.hud.levelBanner('NIVEL ' + lv, '¡más rápido!', stage, false);
         }
         this.hud.setStageChip(this.activeScenarioLabel(lv));
+        this.refreshBackdrop();
         break;
       }
       case 'gameover':

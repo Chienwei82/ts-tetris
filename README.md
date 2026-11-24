@@ -41,7 +41,7 @@ aparece un aviso de clasificación no disponible (el botón nunca se oculta) y e
 envío de puntaje se puede reintentar.
 
 ```bash
-npm test         # tests de lógica (vitest 5, 254 tests)
+npm test         # tests de lógica (vitest 5, 269 tests)
 npm run build    # type-check (tsc 7 nativo) + type-check del API + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
@@ -195,11 +195,24 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
 - Lock delay de 0.5 s con hasta 15 reseteos al mover/rotar.
 - Pieza fantasma **hueca y con contorno discontinuo**, vista previa de las 3
   piezas siguientes (2 en la tira compacta móvil para que sigan legibles) y reserva.
+- **Motivos por pieza** (ajuste opcional, apagado por defecto): I verticales,
+  O lunares, T, S/Z diagonales opuestas y J/L chevrones. El mismo trazo se aplica
+  a los bloques 3D, al preview, a la reserva y a los iconos de la ayuda, para
+  distinguir piezas sin depender del color (daltonismo, pantallas lavadas).
+- La pieza activa lleva **contorno de papel iluminado** y algo más de brillo
+  propio: se distingue de las ya fijadas incluso con el tablero lleno.
 - **Zona de peligro** en las 4 filas superiores y chip de aviso cuando la pila
   llega arriba; sigue visible con efectos OFF y sin pulso con movimiento reducido.
 - **Sacudida de cámara y destellos de línea se ajustan por separado** en la
   pantalla de inicio, se guardan en `localStorage` y arrancan desactivados si el
   sistema pide movimiento reducido.
+- **Hoja del tablero por escenario**: con efectos es translúcida y su opacidad
+  sube en los escenarios oscuros (pradera 0.46 · bosque 0.52 · ciudad y mar 0.60 ·
+  espacio 0.64) para que piezas y huecos sigan leyéndose; sin efectos vuelve a ser
+  sólida y más barata de renderizar.
+- **Hit-stop de 45 ms** solo en Tetris y con movimiento permitido: congela la
+  animación de la limpieza como golpe visual, nunca el motor, los controles ni el
+  temporizador.
 - **Pantalla de ayuda** (se abre sola al arrancar; también con `H` o el botón
   ❓): explica los 7 bloques y todas las ayudas del juego con enfoque móvil y un
   desplegable opcional de teclado. Abrirla durante la partida pausa el juego.
@@ -323,9 +336,11 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
   las mismas `InputActions` (`inputManager.ts`); la máquina de gestos (`pieceDrag.ts`)
   es pura y testeada: arrastre convertido en pasos de celda con resto conservado,
   caída por profundidad máxima del dedo y tap con slop + temporizador.
-- **Panel del tablero por modos**: translúcido con efectos (el fondo se ve detrás de
-  las piezas y las sombras se recortan contra el panel) y sólido sin ellos
+- **Panel del tablero por modos y escenario**: translúcido con efectos (el fondo
+  se ve detrás de las piezas y las sombras se recortan contra el panel) con
+  opacidad creciente en escenarios oscuros, y sólido sin ellos
   (`transparent: false`, sin blending ni ordenación) para ahorrar GPU.
+  `render/boardBackdrop.ts` concentra la tabla (pura y testeada).
 - **Render condicional**: `renderer.render()` solo se ejecuta cuando hay un frame
   sucio (cambio de grid/pieza, sombra, escombros, clima, shake, HUD o render
   pendiente); pantallas estáticas (menú, pausa, gameover) no re-dibujan.
@@ -435,12 +450,19 @@ paso previsto es un ticket de partida firmado con HMAC al empezar.
   aditiva, estrellas con parpadeo, luciérnagas y estrellas fugaces) y el confeti
   siguen animándose por encima.
 - **Legibilidad primero**: fantasma hueco con borde discontinuo, luz más cenital
-  para acortar sombras, franja de peligro en la zona alta y HUD compacto que
-  conserva Puntos/Nivel/Líneas, gauge, Siguiente y Reserva.
+  para acortar sombras, franja de peligro en la zona alta, contorno iluminado de
+  la pieza activa y HUD compacto que conserva Puntos/Nivel/Líneas, gauge,
+  Siguiente y Reserva.
+- **Motivos de papel por pieza** (`render/pieceMotifs.ts`): trazos normalizados
+  0..1 que se dibujan igual en la textura 3D (256 px) y en las previews 2D, con
+  un patrón distinto por tetromino. Son datos puros, así que el mismo motivo no
+  puede desincronizarse entre el tablero y el HUD.
 - Cámara en perspectiva con **deriva sinusoidal sutil** + trauma/shake en drops, clears y niveles.
 - Feedback en cada acción: rebote al fijar, fichas que vuelan + destello al limpiar,
   hard drop con estela y onda de impacto, barrido escalonado de filas, textos 3D
-  reservados para dobles/triples/Tetris/combos, pulso del marcador y overlay de cartón.
+  reservados para dobles/triples/Tetris/combos, hit-stop breve en Tetris, aviso
+  único con desglose (`¡TETRIS! +1200 · Combo x3`), pulso del marcador y overlay
+  de cartón.
 
 ## Despliegue (Vercel)
 

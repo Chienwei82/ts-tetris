@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ALL_KINDS, CLEAR_TYPE_COLOR, CLEAR_TYPE_LABEL, COLS, DRILL_COLOR, JUNK_COLOR, PIECE_COLORS, VISIBLE_ROWS } from '../game/types.js';
 import type { ClearType, Grid, PieceKind, Vec2 } from '../game/types.js';
 import { BOARD_D, BOARD_H, BOARD_W, cellToWorld } from './constants.js';
-import { INK, blockMaterial, cardboardMaterial, graphPaperMaterial, outlineMaterial, tapeMaterial } from './materials.js';
+import { INK, activeOutlineMaterial, blockMaterial, cardboardMaterial, graphPaperMaterial, outlineMaterial, tapeMaterial } from './materials.js';
 import { ParticleSystem } from './particles.js';
 import { ACTIVE_STIFFNESS, GHOST_STIFFNESS, criticalDamping, isSettled, matchByProximity, stepSpring } from './motionSpring.js';
 // Materiales del tablero: `fog: false` en todos — la niebla del fondo es para el
@@ -162,6 +162,12 @@ export class BoardRenderer {
   private dangerLevel: 'safe' | 'warn' | 'danger' = 'safe';
   private dangerPulse = true;
   private dangerOpacity = 0;
+  /**
+   * Congelación visual de 30–50 ms para logros excepcionales. Solo detiene las
+   * animaciones de clear/lock y los textos; el motor, los controles y los
+   * temporizadores siguen su curso.
+   */
+  private hitStopLeft = 0;
   /** Reloj cosmético compartido por la guía, el icono y el granizo. */
   private fxClock = 0;
   /** Caída animada del granizo: clave de celda -> progreso 0..1. */
@@ -386,23 +392,32 @@ export class BoardRenderer {
     g.add(mesh, edge);
     return g;
   }
-  private makeBlock(kind: PieceKind): THREE.Group {
+  private makeBlock(kind: PieceKind, active = false): THREE.Group {
     let g = this.pullFree.pop();
     // Recycled blocks carry the previous kind/material: always re-colorize.
-    if (g) { g.visible = true; g.scale.setScalar(1); g.rotation.set(0, 0, 0); this.colorize(g, kind); return g; }
+    if (g) { g.visible = true; g.scale.setScalar(1); g.rotation.set(0, 0, 0); this.colorize(g, kind, active); return g; }
     g = new THREE.Group();
-    const mesh = new THREE.Mesh(this.geo, blockMaterial(kind));
+    const mesh = new THREE.Mesh(this.geo, blockMaterial(kind, active));
     mesh.castShadow = true; mesh.receiveShadow = true;
-    const outline = new THREE.Mesh(this.geo, outlineMaterial());
+    const outline = new THREE.Mesh(this.geo, active ? activeOutlineMaterial() : outlineMaterial());
     outline.scale.setScalar(1.07);
     g.add(mesh, outline);
     g.userData.kind = kind;
     return g;
   }
-  private colorize(g: THREE.Group, kind: PieceKind): void {
+  private colorize(g: THREE.Group, kind: PieceKind, active = false): void {
     const mesh = g.children[0] as THREE.Mesh;
-    if (g.userData.kind !== kind) mesh.material = blockMaterial(kind);
+    if (g.userData.kind !== kind || mesh.material !== blockMaterial(kind, active)) {
+      mesh.material = blockMaterial(kind, active);
+    }
     g.userData.kind = kind;
+    // El contorno también se recicla: los bloques que pasan del pool activo al
+    // tablero (o al revés) deben recuperar su borde correcto.
+    const outline = g.children[1] as THREE.Mesh | undefined;
+    if (outline) {
+      const want = active ? activeOutlineMaterial() : outlineMaterial();
+      if (outline.material !== want) outline.material = want;
+    }
   }
   private buildFrame(): void {
     const card = cardboardMaterial();
@@ -457,17 +472,26 @@ export class BoardRenderer {
     this.group.add(back);
   }
   /**
-   * Panel de fondo translúcido (efectos ON: el diorama se ve a través del
-   * tablero, con las sombras de los bloques recortadas contra el fondo) u
-   * opaco (OFF: sin blending ni ordenación, más barato). El marco de cartón y
-   * la plataforma permanecen sólidos siempre.
+   * Panel de fondo del tablero. Con efectos es translúcido (el diorama se ve a
+   * través de la hoja y las sombras se recortan contra el fondo) y su opacidad
+   * depende del escenario: pradera clara admite más transparencia que ciudad,
+   * espacio o mar. Sin efectos vuelve a ser opaco (sin blending, más barato).
+   * El marco de cartón y la plataforma permanecen sólidos siempre.
    */
-  setBackdropTranslucent(on: boolean): void {
+  setBackdropOpacity(opacity: number): void {
     const mat = graphPaperMaterial();
-    mat.transparent = on;
-    mat.opacity = on ? 0.42 : 1;
-    mat.depthWrite = !on;
+    const clamped = Math.max(0.2, Math.min(1, opacity));
+    const transparent = clamped < 0.999;
+    mat.transparent = transparent;
+    mat.opacity = clamped;
+    mat.depthWrite = !transparent;
     mat.needsUpdate = true;
+  }
+
+  /** Congela brevemente la puesta en escena (nunca el juego) en logros grandes. */
+  hitStop(seconds: number): void {
+    if (seconds <= 0) return;
+    this.hitStopLeft = Math.max(this.hitStopLeft, seconds);
   }
   /** Numeric cell key: no string garbage in the hot paths. */
   key(col: number, row: number): number { return col + row * COLS; }
@@ -604,7 +628,7 @@ export class BoardRenderer {
       }
       const s: ActiveSpring = best ?? this.takeActiveSpring(t.x, t.y);
       if (bestIdx >= 0) claimed.add(bestIdx);
-      this.colorize(s.mesh, kind);
+      this.colorize(s.mesh, kind, true);
       if (!s.mesh.visible) s.mesh.visible = true;
       if (instant) {
         s.x = t.x; s.y = t.y; s.vx = 0; s.vy = 0;
@@ -643,7 +667,7 @@ export class BoardRenderer {
   /** Saca un muelle del pool (o lo crea) ya situado en su objetivo. */
   private takeActiveSpring(x: number, y: number): ActiveSpring {
     const s = this.activePool.pop();
-    const mesh = this.makeBlock('I');
+    const mesh = this.makeBlock('I', true);
     this.activeGroup.add(mesh);
     mesh.position.set(x, y, 0.15);
     if (s) return { x, y, vx: 0, vy: 0, mesh };
@@ -1019,6 +1043,10 @@ export class BoardRenderer {
   update(dt: number): boolean {
     let moved = this.shadowDirty;
     this.shadowDirty = false;
+    // Hit-stop: la puesta en escena se congela; la pieza, el motor y los
+    // controles siguen con `dt` normal.
+    const stageDt = this.hitStopLeft > 0 ? 0 : dt;
+    if (this.hitStopLeft > 0) this.hitStopLeft = Math.max(0, this.hitStopLeft - dt);
     // Pieza activa: muelle crítico con velocidad heredada. Los pasos laterales
     // encadenados (DAS/ARR) fluyen como un deslizamiento tenso y continuo, sin
     // "teletransporte" entre celdas y sin sobrepasar el objetivo.
@@ -1066,7 +1094,7 @@ export class BoardRenderer {
     for (let i = this.lockAnims.length - 1; i >= 0; i--) {
       const a = this.lockAnims[i];
       if (!a) continue;
-      a.t += dt * 5;
+      a.t += stageDt * 5;
       const k = Math.min(1, a.t);
       a.mesh.position.z = 0.4 * (1 - k);
       a.mesh.scale.setScalar(1 + 0.25 * Math.sin(k * Math.PI));
@@ -1076,16 +1104,16 @@ export class BoardRenderer {
     for (const [r, c] of this.clearingRows) {
       // Barrido por filas: las de abajo arrancan antes y la limpieza se lee.
       if (c.delay > 0) {
-        c.delay = Math.max(0, c.delay - dt);
+        c.delay = Math.max(0, c.delay - stageDt);
         continue;
       }
-      c.t += dt * 4;
+      c.t += stageDt * 4;
       const k = Math.min(1, c.t);
       for (let i = 0; i < c.meshes.length; i++) {
         const m = c.meshes[i] as THREE.Group;
-        m.position.x += Math.sin(i * 3.1 + r) * dt * 6;
-        m.position.y += dt * (4 + i * 0.2);
-        m.rotation.z += dt * 6;
+        m.position.x += Math.sin(i * 3.1 + r) * stageDt * 6;
+        m.position.y += stageDt * (4 + i * 0.2);
+        m.rotation.z += stageDt * 6;
         m.scale.setScalar(Math.max(0.001, 1 - k));
       }
       if (k >= 1) {
@@ -1103,17 +1131,17 @@ export class BoardRenderer {
         const m = t.mesh;
         if (!m) continue;
         if (t.delay > 0) {
-          t.delay = Math.max(0, t.delay - dt);
+          t.delay = Math.max(0, t.delay - stageDt);
           m.visible = false;
           this.clearTexts[alive++] = t;
           continue;
         }
-        t.life += dt / t.maxLife;
+        t.life += stageDt / t.maxLife;
         const k = Math.min(1, t.life);
         // Pop inicial: 0 → 1.25 → 1 en el primer 20 % de la vida.
         const pop = k < 0.2 ? (k / 0.2) * 1.25 : 1.25 - (k - 0.2) / 0.8 * 0.25;
         m.scale.set(t.width * pop, t.height * pop, 1);
-        m.position.y += t.vy * dt;
+        m.position.y += t.vy * stageDt;
         const a = (t.mesh.material as THREE.SpriteMaterial);
         a.opacity = Math.max(0, 1 - k);
         m.visible = k < 1;
@@ -1195,6 +1223,7 @@ export class BoardRenderer {
     this.rebuildJunk();
     this.guideOn = false;
     this.guideIMesh.count = 0;
+    this.hitStopLeft = 0;
     this.setDanger('safe');
     this.hailFall.clear();
     this.specialKind = null;
