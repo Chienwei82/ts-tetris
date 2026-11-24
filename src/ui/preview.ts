@@ -2,6 +2,7 @@ import { PIECE_COLORS } from '../game/types.js';
 import type { PieceKind } from '../game/types.js';
 import type { SpecialKind } from '../game/engine.js';
 import { cellsForRotation } from '../game/pieces.js';
+import { drawPieceMotif } from '../render/pieceMotifs.js';
 const INK = '#3b2b20';
 /** Deterministic micro-tilt per tile so periodic redraws never flicker. */
 function tiltFor(kind: PieceKind, i: number): number {
@@ -32,7 +33,7 @@ function drawSpecialObject(ctx: CanvasRenderingContext2D, rect: Rect, special: s
   ctx.restore();
 }
 
-function drawPieceIn(ctx: CanvasRenderingContext2D, kind: PieceKind | null, rect: Rect, ghost = false): void {
+function drawPieceIn(ctx: CanvasRenderingContext2D, kind: PieceKind | null, rect: Rect, ghost = false, patterns = false): void {
   ctx.clearRect(rect.x, rect.y, rect.w, rect.h);
   if (!kind) {
     ctx.fillStyle = 'rgba(59,43,32,0.45)';
@@ -72,6 +73,14 @@ function drawPieceIn(ctx: CanvasRenderingContext2D, kind: PieceKind | null, rect
       // inner pasted paper panel
       ctx.fillStyle = 'rgba(0,0,0,0.10)';
       ctx.beginPath(); ctx.roundRect(x + 5, y + 5, s - 12, s - 12, 3); ctx.fill();
+      // Motivo por pieza (accesibilidad): mismo dibujo que la textura 3D.
+      if (patterns) {
+        drawPieceMotif(ctx, kind, { x: x + 2, y: y + 2, w: s - 4, h: s - 4 }, {
+          color: INK,
+          lineWidth: Math.max(1.2, s * 0.07),
+          alpha: 0.55,
+        });
+      }
       ctx.lineWidth = 2; ctx.strokeStyle = INK;
       ctx.beginPath(); ctx.roundRect(x + 1, y + 1, s - 4, s - 4, r); ctx.stroke();
     }
@@ -102,11 +111,17 @@ function drawSpecialBadge(ctx: CanvasRenderingContext2D, rect: Rect, special: Sp
   ctx.fillText(info.label, x + w / 2, y + h / 2 + 1);
   ctx.restore();
 }
-/** Next-queue preview: up to 3 upcoming pieces, the closest one in the big slot. */
-export function drawNext(canvas: HTMLCanvasElement, kinds: PieceKind[], special: SpecialKind | null = null): void {
+/** Next-queue preview: hasta 3 piezas; en móvil se piden 2 para que sigan legibles. */
+export function drawNext(
+  canvas: HTMLCanvasElement,
+  kinds: PieceKind[],
+  special: SpecialKind | null = null,
+  count = 3,
+  patterns = false
+): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  const shown = kinds.slice(0, 3);
+  const shown = kinds.slice(0, Math.max(1, Math.min(3, Math.floor(count))));
   if (shown.length === 0) {
     drawPieceIn(ctx, null, { x: 0, y: 0, w: canvas.width, h: canvas.height });
     return;
@@ -118,21 +133,27 @@ export function drawNext(canvas: HTMLCanvasElement, kinds: PieceKind[], special:
       ? { x: 0, y: 0, w: canvas.width, h: firstH }
       : { x: 0, y: firstH + (i - 1) * restH, w: canvas.width, h: restH };
     if (i === 0 && special) drawSpecialObject(ctx, rect, special);
-    else drawPieceIn(ctx, kind, rect);
+    else drawPieceIn(ctx, kind, rect, false, patterns);
     if (i === 0 && special) drawSpecialBadge(ctx, rect, special);
   });
 }
-export function drawHold(canvas: HTMLCanvasElement, kind: PieceKind | null, canHold: boolean, special: SpecialKind | null = null): void {
+export function drawHold(
+  canvas: HTMLCanvasElement,
+  kind: PieceKind | null,
+  canHold: boolean,
+  special: SpecialKind | null = null,
+  patterns = false
+): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const rect = { x: 0, y: 0, w: canvas.width, h: canvas.height };
   if (kind && special) drawSpecialObject(ctx, rect, special);
-  else drawPieceIn(ctx, kind, rect, !canHold);
+  else drawPieceIn(ctx, kind, rect, !canHold, patterns);
   if (kind && special) drawSpecialBadge(ctx, rect, special);
 }
 /** Standalone piece icon used by the help screen. */
-export function drawPieceIcon(canvas: HTMLCanvasElement, kind: PieceKind): void {
+export function drawPieceIcon(canvas: HTMLCanvasElement, kind: PieceKind, patterns = false): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  drawPieceIn(ctx, kind, { x: 0, y: 0, w: canvas.width, h: canvas.height });
+  drawPieceIn(ctx, kind, { x: 0, y: 0, w: canvas.width, h: canvas.height }, false, patterns);
 }

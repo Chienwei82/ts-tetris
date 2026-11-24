@@ -113,6 +113,8 @@ export interface GameEvent {
   column?: number;
   scoreGained?: number;
   level?: number;
+  /** Filas recorridas en una caída instantánea (solo evento 'harddrop'). */
+  distance?: number;
   /** Tipo de clear (solo en eventos 'clear'). */
   clearType?: ClearType;
   /** Racha de combo actual (solo en eventos 'clear' y 'combo'). */
@@ -214,6 +216,8 @@ export interface LevelProgress {
   ratio: number;
   /** Which rule is currently ahead. */
   source: 'lines' | 'time';
+  /** Líneas limpiadas desde el inicio del nivel actual (0..LINES_PER_LEVEL). */
+  linesIntoLevel: number;
   /** True when the level cap has been reached. */
   atMax: boolean;
 }

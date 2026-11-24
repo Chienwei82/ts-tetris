@@ -47,6 +47,14 @@ body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none
 .stat strong { font-size: 30px; font-variant-numeric: tabular-nums; color: var(--ink); text-shadow: 2px 2px 0 rgba(255,255,255,0.7); }
 .stat-row { display: flex; gap: 12px; }
 .stat canvas { width: 100%; background: var(--paper-hi); border: 2px solid var(--ink); border-radius: 10px; box-shadow: inset 0 2px 6px rgba(var(--shadow), 0.14); }
+#hud-primary, #hud-previews, #hud-progress { display: block; }
+#hud-chips { display: block; }
+.stat.score-pop strong { animation: scorePop 0.32s cubic-bezier(0.2, 1.5, 0.4, 1); }
+@keyframes scorePop {
+  0% { transform: scale(1); color: var(--ink); }
+  45% { transform: scale(1.18); color: var(--red); }
+  100% { transform: scale(1); color: var(--ink); }
+}
 #hud-right h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--ink); font-weight: 700; }
 #hud-right ul { list-style: none; margin: 0; padding: 0; font-size: 13px; line-height: 2.1; }
 .key {
@@ -150,6 +158,11 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #chaos-status.bolt { background: #d9a91f; color: var(--ink); }
 #chaos-status.drill { background: #b8652f; }
 #chaos-status.chatarra { background: #9d8a6b; color: #fff8ea; }
+#combo-chip { display: inline-block; margin-left: 4px; padding: 1px 8px; background: #ffcb3d; color: var(--ink); border: 1.5px solid var(--ink); border-radius: 8px; font-size: 11px; font-weight: 700; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.2); transform: rotate(1deg); }
+#combo-chip.hidden, #danger-chip.hidden { display: none; }
+#danger-chip { display: inline-block; margin-left: 4px; padding: 1px 8px; background: #ffd27a; color: #6b2b18; border: 1.5px solid var(--ink); border-radius: 8px; font-size: 11px; font-weight: 700; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.2); }
+#danger-chip.danger { background: var(--red); color: #fff8ea; }
+@media (prefers-reduced-motion: reduce) { .stat.score-pop strong { animation: none; } }
 /* Color por tormenta: cada aviso se reconoce de un vistazo. */
 #mutator-chip.wind { background: #b9d6e8; }
 #mutator-chip.rain { background: #6f9dc4; color: #fff; }
@@ -421,19 +434,28 @@ body.touch #bottom-bar .bb-label { display: none; }
   .panel::before { display: none; }
   #hud-left {
     left: 6px; right: 6px; width: auto; transform: none;
-    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-    gap: 4px 8px;
+    display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-start;
+    gap: 4px 7px;
   }
-  body.touch #hud-left { right: calc(58px + env(safe-area-inset-right, 0px)); justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  body.touch #hud-left::-webkit-scrollbar { display: none; }
-  .stat { margin: 0; display: flex; align-items: center; gap: 5px; }
-  .stat label { display: none; }
-  .stat strong { font-size: 17px; }
-  .stat-row { gap: 10px; }
-  .stat canvas { width: 44px; height: auto; }
-  #gauge { width: 84px; height: 11px; }
+  body.touch #hud-left { right: calc(58px + env(safe-area-inset-right, 0px)); }
+  #hud-primary { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
+  #hud-primary .stat { margin: 0; }
+  #hud-primary .stat label { display: block; font-size: 7px; line-height: 1; letter-spacing: 0.35px; margin: 0 0 1px; }
+  #hud-primary .stat strong { font-size: 16px; line-height: 1; }
+  #hud-primary .stat-row { gap: 7px; }
+  #hud-progress { flex: 1 1 70px; min-width: 58px; margin: 0; }
+  #hud-progress > label { display: none; }
+  #gauge { width: 100%; height: 9px; }
   #gauge-caption { display: none; }
-  #stage-chip { font-size: 9px; }
+  #hud-chips { display: flex; align-items: center; gap: 3px; margin-top: 2px; min-height: 15px; overflow: hidden; }
+  #mode-chip, #stage-chip, #debris-chip, #mutator-chip { display: none; }
+  #combo-chip, #danger-chip { margin-left: 0; padding: 0 5px; font-size: 8.5px; line-height: 14px; white-space: nowrap; }
+  #hud-previews { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+  #hud-previews .stat { margin: 0; }
+  #hud-previews .stat label { display: block; font-size: 7px; line-height: 1; letter-spacing: 0.25px; margin: 0 0 1px; }
+  #hud-previews .key { display: none; }
+  .hud-next canvas { width: 42px; height: auto; max-height: 50px; }
+  .hud-hold canvas { width: 46px; height: auto; max-height: 23px; }
   #hud-right { display: none; }
   #help-overlay .help-card { max-height: 82dvh; }
   #wind-arrow { top: 20%; padding: 6px 14px; }
@@ -444,6 +466,9 @@ body.touch #bottom-bar .bb-label { display: none; }
 
 /* ============ Pantallas bajas (móvil horizontal): botones compactos, sin solapes ============ */
 @media (max-height: 480px) {
+  /* Las opciones de inicio pueden superar la altura de un móvil apaisado. */
+  #overlay { align-items: flex-start; overflow-y: auto; padding: 12px 0; }
+  #overlay .card { margin: auto; }
   .tc-btn { width: 58px; height: 58px; font-size: 22px; border-radius: 15px; }
   #tc-move .tc-btn { width: 68px; height: 68px; font-size: 26px; }
   #tc-rotate .tc-btn { width: 58px; height: 58px; font-size: 24px; }

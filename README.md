@@ -41,7 +41,7 @@ aparece un aviso de clasificación no disponible (el botón nunca se oculta) y e
 envío de puntaje se puede reintentar.
 
 ```bash
-npm test         # tests de lógica (vitest 5, 216 tests)
+npm test         # tests de lógica (vitest 5, 269 tests)
 npm run build    # type-check (tsc 7 nativo) + type-check del API + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
@@ -193,7 +193,26 @@ en `localStorage` (se puede cambiar con **⚙️ Controles**).
   misma canción). Pausa con el juego y con la pestaña oculta; preferencia
   guardada en `localStorage`.
 - Lock delay de 0.5 s con hasta 15 reseteos al mover/rotar.
-- Pieza fantasma, vista previa de las 3 piezas siguientes y reserva.
+- Pieza fantasma **hueca y con contorno discontinuo**, vista previa de las 3
+  piezas siguientes (2 en la tira compacta móvil para que sigan legibles) y reserva.
+- **Motivos por pieza** (ajuste opcional, apagado por defecto): I verticales,
+  O lunares, T, S/Z diagonales opuestas y J/L chevrones. El mismo trazo se aplica
+  a los bloques 3D, al preview, a la reserva y a los iconos de la ayuda, para
+  distinguir piezas sin depender del color (daltonismo, pantallas lavadas).
+- La pieza activa lleva **contorno de papel iluminado** y algo más de brillo
+  propio: se distingue de las ya fijadas incluso con el tablero lleno.
+- **Zona de peligro** en las 4 filas superiores y chip de aviso cuando la pila
+  llega arriba; sigue visible con efectos OFF y sin pulso con movimiento reducido.
+- **Sacudida de cámara y destellos de línea se ajustan por separado** en la
+  pantalla de inicio, se guardan en `localStorage` y arrancan desactivados si el
+  sistema pide movimiento reducido.
+- **Hoja del tablero por escenario**: con efectos es translúcida y su opacidad
+  sube en los escenarios oscuros (pradera 0.46 · bosque 0.52 · ciudad y mar 0.60 ·
+  espacio 0.64) para que piezas y huecos sigan leyéndose; sin efectos vuelve a ser
+  sólida y más barata de renderizar.
+- **Hit-stop de 45 ms** solo en Tetris y con movimiento permitido: congela la
+  animación de la limpieza como golpe visual, nunca el motor, los controles ni el
+  temporizador.
 - **Pantalla de ayuda** (se abre sola al arrancar; también con `H` o el botón
   ❓): explica los 7 bloques y todas las ayudas del juego con enfoque móvil y un
   desplegable opcional de teclado. Abrirla durante la partida pausa el juego.
@@ -241,7 +260,11 @@ src/
       scenarioCatalog.ts  Metadatos puros compartidos (id/nombre/icono/minLevel y periodo)
       forest.ts · cityNight.ts · space.ts · deepSea.ts  Escenografías y looks de cada escenario
     materials.ts    Texturas procedurales (papel, cartón, cuadrícula, cinta) + toon + tinta
+    pieceMotifs.ts  Motivos por pieza (datos 0..1 + dibujo) compartidos por 3D y previews
+    boardBackdrop.ts Opacidad de la hoja del tablero por escenario (puro, testeado)
   ui/         Entrada con DAS/ARR, gestos de arrastre de la pieza, HUD, previews 2D, preferencias
+    feedbackDirector.ts Prioridad de avisos + presupuesto de cámara/fogonazos (puro, testeado)
+    clearSummary.ts    Título y desglose del aviso de clear (puro, testeado)
     scoreboard.ts      Overlay del Top con pestañas Tradicional/Caos, estados de carga/error/vacío
     leaderboardStatus.ts Aviso de API caída en inicio/pausa (nunca oculta el botón)
     levelBannerTheme.ts Fondo/animación del cartel para cada nivel (puro)
@@ -281,14 +304,21 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
   que sustituye a `manualChunks`): la caché del navegador sobrevive a cambios de la app.
 - **APIs modernas de three**: `Timer` (core desde r179) + Page Visibility API en lugar de `Clock`
   (deprecado en r183), y `PCF ShadowMap` (ya suave desde r182; `PCFSoftShadowMap` quedó deprecado).
-- **SRS con wall-kicks** simplificado (tablas JLSTZ e I) para rotaciones correctas junto a paredes.
+- **SRS estricto con wall-kicks** (tablas JLSTZ e I): si ningún kick de la tabla
+  es válido la rotación falla; no hay desplazamientos fuera del estándar.
 - **Render con pooling**: una `BoxGeometry` + `EdgesGeometry` compartidas y materiales por
-  pieza cacheados; los meshes se reciclan para no generar basura por frame.
+  pieza cacheados; los meshes se reciclan para no generar basura por frame. Los
+  textos de bonificación usan texturas inmutables acotadas y un material exclusivo
+  por sprite, liberado al terminar.
 - **Eventos del motor → efectos**: el engine emite `lock/clear/levelup/harddrop…` y `app.ts`
-  los traduce a partículas, destellos, vibración y sonido. Separación lógica/vista total.
+  los traduce a partículas, destellos, vibración y sonido. `FeedbackDirector` (puro)
+  asigna prioridades a los avisos, limita el trauma acumulado de cámara y descarta
+  fogonazos encadenados; un clear y su combo comparten un único anuncio.
 - **Progresión híbrida y testeable**: `LINES_PER_LEVEL`/`SECONDS_PER_LEVEL`/`MAX_LEVEL`
-  viven en `game/types.ts`; `levelProgress()` es puro y devuelve ratio + regla líder,
-  y el reloj del nivel solo acumula en `update()` (nunca en pausa).
+  viven en `game/types.ts`. La regla de líneas es **relativa al inicio del nivel**
+  (`linesAtLevelStart`): subir por tiempo o por líneas reinicia de verdad el otro
+  camino, también al empezar en un nivel alto. `levelProgress()` es puro y devuelve
+  ratio + regla líder; el reloj solo acumula en `update()` (nunca en pausa).
 - **Escenarios desacoplados**: `themes.ts` es solo datos (paletas, luces, clima,
   viento); `stage.ts` los interpola (~1,6 s) y `weather.ts`/`characters.ts` usan
   pools fijos con `visible = false` cuando están inactivos: coste cero en reposo.
@@ -309,9 +339,11 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
   las mismas `InputActions` (`inputManager.ts`); la máquina de gestos (`pieceDrag.ts`)
   es pura y testeada: arrastre convertido en pasos de celda con resto conservado,
   caída por profundidad máxima del dedo y tap con slop + temporizador.
-- **Panel del tablero por modos**: translúcido con efectos (el fondo se ve detrás de
-  las piezas y las sombras se recortan contra el panel) y sólido sin ellos
+- **Panel del tablero por modos y escenario**: translúcido con efectos (el fondo
+  se ve detrás de las piezas y las sombras se recortan contra el panel) con
+  opacidad creciente en escenarios oscuros, y sólido sin ellos
   (`transparent: false`, sin blending ni ordenación) para ahorrar GPU.
+  `render/boardBackdrop.ts` concentra la tabla (pura y testeada).
 - **Render condicional**: `renderer.render()` solo se ejecuta cuando hay un frame
   sucio (cambio de grid/pieza, sombra, escombros, clima, shake, HUD o render
   pendiente); pantallas estáticas (menú, pausa, gameover) no re-dibujan.
@@ -420,9 +452,20 @@ paso previsto es un ticket de partida firmado con HMAC al empezar.
   y personajes teñidos a juego; el clima (tormenta con rayos y trueno, aurora
   aditiva, estrellas con parpadeo, luciérnagas y estrellas fugaces) y el confeti
   siguen animándose por encima.
+- **Legibilidad primero**: fantasma hueco con borde discontinuo, luz más cenital
+  para acortar sombras, franja de peligro en la zona alta, contorno iluminado de
+  la pieza activa y HUD compacto que conserva Puntos/Nivel/Líneas, gauge,
+  Siguiente y Reserva.
+- **Motivos de papel por pieza** (`render/pieceMotifs.ts`): trazos normalizados
+  0..1 que se dibujan igual en la textura 3D (256 px) y en las previews 2D, con
+  un patrón distinto por tetromino. Son datos puros, así que el mismo motivo no
+  puede desincronizarse entre el tablero y el HUD.
 - Cámara en perspectiva con **deriva sinusoidal sutil** + trauma/shake en drops, clears y niveles.
 - Feedback en cada acción: rebote al fijar, fichas que vuelan + destello al limpiar,
-  lluvia de confeti en hard drop, toasts de Tetris/combo/nivel y overlay cartón con cinta.
+  hard drop con estela y onda de impacto, barrido escalonado de filas, textos 3D
+  reservados para dobles/triples/Tetris/combos, hit-stop breve en Tetris, aviso
+  único con desglose (`¡TETRIS! +1200 · Combo x3`), pulso del marcador y overlay
+  de cartón.
 
 ## Despliegue (Vercel)
 
