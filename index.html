@@ -113,6 +113,14 @@
               <option value="high">Alta</option>
             </select>
           </div>
+          <label class="check-row" for="camera-shake">
+            <input type="checkbox" id="camera-shake" />
+            <span>📳 Sacudida de cámara</span>
+          </label>
+          <label class="check-row" for="clear-flash">
+            <input type="checkbox" id="clear-flash" />
+            <span>✨ Destellos de línea</span>
+          </label>
         </div>
         <div class="btn-row">
           <button id="btn-start">▶ Jugar</button>
@@ -168,7 +176,8 @@
           <li><strong><span class="key">HOLD</span> Reserva</strong> — guarda la pieza actual para más tarde (un uso por pieza).</li>
           <li><strong>👻 Pieza fantasma</strong> — la sombra marca dónde aterrizará la pieza.</li>
           <li><strong>🔥 Combos</strong> — limpiar líneas seguidas suma +50 × combo × nivel.</li>
-          <li><strong>⏱️ Nivel híbrido</strong> — subes cada 10 líneas o 45 s (lo que llegue antes), hasta el nivel 20.</li>
+          <li><strong>⏱️ Nivel híbrido</strong> — subes cada 10 líneas o 45 s (lo que llegue antes), hasta el nivel 20. Al subir por un camino, el otro vuelve a empezar.</li>
+          <li><strong>🎛️ Confort visual</strong> — en el inicio puedes apagar por separado la sacudida de cámara y los destellos de línea. La zona de peligro y los avisos siguen visibles.</li>
           <li><strong>🎵 Música procedural</strong> — se genera en vivo y se adapta a la acción: tranquila al principio y más enérgica cuando sube la intensidad. Actívala o apágala con el botón 🎵.</li>
           <li><strong>🌪️ Modo Caos</strong> — elígelo en la pantalla inicial junto al nivel (<strong>Tradicional es siempre el modo por defecto al arrancar</strong>; el Caos vale para la partida que empiezas y no se recuerda). Es el juego clásico con <strong>powerups literales</strong>, <strong>tormentas</strong> y una <strong>pieza trampa</strong>: cada cierto tiempo cae un objeto 💣 ⚡ 🔩 🧱 en vez de una pieza (se anuncia con badge en el preview y con un chip coloreado en el HUD). La bomba revienta 2 filas, el rayo rompe los 4 bloques más altos bajo su base, el taladro se hunde 2 filas y la <strong>chatarra 🧱</strong> deja 4 bloques de basura: esquívala o prepárate para limpiar. Al sostener un powerup el tablero muestra su <strong>zona de impacto</strong> con una guía pulsante y el objeto flota y gira sobre la pieza fantasma.</li>
           <li><strong>⛈️ Tormentas del Caos</strong> — llegan avisadas con un cartel y el chip del HUD se colorea según la tormenta: 🌬️ <strong>Viento</strong> empuja la pieza 1 celda (una flecha marca la dirección al menos 1 s antes; el fondo se inclina y vuelan papeles), 🌧️ <strong>Lluvia</strong> deja el suelo resbaladizo (cada toque mueve 1 celda; mantener acelera la repetición; el ambiente se oscurece y los personajes se cubren), ⚡ <strong>Relámpago</strong> rompe el bloque más alto de 3 columnas (el rayo dentado se dibuja en el tablero y el cielo destella) y 🌨️ <strong>Granizo</strong> deja hielo en 2 columnas que se derrite con chispas (el chip indica las columnas golpeadas).</li>
@@ -190,7 +199,7 @@
       </div>
     </div>
 
-    <div id="level-banner" class="hidden" aria-hidden="true">
+    <div id="level-banner" class="hidden" role="status" aria-live="polite">
       <span id="level-banner-icon" class="lb-icon" aria-hidden="true">☀️</span>
       <strong id="level-banner-title">NIVEL 2</strong>
       <span id="level-banner-sub">☀️ Pradera</span>

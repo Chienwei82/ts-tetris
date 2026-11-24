@@ -7,6 +7,8 @@ const MUSIC_KEY = 'tetris-3d:music';
 const FX_QUALITY_KEY = 'tetris-3d:fx-quality';
 const CHAOS_LIGHTNING_KEY = 'tetris-3d:chaos-lightning';
 const CHAOS_HAIL_KEY = 'tetris-3d:chaos-hail';
+const SHAKE_KEY = 'tetris-3d:camera-shake';
+const FLASH_KEY = 'tetris-3d:clear-flash';
 
 /** Modo de control elegido por el usuario: teclado/ratón o táctil. */
 export type ControlMode = 'desktop' | 'touch';
@@ -98,6 +100,32 @@ export function loadChaosHail(): boolean {
 }
 export function saveChaosHail(on: boolean): void {
   try { window.localStorage.setItem(CHAOS_HAIL_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+}
+
+/** Sacudida de cámara; por defecto se apaga si el sistema pide movimiento reducido. */
+export function loadShakeEnabled(): boolean {
+  try {
+    const v = window.localStorage.getItem(SHAKE_KEY);
+    if (v === '1') return true;
+    if (v === '0') return false;
+  } catch { /* storage unavailable */ }
+  return !prefersReducedMotion();
+}
+export function saveShakeEnabled(on: boolean): void {
+  try { window.localStorage.setItem(SHAKE_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+}
+
+/** Fogonazos de clear; independientes del fondo y también accesibles de apagar. */
+export function loadFlashEnabled(): boolean {
+  try {
+    const v = window.localStorage.getItem(FLASH_KEY);
+    if (v === '1') return true;
+    if (v === '0') return false;
+  } catch { /* storage unavailable */ }
+  return !prefersReducedMotion();
+}
+export function saveFlashEnabled(on: boolean): void {
+  try { window.localStorage.setItem(FLASH_KEY, on ? '1' : '0'); } catch { /* ignore */ }
 }
 export function saveFxQuality(quality: FxQuality): void {
   try { window.localStorage.setItem(FX_QUALITY_KEY, quality); } catch { /* ignore */ }

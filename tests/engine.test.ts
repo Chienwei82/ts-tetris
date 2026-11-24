@@ -3,7 +3,7 @@ import { collides, createGrid } from '../src/game/board.js';
 import { TetrisEngine } from '../src/game/engine.js';
 import { cellsForPiece, getKicks } from '../src/game/pieces.js';
 import { LINES_PER_LEVEL, MAX_LEVEL, SECONDS_PER_LEVEL } from '../src/game/types.js';
-import type { GameEventType, RotationState } from '../src/game/types.js';
+import type { GameEvent, GameEventType, RotationState } from '../src/game/types.js';
 function seqRng(): () => number { let i = 0; return () => { i = (i + 1) % 100; return i / 100; }; }
 describe('pieces', () => {
   it('I piece has 4 cells in a row at spawn', () => {
@@ -209,6 +209,15 @@ describe('dirty-flag versions (gridVersion / pieceVersion)', () => {
     e.active = { kind: 'O', rotation: 0, x: 4, y: 10 };
     e.hardDrop();
     expect(e.gridVersion).toBeGreaterThan(g0);
+  });
+  it('harddrop comunica la distancia recorrida para escalar el impacto', () => {
+    const events: GameEvent[] = [];
+    const e = new TetrisEngine({ rng: seqRng(), onEvent: (ev) => events.push(ev) });
+    e.start();
+    e.active = { kind: 'O', rotation: 0, x: 4, y: 10 };
+    e.hardDrop();
+    const drop = events.find((ev) => ev.type === 'harddrop');
+    expect(drop?.distance).toBe(10);
   });
   it('pieceVersion bumps on successful move/rotate and on spawn', () => {
     const e = new TetrisEngine({ rng: seqRng() });

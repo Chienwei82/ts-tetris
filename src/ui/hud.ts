@@ -135,6 +135,14 @@ export class HUD {
     this.toastQueue.push(msg);
     if (!this.toastBusy) this.nextToast(ms);
   }
+  /** Vacía avisos pendientes al empezar una partida nueva o cambiar de modo. */
+  clearToasts(): void {
+    this.toastQueue.length = 0;
+    this.toastBusy = false;
+    window.clearTimeout(this.toastTimer);
+    this.toastEl.classList.add('hidden');
+    this.toastEl.classList.remove('pop');
+  }
   private nextToast(ms: number): void {
     const msg = this.toastQueue.shift();
     if (msg === undefined) { this.toastBusy = false; return; }

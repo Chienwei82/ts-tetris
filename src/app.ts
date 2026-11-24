@@ -37,7 +37,9 @@ import { InputManager } from './ui/inputManager.js';
 import { ModeSelect } from './ui/modeSelect.js';
 import { HUD } from './ui/hud.js';
 import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
-import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, loadFxQuality, loadChaosLightning, loadChaosHail, prefersReducedMotion, saveEffectsEnabled, saveMusicEnabled, saveMusicGenre, saveFxQuality, saveChaosLightning, saveChaosHail } from './ui/settings.js';
+import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, loadFxQuality, loadChaosLightning, loadChaosHail, loadShakeEnabled, loadFlashEnabled, prefersReducedMotion, saveEffectsEnabled, saveMusicEnabled, saveMusicGenre, saveFxQuality, saveChaosLightning, saveChaosHail, saveShakeEnabled, saveFlashEnabled } from './ui/settings.js';
+import { FeedbackDirector } from './ui/feedbackDirector.js';
+import type { FeedbackPriority } from './ui/feedbackDirector.js';
 import { randomSeed } from './game/rng.js';
 import { MusicMenu } from './ui/musicMenu.js';
 import { Scoreboard } from './ui/scoreboard.js';
@@ -100,6 +102,7 @@ export class GameApp {
   private readonly windArrow: HTMLElement;
   private readonly windGlyph: HTMLElement;
   private readonly stormFxRandom: ReturnType<typeof createFxRandom>;
+  private readonly feedback = new FeedbackDirector();
 
   private gameMode: GameMode;
   private chaosSeed: number;
@@ -108,6 +111,8 @@ export class GameApp {
   private chaosHailOn: boolean;
   private debrisOn = false;
   private effectsOn = true;
+  private shakeOn = true;
+  private flashOn = true;
   private musicOn = true;
   private musicGenre: GenreId;
   private helpOpen = false;
@@ -183,6 +188,10 @@ export class GameApp {
     this.board = new BoardRenderer(scene);
     this.flash = new ClearFlash(scene, 10);
     this.shake = new CameraShake();
+    this.shakeOn = loadShakeEnabled();
+    this.flashOn = loadFlashEnabled();
+    this.shake.setEnabled(this.shakeOn);
+    this.flash.setEnabled(this.flashOn);
     this.chaosFx = new ChaosFx(scene);
 
     const fallbackQuality: FxQuality = this.device.kind === 'desktop' ? 'high' : this.device.kind === 'tablet' ? 'medium' : 'low';
@@ -304,10 +313,14 @@ export class GameApp {
 
     const chaosLightningCheck = el<HTMLInputElement>('chaos-lightning');
     const chaosHailCheck = el<HTMLInputElement>('chaos-hail');
+    const cameraShakeCheck = el<HTMLInputElement>('camera-shake');
+    const clearFlashCheck = el<HTMLInputElement>('clear-flash');
     const fxQualitySelect = el<HTMLSelectElement>('fx-quality');
 
     chaosLightningCheck.checked = this.chaosLightningOn;
     chaosHailCheck.checked = this.chaosHailOn;
+    cameraShakeCheck.checked = this.shakeOn;
+    clearFlashCheck.checked = this.flashOn;
     fxQualitySelect.value = this.fxQuality;
 
     chaosLightningCheck.addEventListener('change', () => {
@@ -317,6 +330,16 @@ export class GameApp {
     chaosHailCheck.addEventListener('change', () => {
       this.chaosHailOn = chaosHailCheck.checked;
       saveChaosHail(this.chaosHailOn);
+    });
+    cameraShakeCheck.addEventListener('change', () => {
+      this.shakeOn = cameraShakeCheck.checked;
+      this.shake.setEnabled(this.shakeOn);
+      saveShakeEnabled(this.shakeOn);
+    });
+    clearFlashCheck.addEventListener('change', () => {
+      this.flashOn = clearFlashCheck.checked;
+      this.flash.setEnabled(this.flashOn);
+      saveFlashEnabled(this.flashOn);
     });
     fxQualitySelect.addEventListener('change', () => {
       const value = fxQualitySelect.value;
@@ -490,28 +513,28 @@ export class GameApp {
     switch (e.kind) {
       case 'warn':
         this.hud.setMutatorChip('⏳ ' + MUTATOR_LABEL[e.mutator] + '…', e.mutator);
-        this.hud.toast('⛈️ ' + MUTATOR_LABEL[e.mutator] + ' en ' + Math.max(1, Math.ceil(e.seconds)) + ' s', 1600);
+        this.announce('critical', '⛈️ ' + MUTATOR_LABEL[e.mutator] + ' en ' + Math.max(1, Math.ceil(e.seconds)) + ' s', 1600);
         break;
       case 'start':
         this.activeMutator = e.mutator;
         this.hud.setMutatorChip(MUTATOR_LABEL[e.mutator], e.mutator);
         if (e.mutator === 'rain') {
           this.setRainStorm(true);
-          this.hud.toast('🌧️ Lluvia — el suelo resbala', 2200);
+          this.announce('critical', '🌧️ Lluvia — el suelo resbala', 2200);
         } else if (e.mutator === 'lightning') {
           this.setLightningStorm(true);
-          this.hud.toast('⚡ Relámpago — rompe bloques', 2200);
+          this.announce('critical', '⚡ Relámpago — rompe bloques', 2200);
         } else if (e.mutator === 'hail') {
           this.setRainStorm(true);
-          this.hud.toast('🌨️ Granizo — bloquea columnas', 2200);
+          this.announce('critical', '🌨️ Granizo — bloquea columnas', 2200);
         } else {
           this.setWindStorm(null);
-          this.hud.toast('🌬️ Viento — empuja la pieza', 2000);
+          this.announce('critical', '🌬️ Viento — empuja la pieza', 2000);
         }
         break;
       case 'drill-warn': {
         this.hud.setMutatorChip('⏳ ' + MUTATOR_LABEL.drill + ' · col ' + (e.column + 1), 'drill');
-        this.hud.toast('🔩 Taladro en columna ' + (e.column + 1) + ' — impacto en ' + Math.max(1, Math.ceil(e.seconds)) + ' s', 1800);
+        this.announce('critical', '🔩 Taladro en columna ' + (e.column + 1) + ' — impacto en ' + Math.max(1, Math.ceil(e.seconds)) + ' s', 1800);
         // Haz pulsante sobre la columna: el aviso se ve en el propio tablero.
         this.chaosFx.drillWarning(e.column, e.seconds);
         break;
@@ -528,7 +551,7 @@ export class GameApp {
       case 'wind-gust': {
         this.stage.gust(e.dir);
         this.sound.play('wind');
-        this.shake.add(0.16);
+        this.addShake(0.16);
         const cells = this.engine.activeCells();
         const base = cells[Math.floor(this.stormFxRandom.range(0, cells.length))];
         if (base) {
@@ -540,7 +563,7 @@ export class GameApp {
       }
       case 'lightning': {
         this.sound.play('lock');
-        this.shake.add(0.3);
+        this.addShake(0.3);
         // Rayo dibujado en el tablero + fogonazo del cielo (independiente del tema).
         this.chaosFx.boltStrike(e.cells);
         this.stage.flashLightning();
@@ -550,7 +573,7 @@ export class GameApp {
             this.board.particles.burst(new THREE.Vector3(p.x, p.y, 0.4), 0xfff2a6, 6, 2.8, 1.6);
           }
         }
-        this.hud.toast('⚡ ¡Rayo!', 900);
+        this.announce('clear', '⚡ ¡Rayo!', 900);
         break;
       }
       case 'hail': {
@@ -569,11 +592,11 @@ export class GameApp {
       case 'end':
         this.clearStormVisuals();
         if (e.mutator === 'rain' || e.mutator === 'hail') {
-          this.hud.toast('⛅ ' + (e.mutator === 'hail' ? 'El granizo se derrite' : 'La lluvia amaina'), 1500);
+          this.announce('routine', '⛅ ' + (e.mutator === 'hail' ? 'El granizo se derrite' : 'La lluvia amaina'), 1500);
         } else if (e.mutator === 'lightning') {
-          this.hud.toast('⛅ El relámpago cesa', 1500);
+          this.announce('routine', '⛅ El relámpago cesa', 1500);
         } else {
-          this.hud.toast('⛅ El viento calma', 1500);
+          this.announce('routine', '⛅ El viento calma', 1500);
         }
         break;
     }
@@ -631,6 +654,36 @@ export class GameApp {
     this.debrisOn = active;
     this.debris.setEnabled(active);
     this.hud.setDebrisChip(active);
+  }
+
+  /** Reloj monotónico compartido por los presupuestos de presentación. */
+  private feedbackNow(): number {
+    return performance.now() / 1000;
+  }
+
+  /** Un solo toque de cámara, limitado por el presupuesto global. */
+  private addShake(amount: number): void {
+    if (!this.shakeOn) return;
+    const granted = this.feedback.cameraAllowance(amount, this.feedbackNow());
+    if (granted > 0) this.shake.add(granted);
+  }
+
+  private quake(power: number, seconds: number): void {
+    if (this.shakeOn) this.shake.quake(power, seconds);
+  }
+
+  private flashRows(row: number, height: number): void {
+    if (!this.flashOn) return;
+    if (!this.feedback.allowFlash(this.feedbackNow())) return;
+    this.flash.flash(row, height);
+  }
+
+  /** Los avisos de menor prioridad esperan; los críticos sí interrumpen. */
+  private announce(priority: FeedbackPriority, message: string, ms: number): void {
+    const now = this.feedbackNow();
+    if (this.feedback.allowAnnouncement(priority, now, ms / 1000)) {
+      this.hud.toast(message, ms);
+    }
   }
 
   private gaugeCaption(p: LevelProgress): string {
@@ -851,6 +904,8 @@ export class GameApp {
     this.lastFrameAt = 0;
     this.scoreSubmitting = false;
     this.hideScoreSubmit();
+    this.feedback.reset();
+    this.hud.clearToasts();
     this.engine = new TetrisEngine({
       mode: this.gameMode,
       mutatorConfig: { pool: this.mutatorPool() },
@@ -919,13 +974,19 @@ export class GameApp {
     this.syncMusicPause();
   }
 
+  private previewCount(): number {
+    // En la tira compacta el canvas mide ~42 px: dos piezas conservan detalle.
+    return window.innerWidth <= 720 || window.innerHeight <= 480 ? 2 : 3;
+  }
+
   private refreshPreviews(): void {
-    const next = this.engine.peekNext(3);
+    const count = this.previewCount();
+    const next = this.engine.peekNext(count);
     const upcoming = this.engine.peekSpecial();
-    const nk = 'N:' + next.join('') + ':' + String(upcoming);
+    const nk = 'N:' + count + ':' + next.join('') + ':' + String(upcoming);
     if (nk !== this.lastNextKey) {
       this.lastNextKey = nk;
-      drawNext(this.nextCanvas, next, upcoming);
+      drawNext(this.nextCanvas, next, upcoming, count);
     }
     const hk = String(this.engine.holdKind) + ':' + this.engine.canHold + ':' + String(this.engine.holdSpecial);
     if (hk !== this.lastHoldKey) {
@@ -943,13 +1004,13 @@ export class GameApp {
       case 'hold': this.sound.play('hold'); break;
       case 'bomb': {
         this.sound.play('explosion');
-        this.shake.add(1);
+        this.addShake(1);
         this.intensity.event('harddrop');
         const cells = e.cells ?? [];
         if (cells.length > 0) {
           const lo = Math.min(...cells.map((c) => c.y));
           const hi = Math.max(...cells.map((c) => c.y));
-          this.flash.flash(lo, hi - lo + 1);
+          this.flashRows(lo, hi - lo + 1);
           // Onda expansiva en el centro de la explosión.
           let sx = 0;
           let sy = 0;
@@ -962,16 +1023,16 @@ export class GameApp {
           this.board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0xffb03a, 9, 3.6, 3.8);
           this.board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0xe04e39, 5, 2.8, 3.0);
         }
-        this.hud.toast('💣 BOOM — 2 filas reventadas', 1700);
+        this.announce('critical', '💣 BOOM — 2 filas reventadas', 1700);
         break;
       }
       case 'bolt': {
         this.sound.play('thunder');
-        this.shake.add(0.6);
+        this.addShake(0.6);
         const cells = e.cells ?? [];
         if (cells.length > 0) {
           const ys = cells.map((c) => c.y);
-          this.flash.flash(Math.min(...ys), Math.max(...ys) - Math.min(...ys) + 1);
+          this.flashRows(Math.min(...ys), Math.max(...ys) - Math.min(...ys) + 1);
           this.chaosFx.boltStrike(cells);
           this.stage.flashLightning();
           for (const c of cells) {
@@ -979,12 +1040,12 @@ export class GameApp {
             this.board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0xffd23f, 8, 3.0, 3.2);
           }
         }
-        this.hud.toast('⚡ Rayo — ' + cells.length + ' bloques rotos', 1700);
+        this.announce('critical', '⚡ Rayo — ' + cells.length + ' bloques rotos', 1700);
         break;
       }
       case 'drill': {
         this.sound.play('lock');
-        this.shake.add(0.35);
+        this.addShake(0.35);
         const cells = e.cells ?? [];
         let sx = 0;
         let sy = 0;
@@ -999,12 +1060,12 @@ export class GameApp {
           const center = cellToWorld(sx / cells.length, sy / cells.length);
           this.chaosFx.impact(center.x, center.y, 0xffa06a);
         }
-        this.hud.toast('🔩 Taladro — se hunde 2 filas', 1500);
+        this.announce('critical', '🔩 Taladro — se hunde 2 filas', 1500);
         break;
       }
       case 'junk': {
         this.sound.play('junk');
-        this.shake.add(0.45);
+        this.addShake(0.45);
         const cells = e.cells ?? [];
         let sx = 0;
         let sy = 0;
@@ -1018,38 +1079,57 @@ export class GameApp {
           const center = cellToWorld(sx / cells.length, sy / cells.length);
           this.chaosFx.impact(center.x, center.y, JUNK_COLOR);
         }
-        this.hud.toast('🧱 Chatarra — ' + cells.length + ' bloques de basura', 1700);
+        this.announce('critical', '🧱 Chatarra — ' + cells.length + ' bloques de basura', 1700);
         break;
       }
       case 'drill-strike': {
         this.sound.play('drill');
-        this.shake.add(0.7);
+        this.addShake(0.7);
         const column = e.column ?? 0;
         const cells = e.cells ?? [];
         if (cells.length > 0) {
           const ys = cells.map((c) => c.y);
-          this.flash.flash(Math.min(...ys), Math.max(...ys) - Math.min(...ys) + 1);
+          this.flashRows(Math.min(...ys), Math.max(...ys) - Math.min(...ys) + 1);
         }
         this.chaosFx.drillStrike(column);
         for (const c of cells) {
           const q = cellToWorld(c.x, c.y);
           this.board.particles.burst(new THREE.Vector3(q.x, q.y, 0.7), 0xe4573f, 10, 3.4, 3.6);
         }
-        this.hud.toast('🔥 Roca roja — columna ' + (column + 1) + ' en desventaja', 1800);
+        this.announce('critical', '🔥 Roca roja — columna ' + (column + 1) + ' en desventaja', 1800);
         break;
       }
-      case 'harddrop':
+      case 'harddrop': {
         this.sound.play('harddrop');
         this.intensity.event('harddrop');
-        this.shake.add(0.35);
-        if (e.cells) for (const c of e.cells.slice(0, 4)) {
-          const p = cellToWorld(c.x, c.y);
-          this.board.particles.burst(new THREE.Vector3(p.x, p.y, 0.5), hex, 4, 1.4, 1.0);
+        const cells = e.cells ?? [];
+        const distance = e.distance ?? 0;
+        this.addShake(0.16 + Math.min(0.22, distance * 0.012));
+        if (cells.length > 0) {
+          let bottom = Number.POSITIVE_INFINITY;
+          let top = Number.NEGATIVE_INFINITY;
+          const columns = new Set<number>();
+          for (const c of cells) {
+            bottom = Math.min(bottom, c.y);
+            top = Math.max(top, c.y);
+            columns.add(c.x);
+          }
+          const trailEnd = Math.max(bottom, top + distance);
+          for (const x of columns) {
+            for (let y = bottom + 2; y <= trailEnd; y += 2) {
+              const p = cellToWorld(x, y);
+              this.board.particles.burst(new THREE.Vector3(p.x, p.y, 0.35), hex, 1, 0.8, 0.55);
+            }
+          }
+          const impact = cellToWorld(COLS / 2 - 0.5, bottom);
+          this.chaosFx.impact(impact.x, impact.y, hex);
         }
         break;
+      }
       case 'lock':
         this.sound.play('lock');
-        this.shake.add(0.08);
+        this.addShake(0.08);
+        this.hud.setCombo(0);
         this.board.playLock(e.cells ?? [], kind);
         // Evitar que matchByProximity empareje muelles de la pieza bloqueada
         // con la nueva pieza al aparecer (causaba bloques desalineados).
@@ -1060,9 +1140,14 @@ export class GameApp {
         const rows = e.rows ?? [];
         const clearType = e.clearType ?? (n >= 4 ? 'tetris' : n === 3 ? 'triple' : n === 2 ? 'double' : 'single');
         const comboCount = e.comboCount ?? 0;
+        const motion = this.effectsOn && !prefersReducedMotion();
         this.intensity.event(n >= 4 ? 'tetris' : 'clear');
-        // Texto flotante 3D sobre el tablero.
-        if (rows.length > 0) this.board.showClearText(clearType, rows, comboCount);
+        this.hud.pulseScore();
+        this.hud.setCombo(comboCount);
+        // Un single se lee en el marcador; los textos 3D se reservan para logros.
+        if (rows.length > 0 && (n > 1 || comboCount >= 2)) {
+          this.board.showClearText(clearType, rows, comboCount, motion ? 0.1 : 0);
+        }
         // Partículas temáticas por tipo de clear.
         const rowsArr = e.rows ?? [];
         const ctColor = CLEAR_TYPE_COLOR[clearType as keyof typeof CLEAR_TYPE_COLOR] ?? 0xffffff;
@@ -1070,35 +1155,38 @@ export class GameApp {
           const cx = COLS / 2 - 0.5;
           const cy = Math.min(...rowsArr) + rowsArr.length / 2 - 0.5;
           const p = cellToWorld(cx, cy);
-          this.board.particles.burst(new THREE.Vector3(p.x, p.y, 1.0), ctColor, 18, 4.0, 4.5);
+          this.board.particles.burst(new THREE.Vector3(p.x, p.y, 1.0), ctColor, 8 + n * 4, 3.4, 3.8);
           if (clearType === 'tetris') {
-            // Destello extra para el Tetris.
-            this.board.particles.burst(new THREE.Vector3(p.x, p.y, 1.2), 0xffffff, 24, 5.0, 5.0);
+            this.board.particles.burst(new THREE.Vector3(p.x, p.y, 1.2), 0xffffff, 20, 5.0, 5.0);
+          }
+          if (comboCount >= 2) {
+            // La racha comparte espacio con el clear, no añade otro toast.
+            this.board.particles.burst(new THREE.Vector3(p.x, p.y, 1.1), 0xffcb3d, Math.min(24, 8 + comboCount * 2), 4.4, 4.2);
           }
         }
-        if (n >= 4) {
-          this.sound.play('tetris');
-          this.hud.toast('¡TETRIS! +' + (e.scoreGained ?? 0));
-        } else {
-          this.sound.play('clear', n);
-          if (n > 1) {
-            const label = CLEAR_TYPE_LABEL[clearType as keyof typeof CLEAR_TYPE_LABEL] ?? n + ' líneas';
-            this.hud.toast('¡' + label + '! +' + (e.scoreGained ?? 0));
-          } else {
-            this.hud.toast('+' + (e.scoreGained ?? 0));
-          }
+        if (n >= 4) this.sound.play('tetris');
+        else this.sound.play('clear', n);
+        if (n > 1 || comboCount >= 2) {
+          const clearLabel = CLEAR_TYPE_LABEL[clearType as keyof typeof CLEAR_TYPE_LABEL] ?? n + ' líneas';
+          const title = n >= 4 ? '¡TETRIS!' : '¡' + clearLabel + '!';
+          const comboText = comboCount >= 2 ? ' · Combo x' + comboCount : '';
+          this.announce(comboCount >= 2 ? 'combo' : 'clear', title + ' +' + (e.scoreGained ?? 0) + comboText, 1800);
         }
         if (this.debrisOn && rows.length > 0) {
           // Terremoto: la limpieza se siente en la cámara y el suelo.
-          this.shake.quake(0.55 + n * 0.15, 0.55 + n * 0.08);
+          this.quake(0.55 + n * 0.15, 0.55 + n * 0.08);
           this.sound.play('quake');
         } else {
-          this.shake.add(0.12 + n * 0.09);
+          this.addShake(0.12 + n * 0.09);
         }
         if (rows.length > 0) {
           const lo = Math.min(...rows); const hi = Math.max(...rows);
-          this.flash.flash(lo, hi - lo + 1);
-          const cleared = this.board.playClear(rows, { launch: !this.debrisOn, particles: !this.debrisOn });
+          this.flashRows(lo, hi - lo + 1);
+          const cleared = this.board.playClear(rows, {
+            launch: !this.debrisOn,
+            particles: !this.debrisOn,
+            stagger: motion ? 0.045 : 0,
+          });
           if (this.debrisOn) {
             this.debris.spawnCells(cleared, { impulse: 1.5, spread: 1.35, scale: 1.15, scaleJitter: 0.25 });
             // Polvo de papel en cada fila: se lee de dónde salen los escombros.
@@ -1112,26 +1200,21 @@ export class GameApp {
         break;
       }
       case 'combo':
+        // La puesta en escena ya se combina con el evento clear del mismo lock.
         this.intensity.event('combo');
-        const cc = e.comboCount ?? 0;
-        const cb = e.comboBonus ?? 0;
-        if (cc >= 2) this.hud.toast('🔥 Combo x' + cc + ' +' + cb);
         break;
       case 'levelup': {
         const lv = e.level ?? this.engine.level;
         this.sound.play('levelup');
         this.intensity.event('levelup');
-        this.shake.add(0.4);
+        this.addShake(0.4);
         this.stage.setLevel(lv);
         const stage = bannerStageForLevel(lv);
         const stageChanged = stage.id !== this.lastStageId;
         this.lastStageId = stage.id;
         if (stageChanged) {
-          const label = stage.icon + ' ' + stage.name;
-          this.hud.toast('Nivel ' + lv + ' — ' + label, 2400);
-          this.hud.levelBanner('NIVEL ' + lv, label, stage, true);
+          this.hud.levelBanner('NIVEL ' + lv, stage.icon + ' ' + stage.name, stage, true);
         } else {
-          this.hud.toast('Nivel ' + lv + ' — ¡más velocidad!', 2200);
           this.hud.levelBanner('NIVEL ' + lv, '¡más rápido!', stage, false);
         }
         this.hud.setStageChip(this.activeScenarioLabel(lv));
@@ -1140,7 +1223,7 @@ export class GameApp {
       case 'gameover':
         this.sound.play('gameover');
         this.music.resolveEnding();
-        this.shake.add(0.6);
+        this.addShake(0.6);
         this.showGameOver();
         break;
     }
@@ -1165,7 +1248,7 @@ export class GameApp {
       strongest = Math.max(strongest, hit.strength);
       this.board.particles.burst(new THREE.Vector3(hit.x, hit.y + 0.12, hit.z), 0xe8dcc0, 3, 1.4, 0.8);
     }
-    this.shake.add(Math.min(0.16, visible * 0.02 + strongest * 0.08));
+    this.addShake(Math.min(0.16, visible * 0.02 + strongest * 0.08));
     const now = performance.now();
     if (now - this.lastDebrisSoundAt > 90) {
       this.lastDebrisSoundAt = now;
@@ -1213,7 +1296,7 @@ export class GameApp {
             : sp === 'chatarra' ? '🧱 Chatarra · deja 4 de basura' : '';
           if (sp && this.engine.pieceVersion !== this.lastSpecialV) {
             this.lastSpecialV = this.engine.pieceVersion;
-            this.hud.toast('Pieza especial: ' + label, 1600);
+            this.announce('routine', 'Pieza especial: ' + label, 1600);
           }
           this.hud.setChaosStatus(label, sp ?? '');
           this.board.setGhost(this.engine.ghostCells(), sp, this.engine.active.kind);

@@ -304,7 +304,7 @@ export class TetrisEngine implements MutatorHost {
     this.active.y = landingY;
     this.pieceVersion++;
     this.score += distance * 2;
-    this.emit({ type: 'harddrop', cells: this.activeCells() });
+    this.emit({ type: 'harddrop', cells: this.activeCells(), distance });
     this.drillSink(); // el taladro tambien se hunde en la caida instantanea
     this.lockPiece();
   }

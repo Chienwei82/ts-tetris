@@ -454,8 +454,8 @@ body.touch #bottom-bar .bb-label { display: none; }
   #hud-previews .stat { margin: 0; }
   #hud-previews .stat label { display: block; font-size: 7px; line-height: 1; letter-spacing: 0.25px; margin: 0 0 1px; }
   #hud-previews .key { display: none; }
-  #hud-next canvas { width: 42px; height: auto; max-height: 50px; }
-  #hud-hold canvas { width: 46px; height: auto; max-height: 23px; }
+  .hud-next canvas { width: 42px; height: auto; max-height: 50px; }
+  .hud-hold canvas { width: 46px; height: auto; max-height: 23px; }
   #hud-right { display: none; }
   #help-overlay .help-card { max-height: 82dvh; }
   #wind-arrow { top: 20%; padding: 6px 14px; }
@@ -466,6 +466,9 @@ body.touch #bottom-bar .bb-label { display: none; }
 
 /* ============ Pantallas bajas (móvil horizontal): botones compactos, sin solapes ============ */
 @media (max-height: 480px) {
+  /* Las opciones de inicio pueden superar la altura de un móvil apaisado. */
+  #overlay { align-items: flex-start; overflow-y: auto; padding: 12px 0; }
+  #overlay .card { margin: auto; }
   .tc-btn { width: 58px; height: 58px; font-size: 22px; border-radius: 15px; }
   #tc-move .tc-btn { width: 68px; height: 68px; font-size: 26px; }
   #tc-rotate .tc-btn { width: 58px; height: 58px; font-size: 24px; }

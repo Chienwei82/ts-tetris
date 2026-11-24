@@ -113,6 +113,8 @@ export interface GameEvent {
   column?: number;
   scoreGained?: number;
   level?: number;
+  /** Filas recorridas en una caída instantánea (solo evento 'harddrop'). */
+  distance?: number;
   /** Tipo de clear (solo en eventos 'clear'). */
   clearType?: ClearType;
   /** Racha de combo actual (solo en eventos 'clear' y 'combo'). */

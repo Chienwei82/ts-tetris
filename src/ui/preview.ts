@@ -102,11 +102,16 @@ function drawSpecialBadge(ctx: CanvasRenderingContext2D, rect: Rect, special: Sp
   ctx.fillText(info.label, x + w / 2, y + h / 2 + 1);
   ctx.restore();
 }
-/** Next-queue preview: up to 3 upcoming pieces, the closest one in the big slot. */
-export function drawNext(canvas: HTMLCanvasElement, kinds: PieceKind[], special: SpecialKind | null = null): void {
+/** Next-queue preview: hasta 3 piezas; en móvil se piden 2 para que sigan legibles. */
+export function drawNext(
+  canvas: HTMLCanvasElement,
+  kinds: PieceKind[],
+  special: SpecialKind | null = null,
+  count = 3
+): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  const shown = kinds.slice(0, 3);
+  const shown = kinds.slice(0, Math.max(1, Math.min(3, Math.floor(count))));
   if (shown.length === 0) {
     drawPieceIn(ctx, null, { x: 0, y: 0, w: canvas.width, h: canvas.height });
     return;
