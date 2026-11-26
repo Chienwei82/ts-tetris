@@ -11,7 +11,7 @@ import type { FxQuality } from './fxQuality.js';
 
 /** Celda eliminada del tablero, en coordenadas de mundo. */
 export interface DebrisCell {
-  kind: PieceKind | 'J';
+  kind: PieceKind | 'X';
   x: number;
   y: number;
 }
@@ -130,7 +130,7 @@ export class DebrisSystem {
     for (const cell of cells) {
       origin.x = cell.x;
       origin.y = cell.y;
-      origin.color = cell.kind === 'J' ? JUNK_COLOR : PIECE_COLORS[cell.kind];
+      origin.color = cell.kind === 'X' ? JUNK_COLOR : PIECE_COLORS[cell.kind];
       this.spawnOne(origin, options);
     }
     this.colorAttr.needsUpdate = true;

@@ -54,6 +54,16 @@ describe('piezas especiales (modo caos)', () => {
     expect(announcedAtLeastOnce).toBe(true);
   });
 
+  it('un powerup sin líneas corta el combo', () => {
+    const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 7 });
+    e.start();
+    e.combo = 4;
+    e.special = 'bomb';
+    e.active = { kind: 'O', rotation: 0, x: 4, y: 8 };
+    e.hardDrop();
+    expect(e.combo).toBe(-1);
+  });
+
   it('bomba: revienta 2 filas al bloquearse y la pieza se consume', () => {
     const events: GameEvent[] = [];
     const e = new TetrisEngine({ rng: seqRng(), mode: 'chaos', seed: 3, onEvent: (ev) => events.push(ev) });

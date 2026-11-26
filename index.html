@@ -2,7 +2,7 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, maximum-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#bfe3f5" />
     <title>TETRIS 3D · Paper Quest</title>
     <meta name="description" content="Tetris 3D jugable en el navegador — TypeScript + three.js, estilo papercraft" />
@@ -53,17 +53,19 @@
     </aside>
 
     <aside id="hud-right" class="panel">
-      <h2>Controles móviles</h2>
-      <ul>
-        <li>👆 Arrastra: mover / bajar</li>
-        <li>👆 Toca el tablero: rotar</li>
-        <li><span class="key">◀</span><span class="key">▶</span> mover</li>
-        <li><span class="key">↺</span><span class="key">↻</span> rotar</li>
-        <li><span class="key">⇊</span> caída instantánea</li>
-        <li><span class="key">HOLD</span> reserva</li>
-        <li>❓ ayuda · ⏸ pausa</li>
-        <li>⚙️ cambiar controles</li>
-      </ul>
+      <details id="controls-details" open>
+        <summary>Controles móviles</summary>
+        <ul>
+          <li>👆 Arrastra: mover / bajar</li>
+          <li>👆 Toca el tablero: rotar</li>
+          <li><span class="key">◀</span><span class="key">▶</span> mover</li>
+          <li><span class="key">↺</span><span class="key">↻</span> rotar</li>
+          <li><span class="key">⇊</span> caída instantánea</li>
+          <li><span class="key">HOLD</span> reserva</li>
+          <li>❓ ayuda · ⏸ pausa</li>
+          <li>⚙️ cambiar controles</li>
+        </ul>
+      </details>
       <div id="chaos-status" class="hidden"></div>
       <div id="toast" class="hidden"></div>
     </aside>
@@ -96,36 +98,39 @@
             <input id="level-range" type="range" min="1" max="20" step="1" value="1" />
             <output id="level-range-out">1 · ☀️ Pradera</output>
           </div>
-          <label class="check-row" for="chaos-lightning">
-            <input type="checkbox" id="chaos-lightning" />
-            <span>⚡ Relámpagos en Caos</span>
-          </label>
-          <label class="check-row" for="chaos-hail">
-            <input type="checkbox" id="chaos-hail" />
-            <span>🌨️ Granizo en Caos</span>
-          </label>
-          <p class="option-hint">Los relámpagos, el granizo y los escombros son exclusivos del modo Caos, donde además caen tormentas de viento y lluvia. La calidad se puede ajustar abajo.</p>
-          <div class="quality-row">
-            <label for="fx-quality">Calidad de efectos</label>
-            <select id="fx-quality">
-              <option value="low">Baja</option>
-              <option value="medium">Media</option>
-              <option value="high">Alta</option>
-            </select>
-          </div>
-          <label class="check-row" for="camera-shake">
-            <input type="checkbox" id="camera-shake" />
-            <span>📳 Sacudida de cámara</span>
-          </label>
-          <label class="check-row" for="clear-flash">
-            <input type="checkbox" id="clear-flash" />
-            <span>✨ Destellos de línea</span>
-          </label>
-          <label class="check-row" for="piece-patterns">
-            <input type="checkbox" id="piece-patterns" />
-            <span>♿ Motivos por pieza</span>
-          </label>
-          <p class="option-hint">Los motivos añaden un trazo distinto a cada pieza (líneas, lunares, chevrones) para distinguirlas sin depender del color. Se aplican también al preview y a la reserva.</p>
+          <details class="advanced-settings">
+            <summary>⚙️ Ajustes avanzados</summary>
+            <label class="check-row" for="chaos-lightning">
+              <input type="checkbox" id="chaos-lightning" />
+              <span>⚡ Relámpagos en Caos</span>
+            </label>
+            <label class="check-row" for="chaos-hail">
+              <input type="checkbox" id="chaos-hail" />
+              <span>🌨️ Granizo en Caos</span>
+            </label>
+            <p class="option-hint">Los relámpagos, el granizo y los escombros son exclusivos del modo Caos, donde además caen tormentas de viento y lluvia. La calidad se puede ajustar abajo.</p>
+            <div class="quality-row">
+              <label for="fx-quality">Calidad de efectos</label>
+              <select id="fx-quality">
+                <option value="low">Baja</option>
+                <option value="medium">Media</option>
+                <option value="high">Alta</option>
+              </select>
+            </div>
+            <label class="check-row" for="camera-shake">
+              <input type="checkbox" id="camera-shake" />
+              <span>📳 Sacudida de cámara</span>
+            </label>
+            <label class="check-row" for="clear-flash">
+              <input type="checkbox" id="clear-flash" />
+              <span>✨ Destellos de línea</span>
+            </label>
+            <label class="check-row" for="piece-patterns">
+              <input type="checkbox" id="piece-patterns" />
+              <span>♿ Motivos por pieza</span>
+            </label>
+            <p class="option-hint">Los motivos añaden un trazo distinto a cada pieza (líneas, lunares, chevrones) para distinguirlas sin depender del color. Se aplican también al preview y a la reserva.</p>
+          </details>
         </div>
         <div class="btn-row">
           <button id="btn-start">▶ Jugar</button>

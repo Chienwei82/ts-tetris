@@ -7,11 +7,15 @@
  * Uso (con el preview de producción ya servido en :4173):
  *   npm run build && npm run preview &
  *   node tools/screenshots.mjs
+ *
+ * Si Playwright tiene Chromium instalado pero no el shell headless, se puede
+ * apuntar al binario concreto con `CHROME_PATH=/ruta/a/chrome npm run shots`.
  */
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
 const BASE = process.env.SHOT_URL ?? 'http://localhost:4173';
+const CHROME_PATH = process.env.CHROME_PATH;
 const OUT = new URL('../docs/screenshots/', import.meta.url).pathname;
 
 /** Cierra la ayuda, empieza la partida y deja el tablero en un estado creíble. */
@@ -55,7 +59,7 @@ async function shot(browser, { name, viewport, deviceScaleFactor = 1, isMobile =
 }
 
 await mkdir(OUT, { recursive: true });
-const browser = await chromium.launch();
+const browser = await chromium.launch(CHROME_PATH ? { executablePath: CHROME_PATH } : {});
 try {
   await shot(browser, { name: 'desktop.jpg', viewport: { width: 1280, height: 800 } });
   await shot(browser, { name: 'mobile-portrait.jpg', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true });

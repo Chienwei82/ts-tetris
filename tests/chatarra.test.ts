@@ -6,7 +6,7 @@ function seqRng(): () => number { let i = 0; return () => { i = (i + 1) % 100; r
 
 function countJunk(e: TetrisEngine): number {
   let count = 0;
-  for (const row of e.grid) for (const cell of row) if (cell === 'J') count++;
+  for (const row of e.grid) for (const cell of row) if (cell === 'X') count++;
   return count;
 }
 
@@ -25,7 +25,16 @@ describe('pieza desventajosa Chatarra (Caos)', () => {
     expect(e.score).toBe(0);
     expect(e.special).toBeNull();
     // La pieza no deja bloques de su color: solo la chatarra.
-    expect(e.grid[0]?.[5]).toBe('J');
+    expect(e.grid[0]?.[5]).toBe('X');
+  });
+
+  it('la pieza J no se confunde con la chatarra', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    e.active = { kind: 'J', rotation: 0, x: 4, y: 0 };
+    e.hardDrop();
+    expect(countJunk(e)).toBe(0);
+    expect(e.grid[0]![3]).toBe('J');
   });
 
   it('la guía anuncia las celdas donde aparecerá la basura', () => {

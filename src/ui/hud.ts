@@ -1,4 +1,5 @@
 import type { BannerStage } from './levelBannerTheme.js';
+import { ToastQueue } from './toastQueue.js';
 
 export class HUD {
   private scoreEl: HTMLElement;
@@ -21,7 +22,7 @@ export class HUD {
   private comboChipEl: HTMLElement | null;
   private dangerChipEl: HTMLElement | null;
   private chaosEl: HTMLElement | null;
-  private toastQueue: string[] = [];
+  private readonly toastQueue = new ToastQueue();
   private toastBusy = false;
   private bannerSubEl: HTMLElement;
   private bannerIconEl: HTMLElement;
@@ -34,6 +35,7 @@ export class HUD {
   private lastGaugeW = '';
   private lastGaugeClass = '';
   private lastGaugeCaption = '';
+  private lastDanger: 'safe' | 'warn' | 'danger' = 'safe';
   constructor() {
     const q = (id: string): HTMLElement => {
       const el = document.getElementById(id);
@@ -105,6 +107,11 @@ export class HUD {
   /** Aviso de pila alta: siempre visible, también con efectos y pulso reducidos. */
   setDanger(level: 'safe' | 'warn' | 'danger'): void {
     if (!this.dangerChipEl) return;
+    // `refreshDanger()` se llama varias veces por segundo: no se toca el DOM ni
+    // la región `aria-live` si el estado no ha cambiado (evita anuncios
+    // repetidos en lectores de pantalla).
+    if (level === this.lastDanger) return;
+    this.lastDanger = level;
     this.dangerChipEl.classList.toggle('hidden', level === 'safe');
     this.dangerChipEl.classList.toggle('danger', level === 'danger');
     this.dangerChipEl.classList.toggle('warn', level === 'warn');
@@ -132,22 +139,23 @@ export class HUD {
     }, 2800);
   }
   toast(msg: string, ms = 1600): void {
-    this.toastQueue.push(msg);
-    if (!this.toastBusy) this.nextToast(ms);
+    this.toastQueue.push(msg, ms);
+    if (!this.toastBusy) this.nextToast();
   }
   /** Vacía avisos pendientes al empezar una partida nueva o cambiar de modo. */
   clearToasts(): void {
-    this.toastQueue.length = 0;
+    this.toastQueue.clear();
     this.toastBusy = false;
     window.clearTimeout(this.toastTimer);
     this.toastEl.classList.add('hidden');
     this.toastEl.classList.remove('pop');
   }
-  private nextToast(ms: number): void {
-    const msg = this.toastQueue.shift();
-    if (msg === undefined) { this.toastBusy = false; return; }
+  private nextToast(): void {
+    const outcome = this.toastQueue.next();
+    if (!outcome) { this.toastBusy = false; return; }
+    const { message, ms } = outcome;
     this.toastBusy = true;
-    this.toastEl.textContent = msg;
+    this.toastEl.textContent = message;
     this.toastEl.classList.remove('hidden');
     this.toastEl.classList.remove('pop');
     void this.toastEl.offsetWidth;
@@ -155,7 +163,7 @@ export class HUD {
     window.clearTimeout(this.toastTimer);
     this.toastTimer = window.setTimeout(() => {
       this.toastEl.classList.add('hidden');
-      this.nextToast(ms);
+      this.nextToast();
     }, ms);
   }
   setModeChip(mode: string): void {

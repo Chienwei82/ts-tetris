@@ -13,7 +13,7 @@ export const VISIBLE_ROWS = 20;
 export const HIDDEN_ROWS = 2;
 export const TOTAL_ROWS = VISIBLE_ROWS + HIDDEN_ROWS;
 
-export type CellValue = PieceKind | 'G' | 'R' | 'J' | 0;
+export type CellValue = PieceKind | 'G' | 'R' | 'X' | 0; // 'X' = chatarra (no confundir con la pieza J)
 export type Grid = CellValue[][]; // grid[row][col], row 0 = bottom
 
 export interface ActivePiece {

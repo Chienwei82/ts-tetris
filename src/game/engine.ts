@@ -150,7 +150,10 @@ export class TetrisEngine implements MutatorHost {
     const kind = this.queue.shift() as PieceKind;
     this.refillQueue();
     this.special = this.nextSpecial();
-    this.active = { kind, rotation: 0, x: Math.floor(COLS / 2) - 1, y: VISIBLE_ROWS - 1 };
+    // La pieza nace con TODAS sus celdas dentro del campo visible. Las filas
+    // ocultas quedan como margen para kicks/rotaciones cerca del techo; si una
+    // celda sube ahí, el renderer la recorta en vez de pintarla sobre el marco.
+    this.active = { kind, rotation: 0, x: Math.floor(COLS / 2) - 1, y: VISIBLE_ROWS - 2 };
     this.fallAcc = 0; this.lockAcc = 0; this.lockResets = 0; this.drillUsed = false;
     this.pieceVersion++;
     if (collides(this.grid, this.activeCells())) { this.phase = 'gameover'; this.emit({ type: 'gameover', scoreGained: this.score }); }
@@ -268,12 +271,19 @@ export class TetrisEngine implements MutatorHost {
    * Tradicional siempre devuelve 1 (sin tormentas).
    */
   get slipperyRepeatBoost(): number { return this.slippery ? 0.55 : 1; }
+  /**
+   * Caída suave (↓ o arrastre táctil). Baja una celda y, si no puede, NO fija la
+   * pieza: el lock delay de `update()` sigue corriendo aunque la tecla esté
+   * pulsada o el dedo empuje contra el montón. Antes se fijaba al instante y el
+   * medio segundo de gracia era inútil en móvil. La caída instantánea
+   * (`hardDrop`) sí fija de inmediato, como es habitual.
+   */
   moveDown(): boolean {
     if (this.phase !== 'playing' || !this.active) return false;
     const ok = this.stepDown(1);
     if (ok) { this.resetLockDelay(); return true; }
+    // El taladro conserva su efecto al tocar el montón.
     if (this.drillSink()) return true;
-    this.lockPiece();
     return false;
   }
   rotate(dir: 1 | -1): boolean {
@@ -320,7 +330,7 @@ export class TetrisEngine implements MutatorHost {
       // El especial viaja con la pieza que sale del hueco (con su estado de taladro).
       this.special = tmpSpecial;
       this.drillUsed = tmpUsed;
-      this.active = { kind: tmp, rotation: 0, x: Math.floor(COLS / 2) - 1, y: VISIBLE_ROWS - 1 };
+      this.active = { kind: tmp, rotation: 0, x: Math.floor(COLS / 2) - 1, y: VISIBLE_ROWS - 2 };
       this.fallAcc = 0; this.lockAcc = 0; this.lockResets = 0;
       this.pieceVersion++;
       if (collides(this.grid, this.activeCells())) { this.phase = 'gameover'; this.emit({ type: 'gameover', scoreGained: this.score }); }
@@ -418,13 +428,13 @@ export class TetrisEngine implements MutatorHost {
     return out;
   }
 
-  /** Chatarra: el objeto se convierte en bloques basura ('J') en sus propias celdas.
+  /** Chatarra: el objeto se convierte en bloques basura ('X') en sus propias celdas.
    *  No da puntos ni rompe nada: ocupa espacio hasta que se limpie una linea. */
   private applyJunk(cells: Vec2[]): void {
     const placed: Vec2[] = [];
     for (const c of cells) {
       const row = this.grid[c.y];
-      if (row && row[c.x] === 0) { row[c.x] = 'J'; placed.push({ x: c.x, y: c.y }); }
+      if (row && row[c.x] === 0) { row[c.x] = 'X'; placed.push({ x: c.x, y: c.y }); }
     }
     if (placed.length === 0) return;
     this.refreshStackHeight();
@@ -519,6 +529,10 @@ export class TetrisEngine implements MutatorHost {
       if (special === 'bomb') this.applyBomb(cells);
       else if (special === 'bolt') this.applyBolt(cells);
       else if (special === 'chatarra') this.applyJunk(cells);
+      // Un powerup no es un clear puntuable: corta la racha igual que una pieza
+      // normal que no limpia líneas. Si no, una bomba podía mantener un combo
+      // vivo sin haber limpiado nada y el bono resultaba imposible de explicar.
+      this.combo = -1;
     } else {
       mergePiece(this.grid, cells, this.active.kind);
       this.refreshStackHeight();
