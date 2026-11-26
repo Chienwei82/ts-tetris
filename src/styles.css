@@ -11,7 +11,7 @@ html { touch-action: manipulation; }
 body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 /* 100dvh evita que la barra de direcciones de Android recorte la escena. */
 #scene { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; height: 100dvh; display: block; touch-action: none; }
-#vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 52%, rgba(var(--shadow), 0.32) 100%); }
+#vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 58%, rgba(var(--shadow), 0.26) 100%); }
 #brand { position: fixed; top: calc(6px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%) rotate(-1deg); text-align: center; pointer-events: none; z-index: 5; }
 #brand h1 {
   margin: 0; font-size: 30px; letter-spacing: 5px; font-weight: 700; color: var(--paper-hi);
@@ -42,6 +42,10 @@ body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none
 }
 #hud-left { left: calc(18px + env(safe-area-inset-left, 0px)); transform: rotate(-1deg); }
 #hud-right { right: calc(18px + env(safe-area-inset-right, 0px)); width: 216px; transform: rotate(0.8deg); }
+/* Plegado: el panel se convierte en una píldora compacta para no competir con el tablero. */
+#hud-right:has(#controls-details:not([open])) { width: auto; padding: 9px 14px; }
+#hud-right:has(#controls-details:not([open])) summary { margin: 0; }
+#hud-right:has(#controls-details:not([open])) #toast:not(.hidden) { margin-top: 10px; max-width: 240px; }
 .stat { margin-bottom: 12px; }
 .stat label { display: block; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
 .stat strong { font-size: 30px; font-variant-numeric: tabular-nums; color: var(--ink); text-shadow: 2px 2px 0 rgba(255,255,255,0.7); }
@@ -55,8 +59,24 @@ body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none
   45% { transform: scale(1.18); color: var(--red); }
   100% { transform: scale(1); color: var(--ink); }
 }
-#hud-right h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--ink); font-weight: 700; }
+#hud-right h2, #hud-right summary { margin: 0 0 10px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--ink); font-weight: 700; cursor: pointer; list-style: none; }
+#hud-right summary::-webkit-details-marker { display: none; }
+#hud-right summary::after { content: ' ▾'; font-size: 10px; }
+#controls-details:not([open]) summary { margin-bottom: 0; }
+#controls-details:not([open]) summary::after { content: ' ▸'; }
 #hud-right ul { list-style: none; margin: 0; padding: 0; font-size: 13px; line-height: 2.1; }
+/* Ajustes avanzados plegados: el inicio prioriza Jugar y el nivel inicial. */
+.advanced-settings { margin: 12px 0 4px; padding-top: 8px; border-top: 1.5px dashed rgba(59, 43, 32, 0.28); text-align: left; }
+.advanced-settings > summary { cursor: pointer; font-size: 12.5px; font-weight: 700; letter-spacing: 1px; color: var(--muted); list-style: none; }
+.advanced-settings > summary::-webkit-details-marker { display: none; }
+.advanced-settings > summary::after { content: ' ▾'; }
+.advanced-settings:not([open]) > summary::after { content: ' ▸'; }
+.advanced-settings[open] > summary { margin-bottom: 8px; }
+/* Foco visible coherente para teclado en todos los controles. */
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible,
+[role="tab"]:focus-visible, [role="button"]:focus-visible {
+  outline: 3px solid #1f6feb; outline-offset: 2px; border-radius: 6px;
+}
 .key {
   display: inline-block; min-width: 22px; text-align: center; padding: 1px 7px; margin: 0 2px; border-radius: 7px;
   background: var(--paper-hi); color: var(--ink); border: 1.5px solid var(--ink); border-bottom-width: 3px;
@@ -163,6 +183,13 @@ button.ghost { background: var(--paper-hi); color: var(--ink); }
 #danger-chip { display: inline-block; margin-left: 4px; padding: 1px 8px; background: #ffd27a; color: #6b2b18; border: 1.5px solid var(--ink); border-radius: 8px; font-size: 11px; font-weight: 700; box-shadow: 2px 2px 0 rgba(var(--shadow), 0.2); }
 #danger-chip.danger { background: var(--red); color: #fff8ea; }
 @media (prefers-reduced-motion: reduce) { .stat.score-pop strong { animation: none; } }
+/* Movimiento reducido: nada de flotaciones, pops ni latidos decorativos. */
+@media (prefers-reduced-motion: reduce) {
+  .card { animation: none; }
+  #toast.pop { animation: none; }
+  #btn-overlay-scoreboard.cta-top { animation: none; }
+  .mode-btn, .panel { animation: none; }
+}
 /* Color por tormenta: cada aviso se reconoce de un vistazo. */
 #mutator-chip.wind { background: #b9d6e8; }
 #mutator-chip.rain { background: #6f9dc4; color: #fff; }

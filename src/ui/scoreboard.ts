@@ -1,6 +1,8 @@
 import { fetchLeaderboard, LeaderboardError } from '../leaderboard/client.js';
 import { describeLeaderboardError } from '../leaderboard/availability.js';
 import type { GameMode, LeaderboardResponse, ScoreEntry } from '../leaderboard/types.js';
+import { trapFocus } from './focusTrap.js';
+import type { FocusTrap } from './focusTrap.js';
 
 export interface ScoreboardOptions {
   root: HTMLElement;
@@ -65,6 +67,7 @@ export class Scoreboard {
   private mode: GameMode = 'classic';
   private open = false;
   private requestSeq = 0;
+  private trap: FocusTrap | null = null;
 
   constructor(options: ScoreboardOptions) {
     this.root = options.root;
@@ -100,6 +103,9 @@ export class Scoreboard {
     this.root.classList.remove('hidden-overlay');
     this.syncTabs();
     this.onOpenChange(true);
+    // El ranking es modal: foco atrapado y devuelto al botón de origen.
+    this.trap?.release();
+    this.trap = trapFocus(this.root, this.closeBtn);
     void this.load();
   }
 
@@ -108,6 +114,8 @@ export class Scoreboard {
     this.open = false;
     this.requestSeq++;
     this.root.classList.add('hidden-overlay');
+    this.trap?.release();
+    this.trap = null;
     this.onOpenChange(false);
   }
 

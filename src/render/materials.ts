@@ -235,7 +235,9 @@ export function blockMaterial(kind: PieceKind, active = false): THREE.MeshToonMa
       map: piecePatterns ? patternedTile(kind) : paperTileTex,
       gradientMap: toonGradient,
       emissive: PIECE_COLORS[kind],
-      emissiveIntensity: active ? 0.3 : 0.13,
+      // La pieza activa brilla más y los bloques fijados menos: la jerarquía
+      // "activa > fijada > fantasma" se lee antes que el color de cada pieza.
+      emissiveIntensity: active ? 0.36 : 0.08,
       // El tablero es el primer plano del diorama: la niebla del fondo (que
       // oscurece el horizonte) no debe teñir las piezas.
       fog: false
@@ -255,7 +257,7 @@ export function outlineMaterial(): THREE.MeshBasicMaterial {
  * Contorno de la pieza activa: papel iluminado en vez de tinta oscura. Marca
  * "esta pieza se mueve" a un vistazo, incluso con el tablero lleno.
  */
-const activeOutline = new THREE.MeshBasicMaterial({ color: 0xfff3cf, side: THREE.BackSide, fog: false });
+const activeOutline = new THREE.MeshBasicMaterial({ color: 0xfffdf1, side: THREE.BackSide, fog: false });
 export function activeOutlineMaterial(): THREE.MeshBasicMaterial {
   return activeOutline;
 }

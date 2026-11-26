@@ -36,6 +36,8 @@ import { ViewportManager } from './platform/viewport.js';
 import { InputManager } from './ui/inputManager.js';
 import { ModeSelect } from './ui/modeSelect.js';
 import { HUD } from './ui/hud.js';
+import { trapFocus } from './ui/focusTrap.js';
+import type { FocusTrap } from './ui/focusTrap.js';
 import { drawHold, drawNext, drawPieceIcon } from './ui/preview.js';
 import { loadEffectsEnabled, loadMusicEnabled, loadMusicGenre, loadFxQuality, loadChaosLightning, loadChaosHail, loadShakeEnabled, loadFlashEnabled, loadPiecePatterns, prefersReducedMotion, saveEffectsEnabled, saveMusicEnabled, saveMusicGenre, saveFxQuality, saveChaosLightning, saveChaosHail, saveShakeEnabled, saveFlashEnabled, savePiecePatterns } from './ui/settings.js';
 import { FeedbackDirector } from './ui/feedbackDirector.js';
@@ -121,6 +123,7 @@ export class GameApp {
   private musicGenre: GenreId;
   private helpOpen = false;
   private helpAutoPaused = false;
+  private helpTrap: FocusTrap | null = null;
 
   private engine: TetrisEngine;
   private activeMutator: MutatorId | null = null;
@@ -132,6 +135,8 @@ export class GameApp {
   private hudAcc = 0;
   private musicAcc = 0;
   private needsRender = true;
+  /** Tiempo real acumulado para la simulación entre frames procesados. */
+  private simAcc = 0;
 
   private readonly timer: THREE.Timer;
   private readonly frameLimiter: FrameLimiter;
@@ -945,6 +950,7 @@ export class GameApp {
     this.runStartLevel = lv;
     this.runPlayedMs = 0;
     this.lastFrameAt = 0;
+    this.simAcc = 0;
     this.scoreSubmitting = false;
     this.hideScoreSubmit();
     this.feedback.reset();
@@ -972,6 +978,10 @@ export class GameApp {
     this.lastStageId = bannerStageForLevel(lv).id;
     this.hud.setStageChip(this.activeScenarioLabel(lv));
     this.hud.hideOverlay();
+    // Durante la partida el panel de controles se pliega: el tablero manda.
+    // La lista sigue a un clic en el resumen y se conserva al pausar/terminar.
+    const controls = document.getElementById('controls-details');
+    if (controls instanceof HTMLDetailsElement) controls.open = false;
     this.hud.setStats(0, lv, 0);
     this.hud.setCombo(0);
     this.hud.setDanger('safe');
@@ -1007,11 +1017,16 @@ export class GameApp {
       this.helpAutoPaused = this.engine.phase === 'playing';
       if (this.helpAutoPaused) this.engine.pause();
       this.input.releaseAll();
-      el<HTMLDivElement>('help-overlay').classList.remove('hidden-overlay');
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      const overlay = el<HTMLDivElement>('help-overlay');
+      overlay.classList.remove('hidden-overlay');
+      // Foco dentro del diálogo: Tab no se escapa a la UI de detrás y al cerrar
+      // se devuelve el foco a quien abrió la ayuda.
+      this.helpTrap = trapFocus(overlay, el<HTMLButtonElement>('btn-help-close'));
     } else {
       this.helpOpen = false;
       el<HTMLDivElement>('help-overlay').classList.add('hidden-overlay');
+      this.helpTrap?.release();
+      this.helpTrap = null;
       if (this.helpAutoPaused && this.engine.phase === 'paused') this.engine.resume();
       this.helpAutoPaused = false;
     }
@@ -1307,16 +1322,26 @@ export class GameApp {
 
   private animate = (now: number): void => {
     requestAnimationFrame(this.animate);
-    if (!this.frameLimiter.shouldProcess(now)) return;
     this.timer.update(now);
-    const rawDt = Math.min(this.timer.getDelta(), MAX_DELTA_SECONDS);
-    if (document.hidden) return;
+    const frameDt = Math.min(this.timer.getDelta(), MAX_DELTA_SECONDS);
+    if (document.hidden) {
+      // La pestaña oculta no acumula deuda de simulación al volver.
+      this.simAcc = 0;
+      return;
+    }
+    // La entrada se actualiza en CADA rAF aunque el frame no se simule: el DAS
+    // y la repetición mantenida no deben cuantizarse al tope de FPS.
+    this.input.update(frameDt);
+    this.simAcc = Math.min(this.simAcc + frameDt, MAX_DELTA_SECONDS);
+    if (!this.frameLimiter.shouldProcess(now)) return;
+    // `rawDt` es el tiempo real transcurrido desde el último frame simulado.
+    const rawDt = this.simAcc;
+    this.simAcc = 0;
     const t = this.timer.getElapsed();
     // Tiempo real entre frames para la duración de la partida (el `rawDt` del
     // motor va topado a 100 ms y subestimaría en equipos lentos).
     const frameGapMs = this.lastFrameAt === 0 ? 0 : Math.min(1_000, Math.max(0, now - this.lastFrameAt));
     this.lastFrameAt = now;
-    this.input.update(rawDt);
 
     if (this.windArrowLeft > 0 && this.engine.phase === 'playing' && !this.helpOpen) {
       this.windArrowLeft = Math.max(0, this.windArrowLeft - rawDt);

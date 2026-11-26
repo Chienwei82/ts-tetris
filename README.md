@@ -41,7 +41,7 @@ aparece un aviso de clasificación no disponible (el botón nunca se oculta) y e
 envío de puntaje se puede reintentar.
 
 ```bash
-npm test         # tests de lógica (vitest 5, 269 tests)
+npm test         # tests de lógica (vitest 5, 280 tests)
 npm run build    # type-check (tsc 7 nativo) + type-check del API + bundle Rolldown/Oxc
 npm run preview  # sirve dist/ (también en LAN: http://<tu-IP>:4173)
 npm run curate   # (opcional) regenera las semillas curadas de la música
@@ -365,7 +365,7 @@ La lógica (`src/game`) no importa three.js ni el DOM: se prueba sin navegador.
   trata como caída. El aviso solo se pinta en inicio/pausa y el botón sigue visible.
 - **Cartel y chatarra**: `scenarioCatalog.ts` es la fuente única de metadatos de
   escenario; `HUD.levelBanner` aplica `data-stage`/`data-advance` y CSS pinta la
-  animación. La chatarra es un especial más (`SPECIAL_KINDS`) que escribe celdas `'J'`.
+  animación. La chatarra es un especial más (`SPECIAL_KINDS`) que escribe celdas `'X'`.
 - **Clasificación sin dependencias extra**: las reglas de validación viven en
   `src/leaderboard/rules.ts` y son la MISMA función en el navegador y en el servidor;
   el almacén habla con Upstash por su API REST con `fetch` (sin SDK) y un único

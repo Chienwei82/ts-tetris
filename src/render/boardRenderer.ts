@@ -7,9 +7,12 @@ import { ParticleSystem } from './particles.js';
 import { ACTIVE_STIFFNESS, GHOST_STIFFNESS, criticalDamping, isSettled, matchByProximity, stepSpring } from './motionSpring.js';
 // Materiales del tablero: `fog: false` en todos — la niebla del fondo es para el
 // horizonte y no debe teñir el plano de juego (piezas, panel, fantasmas, guías).
-const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, depthWrite: false, fog: false });
+const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.07, depthWrite: false, fog: false });
 // Contorno discontinuo: se lee como una previsión y nunca como un bloque fijado.
-const ghostEdgeMat = new THREE.LineDashedMaterial({ color: INK, dashSize: 0.18, gapSize: 0.13, transparent: true, opacity: 0.78, fog: false });
+// El trazo es más denso que el relleno y toma el color oscurecido de la pieza:
+// el fantasma se distingue por forma Y por color, sin competir con lo fijado.
+const ghostEdgeMat = new THREE.LineDashedMaterial({ color: INK, dashSize: 0.24, gapSize: 0.08, transparent: true, opacity: 0.92, fog: false });
+const ghostEdgeColor = new THREE.Color();
 /** Instanced-render capacity: every visible cell at once. */
 const MAX_LOCKED = COLS * VISIBLE_ROWS;
 /** Inverted-hull ink outline scale (cut-out edge). */
@@ -24,7 +27,7 @@ interface LockedCell {
 }
 /** Celda que desaparece al limpiar una fila, ya en coordenadas de mundo. */
 export interface ClearedCell {
-  kind: PieceKind | 'J';
+  kind: PieceKind | 'X';
   x: number;
   y: number;
 }
@@ -380,7 +383,7 @@ export class BoardRenderer {
     const outline = new THREE.Mesh(this.geo, outlineMaterial());
     outline.scale.setScalar(1.07);
     g.add(mesh, outline);
-    g.userData.kind = 'J';
+    g.userData.kind = 'X';
     return g;
   }
   /** Bloque fantasma: caja translúcida con borde de tinta (se recicla en `ghostPool`). */
@@ -400,7 +403,8 @@ export class BoardRenderer {
     const mesh = new THREE.Mesh(this.geo, blockMaterial(kind, active));
     mesh.castShadow = true; mesh.receiveShadow = true;
     const outline = new THREE.Mesh(this.geo, active ? activeOutlineMaterial() : outlineMaterial());
-    outline.scale.setScalar(1.07);
+    // El borde de la pieza activa sobresale un poco más: la separa del montón.
+    outline.scale.setScalar(active ? 1.095 : HULL_SCALE);
     g.add(mesh, outline);
     g.userData.kind = kind;
     return g;
@@ -417,6 +421,7 @@ export class BoardRenderer {
     if (outline) {
       const want = active ? activeOutlineMaterial() : outlineMaterial();
       if (outline.material !== want) outline.material = want;
+      outline.scale.setScalar(active ? 1.095 : HULL_SCALE);
     }
   }
   private buildFrame(): void {
@@ -512,10 +517,10 @@ export class BoardRenderer {
       const row = grid[r];
       if (!row) continue;
       for (let c = 0; c < row.length; c++) {
-        const v = row[c] as PieceKind | 'G' | 'R' | 'J' | 0;
+        const v = row[c] as PieceKind | 'G' | 'R' | 'X' | 0;
         const k = this.key(c, r);
-        if (v === 0 || v === undefined || v === 'G' || v === 'R' || v === 'J') {
-          if (v === 'J') {
+        if (v === 0 || v === undefined || v === 'G' || v === 'R' || v === 'X') {
+          if (v === 'X') {
             seenJunk.add(k);
             if (!this.junkState.has(k)) { this.junkState.add(k); junkChanged = true; }
           }
@@ -572,6 +577,9 @@ export class BoardRenderer {
   }
 
   setActive(kind: PieceKind, cells: Vec2[], instant = false, special: string | null = null): void {
+    // Solo se dibuja lo que cae dentro del campo visible: las celdas del buffer
+    // de aparición (filas ocultas) no deben pintarse sobre el marco de cartón.
+    const shown = cells.filter((c) => c.y >= 0 && c.y < VISIBLE_ROWS);
     // Powerup: es un objeto literal (💣/⚡/🔩), no una pieza. Sin bloques: solo
     // el sprite grande sobre su huella (el fantasma marca donde caera).
     if (special) {
@@ -579,16 +587,16 @@ export class BoardRenderer {
       this.activeSprings.length = 0;
       this.activeTargets.length = 0;
       this.activeGliding = false;
-      this.updateSpecialIcon(special, cells);
+      this.updateSpecialIcon(special, shown);
       this.shadowDirty = true;
       return;
     }
-    this.updateSpecialIcon(null, cells);
+    this.updateSpecialIcon(null, shown);
     // La pieza se sigue por BLOQUE (muelles con identidad estable), no por
     // clave de celda: `update()` integra los muelles y produce el
     // deslizamiento visible. El emparejamiento por cercanía evita que los
     // bloques se crucen al rotar.
-    this.reconcileActive(cells, kind, instant);
+    this.reconcileActive(shown, kind, instant);
     this.activeGliding = this.activeSprings.length > 0;
     this.shadowDirty = true;
   }
@@ -773,20 +781,27 @@ export class BoardRenderer {
     // El relleno apenas se insinúa y toma el color de la pieza; el contorno
     // discontinuo es la señal principal para no confundirlo con basura fijada.
     ghostMat.color.setHex(kind ? PIECE_COLORS[kind] : 0xffffff);
+    if (kind) {
+      ghostEdgeColor.setHex(PIECE_COLORS[kind]).multiplyScalar(0.55);
+      ghostEdgeMat.color.copy(ghostEdgeColor);
+    } else {
+      ghostEdgeMat.color.setHex(INK);
+    }
     // Powerup: su guía es el icono translúcido sobre la huella, NO las cajas del
     // tetromino — así el fantasma corresponde al objeto que realmente cae.
+    const shown = cells.filter((c) => c.y >= 0 && c.y < VISIBLE_ROWS);
     if (special) {
       for (const s of this.ghostSprings) this.recycleGhostSpring(s);
       this.ghostSprings.length = 0;
       this.ghostTargets.length = 0;
       this.ghostGliding = false;
-      this.updateGhostSpecial(special, cells);
+      this.updateGhostSpecial(special, shown);
       return;
     }
-    this.updateGhostSpecial(null, cells);
+    this.updateGhostSpecial(null, shown);
     // El fantasma también desliza: mismos muelles que la pieza (más rígidos),
     // emparejados por cercanía para que no se crucen al rotar.
-    const targets = cells.map((c) => cellToWorld(c.x, c.y));
+    const targets = shown.map((c) => cellToWorld(c.x, c.y));
     const fromX = this.ghostSprings.map((s) => s.x);
     const fromY = this.ghostSprings.map((s) => s.y);
     const assign = matchByProximity(fromX, fromY, targets.map((t) => t.x), targets.map((t) => t.y));
@@ -926,7 +941,7 @@ export class BoardRenderer {
         const k = this.key(c, r);
         if (this.junkState.has(k)) {
           const p = cellToWorld(c, r);
-          cleared.push({ kind: 'J', x: p.x, y: p.y });
+          cleared.push({ kind: 'X', x: p.x, y: p.y });
           if (launch) {
             const g = this.makeJunkBlock();
             g.position.set(p.x, p.y, 0);
@@ -974,8 +989,8 @@ export class BoardRenderer {
       // grid has already collapsed when this runs, so it cannot be trusted.
       if (spawnParticles) {
         for (const m of meshes) {
-          const kind = m.userData.kind as PieceKind | 'J' | undefined;
-          const hex = kind === 'J' ? JUNK_COLOR : kind ? PIECE_COLORS[kind] : 0xffffff;
+          const kind = m.userData.kind as PieceKind | 'X' | undefined;
+          const hex = kind === 'X' ? JUNK_COLOR : kind ? PIECE_COLORS[kind] : 0xffffff;
           this.particles.burst(new THREE.Vector3(m.position.x, m.position.y, 0.6), hex, 7, 3.2, 3.4);
         }
       }

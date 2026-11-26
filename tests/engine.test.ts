@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { collides, createGrid } from '../src/game/board.js';
 import { TetrisEngine } from '../src/game/engine.js';
 import { cellsForPiece, getKicks } from '../src/game/pieces.js';
-import { LINES_PER_LEVEL, MAX_LEVEL, SECONDS_PER_LEVEL } from '../src/game/types.js';
+import { LINES_PER_LEVEL, MAX_LEVEL, SECONDS_PER_LEVEL, VISIBLE_ROWS } from '../src/game/types.js';
 import type { GameEvent, GameEventType, RotationState } from '../src/game/types.js';
 function seqRng(): () => number { let i = 0; return () => { i = (i + 1) % 100; return i / 100; }; }
 describe('pieces', () => {
@@ -82,6 +82,35 @@ describe('engine', () => {
     expect(e.canHold).toBe(false);
     e.hold();
     expect(e.holdKind).toBe(first);
+  });
+  it('la pieza aparece con todas sus celdas visibles', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    for (const c of e.activeCells()) {
+      expect(c.y).toBeGreaterThanOrEqual(0);
+      expect(c.y).toBeLessThan(VISIBLE_ROWS);
+    }
+  });
+  it('la caída suave contra el suelo respeta el lock delay', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    // O justo encima del fondo: una celda de caída suave y luego contacto.
+    e.active = { kind: 'O', rotation: 0, x: 4, y: 1 };
+    expect(e.moveDown()).toBe(true);
+    expect(e.moveDown()).toBe(false); // no puede bajar…
+    expect(e.phase).toBe('playing');  // …pero NO se fija al instante
+    expect(e.grid[0]![4]).toBe(0);
+    e.update(0.4);
+    expect(e.grid[0]![4]).toBe(0);    // sigue dentro del medio segundo de gracia
+    e.update(0.15);
+    expect(e.grid[0]![4]).toBe('O'); // el lock delay se cumple y fija
+  });
+  it('la caída instantánea sí fija de inmediato', () => {
+    const e = new TetrisEngine({ rng: seqRng() });
+    e.start();
+    e.active = { kind: 'O', rotation: 0, x: 4, y: 8 };
+    e.hardDrop();
+    expect(e.grid[0]![4]).toBe('O');
   });
   it('levels up every 10 lines', () => {
     const e = new TetrisEngine({ rng: seqRng() });

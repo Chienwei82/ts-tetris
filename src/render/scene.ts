@@ -171,9 +171,12 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
   camera.lookAt(0, 0.3, 0);
 
   // Warm, soft studio light (paper diorama under a lamp).
-  const hemi = new THREE.HemisphereLight(0xfff4dd, 0xd8c9a8, 0.95);
+  // La luz clave sigue marcando volumen, pero se sube el ambiente y se suaviza
+  // la sombra: antes las sombras largas competían con la cuadrícula y el
+  // fantasma. El tablero debe ser la zona más limpia de la imagen.
+  const hemi = new THREE.HemisphereLight(0xfff4dd, 0xd8c9a8, 1.04);
   scene.add(hemi);
-  const key = new THREE.DirectionalLight(0xfff1d6, 1.5);
+  const key = new THREE.DirectionalLight(0xfff1d6, 1.38);
   // Luz más cenital: conserva volumen y sombras, pero acorta la proyección
   // sobre la hoja para que los huecos del tablero sigan siendo legibles.
   key.position.set(3.5, 17, 11);
@@ -185,6 +188,8 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions = {}):
   key.shadow.camera.near = 1; key.shadow.camera.far = 40;
   key.shadow.bias = -0.0004;
   key.shadow.normalBias = 0.02;
+  // PCF con radio: el borde de la sombra se funde en vez de recortar el papel.
+  key.shadow.radius = 3;
   scene.add(key);
   // Luz de relleno tenue: deja las sombras de la luz clave marcadas y dramáticas.
   const fill = new THREE.DirectionalLight(0xd8ecff, 0.22);

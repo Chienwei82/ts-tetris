@@ -24,7 +24,20 @@ describe('FrameLimiter', () => {
   it('caps a 144 Hz stream at or below the limit', () => {
     const n = countFrames(new FrameLimiter(MAX_FPS), 144, 1000);
     expect(n).toBeLessThanOrEqual(MAX_FPS);
-    expect(n).toBeGreaterThan(40); // still smooth (≈48 fps on a 144 Hz grid)
+    expect(n).toBeGreaterThan(55); // la cadencia media se mantiene cerca de 60
+  });
+
+  it('no cae a la mitad en pantallas de 75 Hz (el bug del descarte puro)', () => {
+    const n = countFrames(new FrameLimiter(MAX_FPS), 75, 1000);
+    // Con descarte puro daba ~37,5 fps; acumulando el sobrante, ~60.
+    expect(n).toBeGreaterThan(55);
+    expect(n).toBeLessThanOrEqual(MAX_FPS);
+  });
+
+  it('no cae a la mitad en pantallas de 90 Hz', () => {
+    const n = countFrames(new FrameLimiter(MAX_FPS), 90, 1000);
+    expect(n).toBeGreaterThan(55);
+    expect(n).toBeLessThanOrEqual(MAX_FPS);
   });
 
   it('tolerates vsync jitter at 60 Hz without dropping to 30 fps', () => {
